@@ -26,8 +26,16 @@ object BackupScheduler {
     private const val KEY_JAM = "jam"
     private const val KEY_SCHEDULED_JAM = "scheduled_jam"
     private const val KEY_LAST_AT = "last_attempt_at"
+    private const val KEY_LAST_SUCCESS_AT = "last_success_at"
     private const val KEY_LAST_STATUS = "last_status"
     private const val KEY_LAST_MESSAGE = "last_message"
+
+    data class BackupStatus(
+        val lastAttemptAt: String?,
+        val lastSuccessAt: String?,
+        val lastStatus: String?,
+        val lastMessage: String?,
+    )
 
     fun sync(context: Context, enabled: Boolean, jam: String?) {
         val app = context.applicationContext
@@ -67,11 +75,25 @@ object BackupScheduler {
     }
 
     fun recordResult(context: Context, status: String, message: String) {
-        prefs(context.applicationContext).edit()
-            .putString(KEY_LAST_AT, Instant.now().toString())
+        val now = Instant.now().toString()
+        val editor = prefs(context.applicationContext).edit()
+            .putString(KEY_LAST_AT, now)
             .putString(KEY_LAST_STATUS, status)
             .putString(KEY_LAST_MESSAGE, message.take(300))
-            .apply()
+        if (status == "ok") {
+            editor.putString(KEY_LAST_SUCCESS_AT, now)
+        }
+        editor.apply()
+    }
+
+    fun status(context: Context): BackupStatus {
+        val prefs = prefs(context.applicationContext)
+        return BackupStatus(
+            lastAttemptAt = prefs.getString(KEY_LAST_AT, null),
+            lastSuccessAt = prefs.getString(KEY_LAST_SUCCESS_AT, null),
+            lastStatus = prefs.getString(KEY_LAST_STATUS, null),
+            lastMessage = prefs.getString(KEY_LAST_MESSAGE, null),
+        )
     }
 
     private fun enqueue(

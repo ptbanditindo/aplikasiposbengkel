@@ -25,18 +25,20 @@ class ScheduledBackupWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val token = runCatching {
+        val token = try {
             PinStore.open(applicationContext).getOrCreateAdminToken()
-        }.getOrNull() ?: return@withContext Result.success()
+        } catch (error: Exception) {
+            // Perangkat bisa belum dibuka setelah reboot atau Keystore sementara
+            // tidak tersedia; jangan pernah menganggap backup berhasil.
+            return@withContext handleTokenFailure(error)
+        }
 
         val startedHere = !BackendManager.isRunning()
         if (startedHere && !BackendManager.start(applicationContext, token)) {
-            BackupScheduler.recordResult(
-                applicationContext,
-                "failed",
-                "Server lokal gagal dijalankan.",
+            return@withContext recordFailure(
+                "Server lokal gagal dijalankan. Backup akan dicoba lagi.",
+                BackupPolicy.backendFailureDecision(runAttemptCount),
             )
-            return@withContext Result.retry()
         }
 
         try {
@@ -44,18 +46,56 @@ class ScheduledBackupWorker(
             val status = body.optString("status", "failed")
             val message = body.optString("message", "")
             BackupScheduler.recordResult(applicationContext, status, message)
-            if (BackupPolicy.shouldRetry(status)) Result.retry() else Result.success()
-        } catch (error: Exception) {
-            BackupScheduler.recordResult(
-                applicationContext,
-                "failed",
-                error.message ?: "Backup gagal.",
-            )
+            if (!BackupPolicy.shouldRetry(status)) return@withContext Result.success()
+            if (runAttemptCount >= BackupPolicy.MAX_ATTEMPTS) {
+                BackupScheduler.recordResult(
+                    applicationContext,
+                    "failed",
+                    "Backup belum berhasil setelah beberapa percobaan. " +
+                        message.ifBlank {
+                            "Akan dicoba lagi pada jadwal berikutnya."
+                        },
+                )
+                // Biarkan jadwal harian tetap hidup; backoff retry dihentikan.
+                return@withContext Result.success()
+            }
             Result.retry()
+        } catch (error: Exception) {
+            return@withContext recordFailure(
+                "Backup lokal gagal dihubungi. Backup akan dicoba lagi.",
+                BackupPolicy.backendFailureDecision(runAttemptCount),
+            )
         } finally {
             if (startedHere && !ForegroundState.isForeground) {
                 runCatching { BackendManager.stop() }
             }
+        }
+    }
+
+    private fun handleTokenFailure(error: Throwable): Result {
+        val decision = BackupPolicy.tokenFailureDecision(error, runAttemptCount)
+        val message = if (decision == BackupPolicy.Decision.GIVE_UP) {
+            "Kredensial perangkat tidak dapat dibaca. Buka aplikasi, atur ulang " +
+                "PIN, lalu jalankan backup manual."
+        } else {
+            "Kredensial perangkat belum dapat dibaca (mis. perangkat baru " +
+                "dibuka setelah restart). Backup akan dicoba lagi."
+        }
+        BackupScheduler.recordResult(applicationContext, "failed", message)
+        return if (decision == BackupPolicy.Decision.RETRY) {
+            Result.retry()
+        } else {
+            // Jangan mengulang tanpa batas, tetapi jadwal harian tetap ada.
+            Result.success()
+        }
+    }
+
+    private fun recordFailure(message: String, decision: BackupPolicy.Decision): Result {
+        BackupScheduler.recordResult(applicationContext, "failed", message)
+        return if (decision == BackupPolicy.Decision.RETRY) {
+            Result.retry()
+        } else {
+            Result.success()
         }
     }
 

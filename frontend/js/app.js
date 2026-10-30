@@ -3135,6 +3135,7 @@
       parts.push('Kegagalan terakhir: ' + backup.last_error);
     }
     status.textContent = parts.join(' ');
+    appendNativeBackupStatus(status, parts);
 
     const banner = $('#backupStaleBanner');
     if (!banner) return;
@@ -3145,6 +3146,22 @@
         (backup.stale_days || 2) +
         ' hari. Periksa jadwal, koneksi, dan ruang penyimpanan.';
     }
+  }
+
+  function appendNativeBackupStatus(statusEl, parts) {
+    // APK: tampilkan kegagalan jadwal native (mis. kredensial belum terbaca).
+    if (!window.BengkelBridge || !window.BengkelBridge.available()) return;
+    window.BengkelBridge.call('scheduledBackupStatus', {}, 5000)
+      .then(function (info) {
+        if (!info || !info.last_status || info.last_status === 'ok') return;
+        if (!info.last_message) return;
+        statusEl.textContent = parts
+          .concat(['Jadwal backup: ' + info.last_message])
+          .join(' ');
+      })
+      .catch(function () {
+        // Status native opsional; jangan ganggu tampilan utama.
+      });
   }
 
   function syncNativeBackupSchedule() {

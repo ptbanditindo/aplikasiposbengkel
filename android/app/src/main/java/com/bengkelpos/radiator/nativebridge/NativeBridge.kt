@@ -50,6 +50,7 @@ class NativeBridge(
                     "shareBackup" -> shareBackup(requestId, args)
                     "restartBackend" -> restartBackend(requestId)
                     "syncScheduledBackup" -> syncScheduledBackup(requestId, args)
+                    "scheduledBackupStatus" -> scheduledBackupStatus(requestId)
                     else -> fail(requestId, "UNKNOWN", "Perintah tidak dikenal.")
                 }
             } catch (error: BridgeError) {
@@ -218,6 +219,19 @@ class NativeBridge(
             JSONObject()
                 .put("ok", true)
                 .put("scheduled", enabled),
+        )
+    }
+
+    private fun scheduledBackupStatus(requestId: String) {
+        val status = BackupScheduler.status(activity.applicationContext)
+        reply(
+            requestId,
+            JSONObject()
+                .put("ok", true)
+                .put("last_attempt_at", status.lastAttemptAt ?: JSONObject.NULL)
+                .put("last_success_at", status.lastSuccessAt ?: JSONObject.NULL)
+                .put("last_status", status.lastStatus ?: JSONObject.NULL)
+                .put("last_message", status.lastMessage ?: JSONObject.NULL),
         )
     }
 

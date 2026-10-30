@@ -14,8 +14,18 @@ object BackupPolicy {
     const val PERIOD_HOURS = 24L
     const val RETRY_MINUTES = 30L
     const val DEFAULT_JAM = "21:00"
+    const val MAX_ATTEMPTS = 5
 
     private val JAM_PATTERN = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
+    private val PERMANENT_TOKEN_MARKERS = listOf(
+        "aeadbadtag",
+        "corrupt",
+        "invalidprotocolbuffer",
+        "invalid key",
+        "permanently invalidated",
+    )
+
+    enum class Decision { RETRY, GIVE_UP }
 
     fun normalizeJam(value: String?): Pair<Int, Int>? {
         val match = JAM_PATTERN.matchEntire(value?.trim().orEmpty()) ?: return null
@@ -40,4 +50,23 @@ object BackupPolicy {
 
     /** Hanya status "ok" yang dianggap tuntas; selain itu WorkManager mencoba lagi. */
     fun shouldRetry(status: String?): Boolean = status != "ok"
+
+    /**
+     * Kredensial yang rusak permanen tidak boleh diulang selamanya. Kegagalan
+     * lain (mis. perangkat belum dibuka setelah reboot) dianggap sementara.
+     */
+    fun isPermanentTokenFailure(error: Throwable?): Boolean {
+        val text = generateSequence(error) { it.cause }
+            .joinToString(" ") { (it.message ?: "") + " " + it.javaClass.simpleName }
+            .lowercase()
+        return PERMANENT_TOKEN_MARKERS.any { text.contains(it) }
+    }
+
+    fun tokenFailureDecision(error: Throwable?, attempt: Int): Decision =
+        if (isPermanentTokenFailure(error)) Decision.GIVE_UP else failureDecision(attempt)
+
+    fun backendFailureDecision(attempt: Int): Decision = failureDecision(attempt)
+
+    private fun failureDecision(attempt: Int): Decision =
+        if (attempt >= MAX_ATTEMPTS) Decision.GIVE_UP else Decision.RETRY
 }

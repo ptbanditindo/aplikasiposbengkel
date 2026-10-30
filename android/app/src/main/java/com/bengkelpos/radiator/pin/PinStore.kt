@@ -28,7 +28,12 @@ class PinStore private constructor(private val prefs: SharedPreferences) {
         val token = ByteArray(32)
             .also { SecureRandom().nextBytes(it) }
             .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-        prefs.edit().putString(KEY_ADMIN_TOKEN, token).commit()
+        val saved = prefs.edit().putString(KEY_ADMIN_TOKEN, token).commit()
+        if (!saved) {
+            throw PinStorageException(
+                IllegalStateException("Penyimpanan kredensial perangkat gagal.")
+            )
+        }
         return token
     }
 
