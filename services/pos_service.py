@@ -20,6 +20,7 @@ from database.models import (
     StockItem,
     VehicleOrUnit,
 )
+from database.session import begin_immediate
 from repositories import service_record_repository as record_repo
 from services import pricing_service, warranty_service
 from services.errors import (
@@ -37,22 +38,13 @@ class TransactionResult:
     laba_kotor: Decimal = Decimal("0.00")
 
 
-def _next_nota(db: Session, day: date) -> str:
-    """Nomor nota unik harian INV-YYYYMMDD-XXXX (Ref: FR-POS-01)."""
-    prefix = f"INV-{day:%Y%m%d}-"
-    highest = 0
-    for nota in record_repo.nota_prefix_exists(db, prefix):
-        suffix = nota[len(prefix):]
-        if suffix.isdigit():
-            highest = max(highest, int(suffix))
-    return f"{prefix}{highest + 1:04d}"
-
-
 def create_transaction(db: Session, payload: Any) -> TransactionResult:
     warnings: List[str] = []
 
     # Ref: FR-POS-08 - seluruh proses dalam satu transaksi database atomik.
     with db.begin():
+        # Kunci tulis diambil sejak awal agar alokasi nota & stok terserialisasi.
+        begin_immediate(db)
         unit = db.get(VehicleOrUnit, payload.unit_id)
         if unit is None:
             raise NotFoundError("Unit servis tidak ditemukan.")
@@ -171,7 +163,7 @@ def create_transaction(db: Session, payload: Any) -> TransactionResult:
         now = datetime.now()
         record = ServiceRecord(
             unit_id=unit.id,
-            no_nota=_next_nota(db, now.date()),
+            no_nota=record_repo.allocate_nota(db, now.date()),
             waktu_service=now,
             keluhan_awal=keluhan,
             catatan_pengerjaan=clean_text(payload.catatan_pengerjaan, max_length=2000)

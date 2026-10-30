@@ -100,6 +100,15 @@ class HargaJasa(Base):
     )
 
 
+class NotaCounter(Base):
+    """Counter nomor nota harian yang dinaikkan secara atomik."""
+
+    __tablename__ = "nota_counters"
+
+    tanggal: Mapped[str] = mapped_column(String(8), primary_key=True)
+    terakhir: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class ServiceRecord(Base):
     __tablename__ = "service_records"
 

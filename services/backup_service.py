@@ -24,7 +24,9 @@ REQUIRED_TABLES = {
 
 BACKUP_GLOB = "bengkel_radiator_*.db"
 RESTORE_GLOB = "sebelum_restore_*.db"
+MIGRATION_GLOB = "sebelum_migrasi_*.db"
 RESTORE_BACKUP_KEEP = 3
+MIGRATION_BACKUP_KEEP = 3
 MIN_FREE_MARGIN_BYTES = 20 * 1024 * 1024
 
 
@@ -42,6 +44,7 @@ def prune_backups() -> None:
     """Simpan hanya backup terbaru sesuai retensi, termasuk salinan pra-restore."""
     _prune(BACKUP_GLOB, settings.backup_keep)
     _prune(RESTORE_GLOB, RESTORE_BACKUP_KEEP)
+    _prune(MIGRATION_GLOB, MIGRATION_BACKUP_KEEP)
 
 
 def _ensure_free_space(source: Path) -> None:
@@ -88,6 +91,28 @@ def _redact_secrets(path: Path) -> None:
             connection.execute("VACUUM")
     finally:
         connection.close()
+
+
+def create_migration_backup(source_path: Path) -> Path:
+    """Salin database sebelum migrasi skema ringan dijalankan."""
+    settings.backup_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_free_space(source_path)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    destination = settings.backup_dir / f"sebelum_migrasi_{stamp}.db"
+
+    source = sqlite3.connect(str(source_path))
+    try:
+        target = sqlite3.connect(str(destination))
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+    _redact_secrets(destination)
+    prune_backups()
+    return destination
 
 
 def create_backup() -> Path:
