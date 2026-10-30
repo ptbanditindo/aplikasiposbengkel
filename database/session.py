@@ -48,6 +48,7 @@ def build_engine(url: Optional[str] = None) -> Engine:
         def _enable_foreign_keys(dbapi_connection, _record):  # pragma: no cover
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
 
     return engine

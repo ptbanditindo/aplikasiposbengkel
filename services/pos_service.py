@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List
 
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -208,9 +209,38 @@ def create_transaction(db: Session, payload: Any) -> TransactionResult:
                 )
             )
 
-        # Ref: FR-POS-04 - potong stok gudang otomatis & atomik.
-        for stock_id, needed in stock_needed.items():
-            stock_items[stock_id].jumlah -= needed
+        # Ref: FR-POS-04 - potong stok gudang atomik lewat UPDATE bersyarat.
+        if allow_negative:
+            for stock_id, needed in stock_needed.items():
+                db.execute(
+                    update(StockItem)
+                    .where(StockItem.id == stock_id)
+                    .values(jumlah=StockItem.jumlah - needed)
+                    .execution_options(synchronize_session=False)
+                )
+        else:
+            shortages: List[Dict[str, Any]] = []
+            for stock_id, needed in stock_needed.items():
+                result = db.execute(
+                    update(StockItem)
+                    .where(StockItem.id == stock_id, StockItem.jumlah >= needed)
+                    .values(jumlah=StockItem.jumlah - needed)
+                    .execution_options(synchronize_session=False)
+                )
+                if result.rowcount == 0:
+                    available = db.scalar(
+                        select(StockItem.jumlah).where(StockItem.id == stock_id)
+                    )
+                    shortages.append(
+                        {
+                            "stock_item_id": stock_id,
+                            "nama": stock_items[stock_id].nama,
+                            "diminta": needed,
+                            "tersedia": int(available or 0),
+                        }
+                    )
+            if shortages:
+                raise InsufficientStockError(shortages)
 
         record_id = record.id
 
