@@ -55,7 +55,9 @@ class VehicleOrUnit(Base):
     nopol: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     jenis_mobil: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     tahun_mobil: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    label_radiator: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    label_radiator: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, unique=True, index=True
+    )
     tipe_radiator: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     keterangan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)

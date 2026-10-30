@@ -4,11 +4,13 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.models import Customer, VehicleOrUnit
+from database.session import begin_immediate
 from repositories import customer_repository as repo
-from services.errors import BusinessValidationError, NotFoundError
+from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
 VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY"}
@@ -69,9 +71,6 @@ def create_unit(
     tipe_radiator: Optional[str] = None,
     keterangan: Optional[str] = None,
 ) -> VehicleOrUnit:
-    if repo.get_customer(db, customer_id) is None:
-        raise NotFoundError("Pelanggan tidak ditemukan.")
-
     normalized_type = (unit_type or "").strip().upper()
     if normalized_type not in VALID_UNIT_TYPES:
         raise BusinessValidationError("Jenis unit harus MOBIL atau RADIATOR_ONLY.")
@@ -89,30 +88,52 @@ def create_unit(
             raise BusinessValidationError("Nomor polisi wajib diisi untuk unit mobil.")
         if len(normalized_nopol) > 32:
             raise BusinessValidationError("Nomor polisi terlalu panjang.")
-        return repo.create_unit(
-            db,
-            customer_id=customer_id,
-            unit_type="MOBIL",
-            nopol=normalized_nopol,
-            jenis_mobil=clean_jenis,
-            tahun_mobil=int(tahun_mobil) if tahun_mobil is not None else None,
-            label_radiator=None,
-            tipe_radiator=None,
-            keterangan=clean_ket,
-        )
+        with db.begin():
+            begin_immediate(db)
+            if repo.get_customer(db, customer_id) is None:
+                raise NotFoundError("Pelanggan tidak ditemukan.")
+            unit = VehicleOrUnit(
+                customer_id=customer_id,
+                unit_type="MOBIL",
+                nopol=normalized_nopol,
+                jenis_mobil=clean_jenis,
+                tahun_mobil=int(tahun_mobil) if tahun_mobil is not None else None,
+                label_radiator=None,
+                tipe_radiator=None,
+                keterangan=clean_ket,
+            )
+            db.add(unit)
+            db.flush()
+        db.refresh(unit)
+        return unit
 
     # Ref: PRD FR-UNIT-04 - radiator copotan tanpa nopol, dibuatkan label fisik.
-    label = _next_radiator_label(db, date.today())
-    return repo.create_unit(
-        db,
-        customer_id=customer_id,
-        unit_type="RADIATOR_ONLY",
-        nopol=None,
-        jenis_mobil=None,
-        tahun_mobil=None,
-        label_radiator=label,
-        tipe_radiator=clean_tipe,
-        keterangan=clean_ket,
+    for _attempt in range(5):
+        try:
+            with db.begin():
+                begin_immediate(db)
+                if repo.get_customer(db, customer_id) is None:
+                    raise NotFoundError("Pelanggan tidak ditemukan.")
+                label = _next_radiator_label(db, date.today())
+                unit = VehicleOrUnit(
+                    customer_id=customer_id,
+                    unit_type="RADIATOR_ONLY",
+                    nopol=None,
+                    jenis_mobil=None,
+                    tahun_mobil=None,
+                    label_radiator=label,
+                    tipe_radiator=clean_tipe,
+                    keterangan=clean_ket,
+                )
+                db.add(unit)
+                db.flush()
+            db.refresh(unit)
+            return unit
+        except IntegrityError:
+            continue
+
+    raise ConflictError(
+        "Gagal membuat label radiator unik setelah beberapa percobaan."
     )
 
 

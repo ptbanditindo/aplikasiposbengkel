@@ -106,6 +106,27 @@ def _table_columns(conn, table: str) -> set[str]:
     return {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
 
 
+LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
+
+
+def _index_is_unique(conn, table: str, name: str) -> bool:
+    for row in conn.exec_driver_sql(f"PRAGMA index_list({table})"):
+        if row[1] == name:
+            return bool(row[2])
+    return False
+
+
+def _has_duplicate_labels(conn) -> bool:
+    return (
+        conn.exec_driver_sql(
+            "SELECT 1 FROM vehicle_or_units "
+            "WHERE label_radiator IS NOT NULL "
+            "GROUP BY label_radiator HAVING COUNT(*) > 1 LIMIT 1"
+        ).first()
+        is not None
+    )
+
+
 def _pending_schema_changes(conn, tables: set[str]) -> list[str]:
     pending: list[str] = []
     if "service_parts" in tables and "harga_modal" not in _table_columns(conn, "service_parts"):
@@ -116,6 +137,12 @@ def _pending_schema_changes(conn, tables: set[str]) -> list[str]:
         pending.append("kolom service_records.request_id")
     if any(table in tables for table in CORE_TABLES) and "nota_counters" not in tables:
         pending.append("tabel nota_counters")
+    if (
+        "vehicle_or_units" in tables
+        and not _index_is_unique(conn, "vehicle_or_units", LABEL_INDEX_NAME)
+        and not _has_duplicate_labels(conn)
+    ):
+        pending.append("indeks unik label radiator")
     return pending
 
 
@@ -200,6 +227,24 @@ def _apply_sqlite_migrations(bind: Engine) -> None:
                     "CREATE UNIQUE INDEX IF NOT EXISTS "
                     "ix_service_records_request_id "
                     "ON service_records (request_id)"
+                )
+
+        if (
+            "vehicle_or_units" in tables
+            and not _index_is_unique(conn, "vehicle_or_units", LABEL_INDEX_NAME)
+        ):
+            if _has_duplicate_labels(conn):
+                logger.warning(
+                    "Indeks unik label radiator dilewati: data lama berisi "
+                    "label duplikat. Perbaiki label tersebut lalu mulai ulang."
+                )
+            else:
+                conn.exec_driver_sql(
+                    f"DROP INDEX IF EXISTS {LABEL_INDEX_NAME}"
+                )
+                conn.exec_driver_sql(
+                    f"CREATE UNIQUE INDEX {LABEL_INDEX_NAME} "
+                    "ON vehicle_or_units (label_radiator)"
                 )
 
 
