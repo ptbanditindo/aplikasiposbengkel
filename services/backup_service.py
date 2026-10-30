@@ -32,6 +32,25 @@ def database_file_path() -> Path:
     return Path(database)
 
 
+def _redact_secrets(path: Path) -> None:
+    """Token bot tidak boleh ikut tersimpan di file backup yang dibagikan."""
+    connection = sqlite3.connect(str(path))
+    try:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "app_settings" in tables:
+            connection.execute(
+                "UPDATE app_settings SET value = '' WHERE key = 'telegram.bot_token'"
+            )
+            connection.commit()
+    finally:
+        connection.close()
+
+
 def create_backup() -> Path:
     """Salin database memakai sqlite3 backup API (aman saat file aktif)."""
     source_path = database_file_path()
@@ -51,6 +70,8 @@ def create_backup() -> Path:
             target.close()
     finally:
         source.close()
+
+    _redact_secrets(destination)
     return destination
 
 

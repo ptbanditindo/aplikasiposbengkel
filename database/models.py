@@ -191,3 +191,15 @@ class ServicePart(Base):
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="parts")
     stock_item: Mapped[Optional["StockItem"]] = relationship()
+
+
+class AppSetting(Base):
+    """Pengaturan aplikasi berbentuk key-value (menimpa default .env)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )

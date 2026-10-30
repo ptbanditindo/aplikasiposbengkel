@@ -69,6 +69,12 @@ class Settings:
     backup_dir: Path
     auto_backup_enabled: bool
 
+    telegram_bot_token: str
+    telegram_chat_id: str
+    telegram_backup_enabled: bool
+    telegram_backup_time: str
+    telegram_api_base: str
+
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
@@ -110,6 +116,13 @@ def load_settings() -> Settings:
         ).strip(),
         backup_dir=_as_path("BACKUP_DIR", "./backups"),
         auto_backup_enabled=_as_bool("AUTO_BACKUP_ENABLED", True),
+        telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
+        telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", "").strip(),
+        telegram_backup_enabled=_as_bool("TELEGRAM_BACKUP_ENABLED", False),
+        telegram_backup_time=os.getenv("TELEGRAM_BACKUP_TIME", "21:00").strip(),
+        telegram_api_base=os.getenv(
+            "TELEGRAM_API_BASE", "https://api.telegram.org"
+        ).strip(),
     )
 
 

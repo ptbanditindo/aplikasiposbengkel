@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BengkelPOS Radiator</string>
+
+    <string name="pin_create_title">Buat PIN</string>
+    <string name="pin_create_subtitle">Masukkan 6 angka</string>
+    <string name="pin_confirm_title">Konfirmasi PIN</string>
+    <string name="pin_confirm_subtitle">Masukkan 6 angka yang sama</string>
+    <string name="pin_unlock_title">Masukkan PIN</string>
+    <string name="pin_unlock_subtitle">6 angka untuk membuka aplikasi</string>
+
+    <string name="pin_mismatch">PIN tidak sama</string>
+    <string name="pin_wrong">PIN salah</string>
+    <string name="pin_wrong_remaining">PIN salah, sisa percobaan sebelum dikunci: %1$d</string>
+    <string name="pin_locked_countdown">Terkunci. Coba lagi dalam %1$s</string>
+    <string name="pin_storage_error">Penyimpanan aman PIN bermasalah. Coba lagi.</string>
+
+    <string name="forgot_pin">Lupa PIN?</string>
+    <string name="forgot_title">Lupa PIN?</string>
+    <string name="forgot_warning">Data lokal aplikasi ini akan dihapus, termasuk PIN, database, dan pengaturan Telegram.\n\nSetelah membuat PIN baru, pulihkan data dari file backup Telegram melalui menu Pengaturan. Transaksi yang belum sempat dibackup akan hilang dan tidak dapat dikembalikan.</string>
+    <string name="reset_confirm_title">Konfirmasi reset</string>
+    <string name="reset_confirm_message">Ketik RESET (huruf besar) untuk melanjutkan.</string>
+    <string name="reset_type_hint">Ketik RESET untuk melanjutkan</string>
+    <string name="reset_action">Reset aplikasi</string>
+    <string name="reset_done">Data lokal dihapus. Buat PIN baru, lalu pulihkan dari backup Telegram.</string>
+    <string name="reset_done_title">PIN baru dibuat</string>
+    <string name="cancel">Batal</string>
+    <string name="continue_label">Lanjut</string>
+    <string name="ok">OK</string>
+
+    <string name="pin_storage_title">Penyimpanan PIN tidak dapat dibuka</string>
+    <string name="pin_storage_message">Kunci keamanan perangkat tidak dapat dipakai untuk membaca PIN. Satu-satunya pilihan adalah mereset data lokal lalu memulihkan dari backup Telegram.</string>
+
+    <string name="delete_digit">Hapus angka</string>
+    <string name="restore_hint">Unduh file backup dari chat Telegram, lalu impor lewat Pengaturan → Pulihkan database.</string>
+    <string name="offline_hint">Server lokal belum merespons.\nCoba lagi.</string>
+    <string name="preparing_hint">Menyiapkan server lokal.\nMohon tunggu…</string>
+    <string name="backend_error_hint">Server lokal gagal dijalankan. Tekan Coba lagi. Bila tetap gagal, instal ulang aplikasi.</string>
+    <string name="retry">Coba lagi</string>
+    <string name="external_link_blocked">Tautan eksternal diblokir di dalam aplikasi.</string>
+</resources>

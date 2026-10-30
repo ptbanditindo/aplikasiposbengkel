@@ -31,6 +31,10 @@ os.environ["BENGKEL_NO_REKENING"] = "987-654-3210"
 os.environ["BENGKEL_ATAS_NAMA"] = "BENGKEL RADIATOR TEST"
 os.environ["PRINTER_PAPER_WIDTH"] = "58"
 os.environ["DEFAULT_GARANSI_BULAN"] = "1"
+os.environ["TELEGRAM_BOT_TOKEN"] = ""
+os.environ["TELEGRAM_CHAT_ID"] = ""
+os.environ["TELEGRAM_BACKUP_ENABLED"] = "false"
+os.environ["TELEGRAM_BACKUP_TIME"] = "21:00"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

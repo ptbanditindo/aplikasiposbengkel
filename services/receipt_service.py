@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from config import settings
 from database.models import ServiceRecord
-from services import warranty_service
+from services import settings_service, warranty_service
 from services.customer_service import describe_unit
 from services.escpos_service import ReceiptBuilder
 from services.utils import format_rupiah
@@ -20,18 +20,20 @@ def _duration_label(record: ServiceRecord) -> str:
     return f" ({months} Bulan)"
 
 
-def _build(record: ServiceRecord, width: int) -> ReceiptBuilder:
+def _build(
+    record: ServiceRecord, width: int, bengkel: Dict[str, str]
+) -> ReceiptBuilder:
     unit = record.unit
     customer = unit.customer
 
     b = ReceiptBuilder(width)
     b.divider("=")
-    b.center(settings.bengkel_nama, bold=True, double=True)
-    if settings.bengkel_tagline:
-        b.center(settings.bengkel_tagline)
-    if settings.bengkel_alamat:
-        b.center(settings.bengkel_alamat)
-    contact = settings.bengkel_wa or settings.bengkel_telepon
+    b.center(bengkel["nama"], bold=True, double=True)
+    if bengkel["tagline"]:
+        b.center(bengkel["tagline"])
+    if bengkel["alamat"]:
+        b.center(bengkel["alamat"])
+    contact = bengkel["wa"] or bengkel["telepon"]
     if contact and contact != "-":
         b.center(f"Telp/WA: {contact}")
     b.divider("=")
@@ -89,8 +91,8 @@ def _build(record: ServiceRecord, width: int) -> ReceiptBuilder:
 
     b.divider("-")
     b.add("REKENING BENGKEL (TRANSFER):", bold=True)
-    b.add(f"{settings.bengkel_bank_nama}: {settings.bengkel_no_rekening}")
-    b.add(f"a/n {settings.bengkel_atas_nama}")
+    b.add(f"{bengkel['bank_nama']}: {bengkel['no_rekening']}")
+    b.add(f"a/n {bengkel['atas_nama']}")
 
     b.divider("-")
     b.center("Simpan struk ini sebagai")
@@ -101,13 +103,16 @@ def _build(record: ServiceRecord, width: int) -> ReceiptBuilder:
     return b
 
 
-def build_receipt_payload(record: ServiceRecord) -> Dict[str, Any]:
+def build_receipt_payload(
+    record: ServiceRecord, bengkel: Dict[str, str] | None = None
+) -> Dict[str, Any]:
     """Data lengkap struk (58mm & 80mm) untuk reprint / cetak Bluetooth."""
     unit = record.unit
     customer = unit.customer
+    info = bengkel or settings_service.default_bengkel_info()
 
-    builder_58 = _build(record, 32)
-    builder_80 = _build(record, 48)
+    builder_58 = _build(record, 32, info)
+    builder_80 = _build(record, 48, info)
 
     jobs: List[Dict[str, Any]] = [
         {
@@ -155,14 +160,14 @@ def build_receipt_payload(record: ServiceRecord) -> Dict[str, Any]:
         "warranty_status": warranty_service.warranty_status(record),
         "jobs": jobs,
         "parts": parts,
-        "bengkel_nama": settings.bengkel_nama,
-        "bengkel_tagline": settings.bengkel_tagline,
-        "bengkel_alamat": settings.bengkel_alamat,
-        "bengkel_telepon": settings.bengkel_telepon,
-        "bengkel_wa": settings.bengkel_wa,
-        "bengkel_bank_nama": settings.bengkel_bank_nama,
-        "bengkel_no_rekening": settings.bengkel_no_rekening,
-        "bengkel_atas_nama": settings.bengkel_atas_nama,
+        "bengkel_nama": info["nama"],
+        "bengkel_tagline": info["tagline"],
+        "bengkel_alamat": info["alamat"],
+        "bengkel_telepon": info["telepon"],
+        "bengkel_wa": info["wa"],
+        "bengkel_bank_nama": info["bank_nama"],
+        "bengkel_no_rekening": info["no_rekening"],
+        "bengkel_atas_nama": info["atas_nama"],
         "printer_paper_width": settings.printer_paper_width,
         "struk_58": builder_58.lines(),
         "struk_80": builder_80.lines(),

@@ -14,7 +14,7 @@ from api.schemas import (
 )
 from database.session import get_db
 from repositories import service_record_repository as record_repo
-from services import pos_service, warranty_service
+from services import pos_service, settings_service, warranty_service
 from services.errors import NotFoundError
 from services.receipt_service import build_receipt_payload, record_summary
 
@@ -26,7 +26,9 @@ def create_transaction(
     payload: CreateServiceTransactionRequest, db: Session = Depends(get_db)
 ):
     result = pos_service.create_transaction(db, payload)
-    receipt = ReceiptOut.model_validate(build_receipt_payload(result.record))
+    receipt = ReceiptOut.model_validate(
+        build_receipt_payload(result.record, settings_service.get_bengkel_info(db))
+    )
     summary = ServiceRecordOut.model_validate(record_summary(result.record))
     return TransactionResponse(
         record=summary,
@@ -61,7 +63,9 @@ def get_receipt(record_id: int, db: Session = Depends(get_db)):
     record = record_repo.get_record(db, record_id)
     if record is None:
         raise NotFoundError("Nota servis tidak ditemukan.")
-    return ReceiptOut.model_validate(build_receipt_payload(record))
+    return ReceiptOut.model_validate(
+        build_receipt_payload(record, settings_service.get_bengkel_info(db))
+    )
 
 
 @router.put("/service-records/{record_id}/claim", response_model=ServiceRecordOut)

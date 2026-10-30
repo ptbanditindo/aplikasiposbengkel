@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#f2f4f7">
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -45,11 +45,19 @@
         </button>
         <button type="button" class="nav-tab" data-view="stock">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4z"></path><path d="M4 7l3-3h10l3 3"></path><path d="M9 11h6"></path></svg>
-          Stok &amp; jasa
+          Stok
+        </button>
+        <button type="button" class="nav-tab" data-view="jasa">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3a5 5 0 0 0-4.7 6.7L4 16v4h4l6.3-6.3A5 5 0 0 0 21 9l-3 3-3-3 3-3a5 5 0 0 0-3-3z"></path></svg>
+          Jasa
         </button>
         <button type="button" class="nav-tab" data-view="report">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M11 20V4M17 20v-7"></path></svg>
           Laporan
+        </button>
+        <button type="button" class="nav-tab" data-view="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>
+          Pengaturan
         </button>
       </nav>
 
@@ -354,7 +362,12 @@
                       <option value="3">3 Bulan (90 hari)</option>
                       <option value="6">6 Bulan (180 hari)</option>
                       <option value="12">12 Bulan (360 hari)</option>
+                      <option value="custom">Custom…</option>
                     </select>
+                  </label>
+                  <label class="field hidden" id="garansiBulanCustomField">
+                    <span>Jumlah bulan (1–120)</span>
+                    <input type="number" class="input" id="garansiBulanCustom" min="1" max="120" step="1" inputmode="numeric" placeholder="mis. 18">
                   </label>
                   <label class="field">
                     <span>Catatan garansi</span>
@@ -411,50 +424,60 @@
       <section class="view hidden" id="view-stock">
         <div class="page-head">
           <div>
-            <h1>Stok &amp; tarif jasa</h1>
+            <h1>Stok sparepart</h1>
             <p class="muted">Harga master hanya patokan awal untuk kasir.</p>
           </div>
           <div class="page-actions">
-            <button type="button" class="btn btn-outline" id="btnAddJasa">+ Tarif jasa</button>
             <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
           </div>
         </div>
 
-        <div class="two-col">
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Sparepart gudang</h2>
-                <p class="muted" id="stockSummary">-</p>
-              </div>
-            </div>
-            <div class="table-wrap">
-              <table class="table table-stock">
-                <thead>
-                  <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th></th></tr>
-                </thead>
-                <tbody id="stockBody"></tbody>
-              </table>
-              <div class="empty-state hidden" id="stockEmpty">Belum ada data sparepart.</div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Sparepart gudang</h2>
+              <p class="muted" id="stockSummary">-</p>
             </div>
           </div>
+          <div class="table-wrap">
+            <table class="table table-stock">
+              <thead>
+                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th></th></tr>
+              </thead>
+              <tbody id="stockBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="stockEmpty">Belum ada data sparepart.</div>
+          </div>
+        </div>
+      </section>
 
-          <div class="card">
-            <div class="card-head">
-              <div>
-                <h2>Tarif jasa</h2>
-                <p class="muted">Patokan ongkos pengerjaan.</p>
-              </div>
+      <!-- ============================= JASA ============================= -->
+      <section class="view hidden" id="view-jasa">
+        <div class="page-head">
+          <div>
+            <h1>Tarif jasa</h1>
+            <p class="muted">Patokan ongkos pengerjaan untuk kasir.</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-primary" id="btnAddJasa">+ Tarif jasa</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Daftar tarif jasa</h2>
+              <p class="muted" id="jasaSummary">-</p>
             </div>
-            <div class="table-wrap">
-              <table class="table table-jasa">
-                <thead>
-                  <tr><th>Nama Jasa</th><th class="text-right">Tarif</th><th></th></tr>
-                </thead>
-                <tbody id="jasaBody"></tbody>
-              </table>
-              <div class="empty-state hidden" id="jasaEmpty">Belum ada tarif jasa.</div>
-            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-jasa">
+              <thead>
+                <tr><th>Nama Jasa</th><th class="text-right">Tarif</th><th></th></tr>
+              </thead>
+              <tbody id="jasaBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="jasaEmpty">Belum ada tarif jasa.</div>
           </div>
         </div>
       </section>
@@ -557,6 +580,156 @@
         </section>
       </section>
 
+      <!-- ============================ SETTINGS ============================ -->
+      <section class="view hidden" id="view-settings">
+        <div class="page-head">
+          <div>
+            <h1>Pengaturan bengkel</h1>
+            <p class="muted">Identitas ini tampil di aplikasi dan tercetak pada struk.</p>
+          </div>
+        </div>
+
+        <form class="card" id="settingsForm">
+          <div class="card-head">
+            <div>
+              <h2>Identitas &amp; rekening</h2>
+              <p class="muted" id="settingsAdminNote">Perubahan disimpan di database lokal.</p>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Nama bengkel <em>*</em></span>
+              <input type="text" class="input" id="settingsNama" required minlength="2" maxlength="255" placeholder="contoh: Bengkel Radiator Berkah">
+            </label>
+            <label class="field">
+              <span>Tagline</span>
+              <input type="text" class="input" id="settingsTagline" maxlength="255" placeholder="contoh: Spesialis Servis &amp; Las Radiator">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Alamat</span>
+            <textarea class="input textarea" id="settingsAlamat" rows="2" maxlength="500" placeholder="Alamat bengkel"></textarea>
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Telepon</span>
+              <input type="text" class="input" id="settingsTelepon" maxlength="64" placeholder="021-xxxxxxx">
+            </label>
+            <label class="field">
+              <span>WhatsApp</span>
+              <input type="text" class="input" id="settingsWa" maxlength="64" placeholder="0812-xxxx-xxxx">
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Bank</span>
+              <input type="text" class="input" id="settingsBankNama" maxlength="255" placeholder="contoh: BCA">
+            </label>
+            <label class="field">
+              <span>Nomor rekening</span>
+              <input type="text" class="input" id="settingsNoRekening" maxlength="64" placeholder="contoh: 123-456-7890">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Atas nama</span>
+            <input type="text" class="input" id="settingsAtasNama" maxlength="255" placeholder="Nama pemilik rekening">
+          </label>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-ghost" id="settingsReset">Batalkan perubahan</button>
+            <button type="submit" class="btn btn-primary" id="settingsSave">Simpan pengaturan</button>
+          </div>
+        </form>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Backup &amp; pemulihan database</h2>
+              <p class="muted">Seluruh data lokal (pelanggan, unit, nota, stok, pengaturan) ada dalam satu file database.</p>
+            </div>
+          </div>
+          <p class="tiny muted">
+            Pulihkan file database dari perangkat lain saat instalasi baru. Data saat ini akan
+            diganti, tetapi backup keamanan dibuat otomatis sebelum pemulihan.
+          </p>
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" id="settingsBackup">Unduh backup</button>
+            <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan database</button>
+            <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
+          </div>
+        </section>
+
+        <form class="card" id="telegramForm">
+          <div class="card-head">
+            <div>
+              <h2>Backup otomatis Telegram</h2>
+              <p class="muted" id="telegramStatus">Belum diatur.</p>
+            </div>
+          </div>
+
+          <label class="switch-row">
+            <span>Kirim backup otomatis setiap hari</span>
+            <input type="checkbox" id="telegramAktif">
+            <span class="switch-ui" aria-hidden="true"></span>
+          </label>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Jam kirim (waktu lokal)</span>
+              <input type="time" class="input" id="telegramJam" value="21:00">
+            </label>
+            <label class="field">
+              <span>Chat ID owner / penerima</span>
+              <input type="text" class="input" id="telegramChatId" maxlength="64" placeholder="contoh: 123456789 atau @namachannel">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Bot token Telegram</span>
+            <input type="password" class="input" id="telegramToken" maxlength="200" autocomplete="new-password" placeholder="Biarkan kosong untuk memakai token yang tersimpan">
+          </label>
+
+          <p class="tiny muted">
+            Setiap pengiriman berisi satu file database lengkap (semua data) dengan nama rentang
+            tanggal, sehingga tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet.
+            Jika backup harian terlewat (misalnya internet mati), aplikasi langsung mengirimkannya
+            begitu internet tersedia tanpa menunggu jam kirim.
+          </p>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" id="telegramSendNow">Kirim backup sekarang</button>
+            <button type="submit" class="btn btn-primary" id="telegramSave">Simpan pengaturan Telegram</button>
+          </div>
+        </form>
+
+        <section class="card hidden" id="pinSecurityCard">
+          <div class="card-head">
+            <div>
+              <h2>Keamanan aplikasi (APK)</h2>
+              <p class="muted">PIN diminta setiap aplikasi dibuka dan setelah aplikasi lama di latar belakang.</p>
+            </div>
+          </div>
+          <label class="field">
+            <span>Kunci otomatis setelah di latar belakang</span>
+            <select class="input" id="pinIdleMinutes">
+              <option value="1">1 menit</option>
+              <option value="2">2 menit</option>
+              <option value="5">5 menit</option>
+              <option value="10">10 menit</option>
+              <option value="30">30 menit</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" id="pinLockNow">Kunci sekarang</button>
+          </div>
+        </section>
+      </section>
+
       <!-- ========================= CUSTOMER DIRECTORY ========================= -->
       <section class="view hidden" id="view-customers">
         <div class="page-head">
@@ -652,6 +825,7 @@
         <div class="segmented sm" id="receiptWidthSwitch">
           <button type="button" data-width="58" class="active">58 mm</button>
           <button type="button" data-width="80">80 mm</button>
+          <button type="button" data-width="A4">A4</button>
         </div>
         <span class="printer-note" id="receiptNotice">Web Bluetooth belum terhubung.</span>
       </div>
@@ -659,7 +833,7 @@
         <pre id="receiptPreview"></pre>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
+        <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak printer sistem</button>
         <button type="button" class="btn btn-primary" id="btnBluetoothPrint">Cetak Bluetooth</button>
       </div>
     </div>

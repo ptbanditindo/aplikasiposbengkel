@@ -252,10 +252,15 @@
     if (view === 'dashboard') loadDashboard();
     if (view === 'history') loadHistory($('#historySearch').value.trim());
     if (view === 'stock') renderStock();
+    if (view === 'jasa') renderJasa();
     if (view === 'customers') {
       loadCustomerDirectory($('#customerDirectorySearch').value.trim());
     }
     if (view === 'report') loadReport();
+    if (view === 'settings') {
+      fillSettingsForm();
+      fillTelegramForm();
+    }
     if (view === 'pos' && !state.selectedCustomer) {
       const search = $('#customerSearch');
       if (search) search.focus();
@@ -273,12 +278,14 @@
     $('#bankAccount').textContent =
       config.bengkel.bank_nama + ': ' + config.bengkel.no_rekening;
     $('#bankOwner').textContent = 'a/n ' + config.bengkel.atas_nama;
-    $('#garansiBulan').value = String(config.default_garansi_bulan || 1);
+    setGaransiBulan(config.default_garansi_bulan || 1);
     $('#garansiCatatan').value = config.garansi_syarat || '';
-    state.receiptWidth = config.printer.paper_width === 80 ? 80 : 58;
+    state.receiptWidth = preferredReceiptWidth();
     syncReceiptWidthUI();
     renderComplaintChips();
     updateReceiptNotice();
+    fillSettingsForm();
+    fillTelegramForm();
   }
 
   function renderComplaintChips() {
@@ -1065,6 +1072,26 @@
   function updateGaransiFields() {
     const enabled = $('#garansiAktif').checked;
     $('#garansiFields').classList.toggle('off', !enabled);
+    $('#garansiBulanCustomField').classList.toggle(
+      'hidden',
+      $('#garansiBulan').value !== 'custom'
+    );
+  }
+
+  function garansiBulanValue() {
+    const selected = $('#garansiBulan').value;
+    const raw = selected === 'custom' ? $('#garansiBulanCustom').value : selected;
+    return Math.min(120, Math.max(1, intValue(raw, 1) || 1));
+  }
+
+  function setGaransiBulan(months) {
+    const value = Math.min(120, Math.max(1, intValue(months, 1) || 1));
+    const isPreset = Array.from($('#garansiBulan').options).some(
+      (option) => option.value === String(value)
+    );
+    $('#garansiBulan').value = isPreset ? String(value) : 'custom';
+    $('#garansiBulanCustom').value = isPreset ? '' : String(value);
+    updateGaransiFields();
   }
 
   function resetPosState() {
@@ -1091,7 +1118,7 @@
     $('#garansiAktif').checked = true;
 
     if (state.config) {
-      $('#garansiBulan').value = String(state.config.default_garansi_bulan || 1);
+      setGaransiBulan(state.config.default_garansi_bulan || 1);
       $('#garansiCatatan').value = state.config.garansi_syarat || '';
     }
 
@@ -1118,7 +1145,7 @@
       metode_bayar: metode,
       bayar: String(paid),
       bergaransi: $('#garansiAktif').checked,
-      garansi_bulan: intValue($('#garansiBulan').value, 1) || 1,
+      garansi_bulan: garansiBulanValue(),
       catatan_garansi: $('#garansiCatatan').value.trim() || null,
       jobs: state.jobs.map((job) => ({
         harga_jasa_id: job.harga_jasa_id || null,
@@ -1216,10 +1243,24 @@
   }
 
   /* ------------------------------ Receipt --------------------------------- */
+  const RECEIPT_WIDTH_KEY = 'bengkel.receiptWidth';
+
+  function normalizeReceiptWidth(value) {
+    if (String(value) === 'A4') return 'A4';
+    return intValue(value, 58) === 80 ? 80 : 58;
+  }
+
+  function preferredReceiptWidth() {
+    const stored = window.localStorage.getItem(RECEIPT_WIDTH_KEY);
+    if (stored) return normalizeReceiptWidth(stored);
+    return normalizeReceiptWidth(
+      state.config && state.config.printer.paper_width
+    );
+  }
+
   function showReceipt(receipt) {
     state.receipt = receipt;
-    state.receiptWidth =
-      state.config && state.config.printer.paper_width === 80 ? 80 : 58;
+    state.receiptWidth = preferredReceiptWidth();
     syncReceiptWidthUI();
     $('#receiptTitle').textContent = 'Struk ' + receipt.no_nota;
     $('#receiptSubtitle').textContent =
@@ -1231,9 +1272,9 @@
 
   function currentReceiptLines() {
     if (!state.receipt) return [];
-    return state.receiptWidth === 80
-      ? state.receipt.struk_80
-      : state.receipt.struk_58;
+    return state.receiptWidth === 58
+      ? state.receipt.struk_58
+      : state.receipt.struk_80;
   }
 
   function renderReceiptPreview() {
@@ -1241,13 +1282,14 @@
     if (!preview || !state.receipt) return;
     preview.textContent = currentReceiptLines().join('\n');
     preview.classList.toggle('w80', state.receiptWidth === 80);
+    preview.classList.toggle('w-a4', state.receiptWidth === 'A4');
   }
 
   function syncReceiptWidthUI() {
     $$('#receiptWidthSwitch button').forEach((button) => {
       button.classList.toggle(
         'active',
-        intValue(button.dataset.width, 58) === state.receiptWidth
+        String(button.dataset.width) === String(state.receiptWidth)
       );
     });
   }
@@ -1255,7 +1297,11 @@
   function onReceiptWidthClick(event) {
     const button = event.target.closest('button[data-width]');
     if (!button) return;
-    state.receiptWidth = intValue(button.dataset.width, 58) === 80 ? 80 : 58;
+    state.receiptWidth = normalizeReceiptWidth(button.dataset.width);
+    window.localStorage.setItem(
+      RECEIPT_WIDTH_KEY,
+      String(state.receiptWidth)
+    );
     syncReceiptWidthUI();
     renderReceiptPreview();
   }
@@ -1265,7 +1311,7 @@
     if (!note) return;
     if (!window.BluetoothPrinter.isSupported()) {
       note.textContent =
-        'Web Bluetooth tidak didukung. Gunakan tombol Cetak Browser.';
+        'Cetak printer sistem bisa dipakai untuk printer thermal maupun printer biasa (A4).';
       return;
     }
     if (window.BluetoothPrinter.connected) {
@@ -1273,7 +1319,8 @@
         'Printer siap: ' + (window.BluetoothPrinter.name || 'Printer Thermal');
       return;
     }
-    note.textContent = 'Klik Cetak Bluetooth untuk pairing printer.';
+    note.textContent =
+      'Klik Cetak Bluetooth untuk pairing thermal, atau Cetak printer sistem untuk printer lain.';
   }
 
   async function printReceipt(receipt, silent) {
@@ -1282,11 +1329,17 @@
       return false;
     }
 
-    const width = state.receiptWidth === 80 ? 80 : 58;
+    const width = state.receiptWidth;
+    const lines = width === 58 ? receipt.struk_58 : receipt.struk_80;
+    const printer = window.BluetoothPrinter;
+
+    if (width === 'A4') {
+      browserPrint(lines, 'A4');
+      return false;
+    }
+
     const base64 =
       width === 80 ? receipt.escpos_80_base64 : receipt.escpos_58_base64;
-    const lines = width === 80 ? receipt.struk_80 : receipt.struk_58;
-    const printer = window.BluetoothPrinter;
 
     if (printer.isSupported() && printer.connected) {
       try {
@@ -1328,22 +1381,32 @@
 
   function browserPrint(lines, width) {
     const text = (lines || []).join('\n');
-    const paper = width === 80 ? '80mm' : '58mm';
-    const fontSize = width === 80 ? '11px' : '10.5px';
+    const isA4 = width === 'A4';
+    const style = isA4
+      ? '@page{size:A4;margin:15mm}' +
+        'body{margin:0;font-family:"Courier New",monospace;font-size:12.5px;line-height:1.5;color:#000}' +
+        'pre{margin:0 auto;width:120mm;white-space:pre;font-family:inherit}'
+      : '@page{size:' +
+        (width === 80 ? '80mm' : '58mm') +
+        ' auto;margin:4mm}' +
+        'body{margin:0;padding:6px;font-family:"Courier New",monospace;font-size:' +
+        (width === 80 ? '11px' : '10.5px') +
+        ';line-height:1.35;color:#000}' +
+        'pre{margin:0;white-space:pre;font-family:inherit}';
     const html =
       '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Struk Servis</title>' +
-      '<style>@page{size:' +
-      paper +
-      ' auto;margin:4mm}' +
-      'body{margin:0;padding:6px;font-family:"Courier New",monospace;font-size:' +
-      fontSize +
-      ';line-height:1.35;color:#000}' +
-      'pre{margin:0;white-space:pre;font-family:inherit}</style></head><body><pre>' +
+      '<style>' +
+      style +
+      '</style></head><body><pre>' +
       esc(text) +
       '</pre><script>window.onload=function(){setTimeout(function(){window.print();},180);};<\/script>' +
       '</body></html>';
 
-    const win = window.open('', '_blank', 'width=420,height=760');
+    const win = window.open(
+      '',
+      '_blank',
+      isA4 ? 'width=900,height=1000' : 'width=420,height=760'
+    );
     if (win && win.document) {
       win.document.open();
       win.document.write(html);
@@ -1396,7 +1459,7 @@
     button.addEventListener('click', async () => {
       if (!printer.isSupported()) {
         toast(
-          'Browser ini tidak mendukung Web Bluetooth. Gunakan Chrome/Edge dan akses lewat localhost.',
+          'Web Bluetooth tidak didukung browser ini. Gunakan tombol "Cetak printer sistem" pada struk untuk printer thermal maupun printer biasa.',
           'warning',
           7000
         );
@@ -2027,6 +2090,7 @@
       state.jasa = results[1];
       populatePickers();
       renderStock();
+      renderJasa();
     } catch (err) {
       toast('Gagal memuat stok: ' + err.message, 'error', 6000);
     }
@@ -2034,8 +2098,7 @@
 
   function renderStock() {
     const stockBody = $('#stockBody');
-    const jasaBody = $('#jasaBody');
-    if (!stockBody || !jasaBody) return;
+    if (!stockBody) return;
 
     const lowStock = state.stock.filter((item) => item.jumlah <= 3).length;
     $('#stockSummary').textContent =
@@ -2080,6 +2143,15 @@
       })
       .join('');
 
+    $('#stockEmpty').classList.toggle('hidden', state.stock.length > 0);
+  }
+
+  function renderJasa() {
+    const jasaBody = $('#jasaBody');
+    if (!jasaBody) return;
+
+    $('#jasaSummary').textContent = state.jasa.length + ' tarif jasa';
+
     jasaBody.innerHTML = state.jasa
       .map(
         (jasa) =>
@@ -2102,7 +2174,6 @@
       )
       .join('');
 
-    $('#stockEmpty').classList.toggle('hidden', state.stock.length > 0);
     $('#jasaEmpty').classList.toggle('hidden', state.jasa.length > 0);
   }
 
@@ -2506,14 +2577,226 @@
   }
 
   function ensureAdminToken() {
-    const stored = sessionStorage.getItem('adminToken') || '';
     if (!adminTokenRequired()) return '';
+
+    // APK Android menyuntikkan token per-instalasi sebelum halaman dimuat.
+    const injected = window.__BENGKEL_ADMIN_TOKEN__;
+    if (typeof injected === 'string' && injected.trim()) return injected.trim();
+
+    const stored = sessionStorage.getItem('adminToken') || '';
     if (stored) return stored;
 
     const answer = window.prompt('Masukkan token admin untuk operasi ini:');
     const token = answer ? answer.trim() : '';
     if (token) sessionStorage.setItem('adminToken', token);
     return token;
+  }
+
+  /* ----------------------------- Settings --------------------------------- */
+  function fillSettingsForm() {
+    const bengkel = state.config && state.config.bengkel;
+    if (!bengkel) return;
+
+    const fields = {
+      settingsNama: 'nama',
+      settingsTagline: 'tagline',
+      settingsAlamat: 'alamat',
+      settingsTelepon: 'telepon',
+      settingsWa: 'wa',
+      settingsBankNama: 'bank_nama',
+      settingsNoRekening: 'no_rekening',
+      settingsAtasNama: 'atas_nama',
+    };
+    Object.keys(fields).forEach((id) => {
+      const input = $('#' + id);
+      if (input) input.value = bengkel[fields[id]] || '';
+    });
+
+    const note = $('#settingsAdminNote');
+    if (note) {
+      note.textContent = adminTokenRequired()
+        ? 'Perubahan disimpan di database lokal dan memerlukan token admin.'
+        : 'Perubahan disimpan di database lokal.';
+    }
+  }
+
+  async function handleSettingsSubmit(event) {
+    event.preventDefault();
+    const button = $('#settingsSave');
+    const payload = {
+      nama: $('#settingsNama').value.trim(),
+      tagline: $('#settingsTagline').value.trim(),
+      alamat: $('#settingsAlamat').value.trim(),
+      telepon: $('#settingsTelepon').value.trim(),
+      wa: $('#settingsWa').value.trim(),
+      bank_nama: $('#settingsBankNama').value.trim(),
+      no_rekening: $('#settingsNoRekening').value.trim(),
+      atas_nama: $('#settingsAtasNama').value.trim(),
+    };
+
+    if (payload.nama.length < 2) {
+      toast('Nama bengkel minimal 2 karakter.', 'warning');
+      $('#settingsNama').focus();
+      return;
+    }
+
+    const token = ensureAdminToken();
+    if (adminTokenRequired() && !token) {
+      toast('Token admin wajib diisi.', 'warning');
+      return;
+    }
+
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      state.config.bengkel = await API.updateBengkel(payload, token);
+      applyConfig();
+      toast('Pengaturan bengkel tersimpan.', 'success');
+    } catch (err) {
+      if (err.status === 401) sessionStorage.removeItem('adminToken');
+      toast('Gagal menyimpan pengaturan: ' + err.message, 'error', 6000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  /* ----------------------------- Telegram --------------------------------- */
+  function renderTelegramStatus(telegram) {
+    const status = $('#telegramStatus');
+    if (!status) return;
+
+    const parts = [];
+    if (!telegram.configured) {
+      parts.push('Bot token dan chat ID belum lengkap.');
+    } else if (telegram.enabled) {
+      parts.push(
+        'Aktif, mengirim otomatis setiap hari pukul ' +
+          (telegram.jam || '21:00') +
+          '.'
+      );
+    } else {
+      parts.push(
+        'Pengiriman otomatis nonaktif (jadwal ' +
+          (telegram.jam || '21:00') +
+          ').'
+      );
+    }
+    parts.push(
+      telegram.last_sent_at
+        ? 'Terakhir dikirim ' + fmtDateTime(telegram.last_sent_at) + '.'
+        : 'Belum pernah dikirim.'
+    );
+    if (telegram.last_error) {
+      parts.push('Kesalahan terakhir: ' + telegram.last_error);
+    }
+    status.textContent = parts.join(' ');
+  }
+
+  function fillTelegramForm() {
+    const telegram = state.config && state.config.telegram;
+    if (!telegram) return;
+    $('#telegramAktif').checked = Boolean(telegram.enabled);
+    $('#telegramJam').value = telegram.jam || '21:00';
+    $('#telegramChatId').value = telegram.chat_id || '';
+    renderTelegramStatus(telegram);
+  }
+
+  async function handleTelegramSubmit(event) {
+    event.preventDefault();
+    const button = $('#telegramSave');
+    const jam = $('#telegramJam').value || '21:00';
+    const payload = {
+      enabled: $('#telegramAktif').checked,
+      jam: jam,
+      chat_id: $('#telegramChatId').value.trim(),
+      bot_token: $('#telegramToken').value.trim(),
+    };
+
+    const token = ensureAdminToken();
+    if (adminTokenRequired() && !token) {
+      toast('Token admin wajib diisi.', 'warning');
+      return;
+    }
+
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      state.config.telegram = await API.updateTelegram(payload, token);
+      $('#telegramToken').value = '';
+      fillTelegramForm();
+      toast('Pengaturan Telegram tersimpan.', 'success');
+    } catch (err) {
+      if (err.status === 401) sessionStorage.removeItem('adminToken');
+      toast('Gagal menyimpan Telegram: ' + err.message, 'error', 6000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleTelegramSendNow() {
+    const button = $('#telegramSendNow');
+    if (!state.config || !state.config.telegram.configured) {
+      toast('Simpan bot token dan chat ID terlebih dahulu.', 'warning');
+      return;
+    }
+    const token = ensureAdminToken();
+    if (adminTokenRequired() && !token) {
+      toast('Token admin wajib diisi.', 'warning');
+      return;
+    }
+
+    setBusy(button, true, 'Mengirim...');
+    try {
+      const result = await API.sendTelegramBackup(token);
+      toast(
+        'Backup terkirim: ' + result.filename + ' (' + result.jumlah_nota + ' nota).',
+        'success',
+        7000
+      );
+      state.config = await API.getConfig();
+      applyConfig();
+    } catch (err) {
+      if (err.status === 401) sessionStorage.removeItem('adminToken');
+      toast('Gagal mengirim backup: ' + err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  /* ------------------------------ Restore --------------------------------- */
+  function requestRestore() {
+    const input = $('#settingsRestoreFile');
+    if (input) input.click();
+  }
+
+  async function handleRestoreFile(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      'Pulihkan database dari "' +
+        file.name +
+        '"? Seluruh data saat ini akan diganti. Backup keamanan tetap dibuat otomatis.'
+    );
+    if (!confirmed) return;
+
+    const token = ensureAdminToken();
+    if (adminTokenRequired() && !token) {
+      toast('Token admin wajib diisi.', 'warning');
+      return;
+    }
+
+    const button = $('#settingsRestore');
+    setBusy(button, true, 'Memulihkan...');
+    try {
+      await API.restoreDatabase(file, token);
+      toast('Database berhasil dipulihkan. Memuat ulang aplikasi...', 'success', 4000);
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+      if (err.status === 401) sessionStorage.removeItem('adminToken');
+      toast('Gagal memulihkan database: ' + err.message, 'error', 7000);
+      setBusy(button, false);
+    }
   }
 
   async function handleBackup() {
@@ -2628,6 +2911,10 @@
       radio.addEventListener('change', handlePaymentModeChange)
     );
     $('#garansiAktif').addEventListener('change', updateGaransiFields);
+    $('#garansiBulan').addEventListener('change', updateGaransiFields);
+    $('#garansiBulanCustom').addEventListener('change', () => {
+      $('#garansiBulanCustom').value = String(garansiBulanValue());
+    });
     $('#btnSavePrint').addEventListener('click', () => saveTransaction(true));
     $('#btnSaveOnly').addEventListener('click', () => saveTransaction(false));
 
@@ -2719,6 +3006,15 @@
     $('#customerForm').addEventListener('submit', handleCustomerSubmit);
     $('#stockForm').addEventListener('submit', handleStockSubmit);
     $('#jasaForm').addEventListener('submit', handleJasaSubmit);
+    $('#settingsForm').addEventListener('submit', handleSettingsSubmit);
+    $('#settingsReset').addEventListener('click', fillSettingsForm);
+
+    $('#settingsBackup').addEventListener('click', handleBackup);
+    $('#settingsRestore').addEventListener('click', requestRestore);
+    $('#settingsRestoreFile').addEventListener('change', handleRestoreFile);
+
+    $('#telegramForm').addEventListener('submit', handleTelegramSubmit);
+    $('#telegramSendNow').addEventListener('click', handleTelegramSendNow);
 
     document.addEventListener('click', handleGlobalClick);
     document.addEventListener('input', handleGlobalInput);
@@ -2745,11 +3041,30 @@
     });
   }
 
+  /* ---------------------------- PIN keamanan APK --------------------------- */
+  function initPinSecurityCard() {
+    const bridge = window.BengkelPin;
+    const card = $('#pinSecurityCard');
+    if (!card || !bridge) return;
+    card.classList.remove('hidden');
+
+    const select = $('#pinIdleMinutes');
+    const current = String(bridge.getIdleMinutes());
+    if (Array.from(select.options).some((option) => option.value === current)) {
+      select.value = current;
+    }
+    select.addEventListener('change', () => {
+      bridge.setIdleMinutes(Number(select.value));
+    });
+    $('#pinLockNow').addEventListener('click', () => bridge.lockNow());
+  }
+
   /* --------------------------------- Init --------------------------------- */
   async function init() {
     bindEvents();
     startClock();
     initPrinter();
+    initPinSecurityCard();
 
     try {
       const results = await Promise.all([
@@ -2763,6 +3078,7 @@
       applyConfig();
       populatePickers();
       renderStock();
+      renderJasa();
     } catch (err) {
       toast(
         'Gagal memuat konfigurasi awal: ' + err.message,

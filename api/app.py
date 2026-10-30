@@ -1,23 +1,33 @@
 """Inisialisasi aplikasi FastAPI BengkelPOS Radiator."""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 
-from api import customer_routes, pos_routes, report_routes, stock_routes
+from api import (
+    customer_routes,
+    pos_routes,
+    report_routes,
+    settings_routes,
+    stock_routes,
+)
 from api.schemas import (
     BengkelInfoOut,
     ConfigOut,
     PrinterInfoOut,
+    TelegramInfoOut,
 )
 from config import BASE_DIR, settings
 from database.seed import seed_defaults
-from database.session import SessionLocal, init_db
+from database.session import SessionLocal, get_db, init_db
+from services import settings_service, telegram_backup_service
 from services.errors import (
     ConflictError,
     DomainError,
@@ -45,7 +55,16 @@ async def lifespan(_app: FastAPI):
     init_db()
     with SessionLocal() as db:
         seed_defaults(db)
-    yield
+    scheduler = None
+    if settings.app_env != "test":
+        scheduler = asyncio.create_task(telegram_backup_service.scheduler_loop())
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduler
 
 
 def create_app() -> FastAPI:
@@ -97,24 +116,21 @@ def create_app() -> FastAPI:
     app.include_router(pos_routes.router, prefix=api_prefix)
     app.include_router(stock_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
+    app.include_router(settings_routes.router, prefix=api_prefix)
 
     @app.get("/api/health", tags=["Sistem"])
     def health():
         return {"status": "ok", "app": "BengkelPOS Radiator", "version": APP_VERSION}
 
     @app.get("/api/config", response_model=ConfigOut, tags=["Sistem"])
-    def app_config():
+    def app_config(db: Session = Depends(get_db)):
         return ConfigOut(
             version=APP_VERSION,
-            bengkel=BengkelInfoOut(
-                nama=settings.bengkel_nama,
-                tagline=settings.bengkel_tagline,
-                alamat=settings.bengkel_alamat,
-                telepon=settings.bengkel_telepon,
-                wa=settings.bengkel_wa,
-                bank_nama=settings.bengkel_bank_nama,
-                no_rekening=settings.bengkel_no_rekening,
-                atas_nama=settings.bengkel_atas_nama,
+            bengkel=BengkelInfoOut(**settings_service.get_bengkel_info(db)),
+            telegram=TelegramInfoOut(
+                **settings_service.telegram_public_info(
+                    settings_service.get_telegram_config(db)
+                )
             ),
             printer=PrinterInfoOut(
                 paper_width=settings.printer_paper_width,

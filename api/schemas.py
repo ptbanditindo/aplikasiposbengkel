@@ -1,37 +1,88 @@
 """Skema Pydantic (kontrak REST API).
 
 Ref: PRD BAB 5.1.
+
+Kompatibel dengan Pydantic v1 maupun v2:
+- Server desktop memakai v2 (requirements.txt).
+- APK Android memakai v1 karena pydantic-core (Rust) tidak tersedia di Chaquopy.
 """
 from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    PlainSerializer,
-)
+import pydantic
+from pydantic import BaseModel, Field
 
+PYDANTIC_V2 = pydantic.VERSION.startswith("2.")
 
-def _serialize_money(value: Decimal) -> str:
-    return f"{Decimal(value):.2f}"
+if PYDANTIC_V2:
+    from typing import Annotated
 
+    from pydantic import ConfigDict, PlainSerializer
 
-Money = Annotated[
-    Decimal,
-    PlainSerializer(_serialize_money, return_type=str, when_used="json"),
-]
+    def _format_money(value: Any) -> str:
+        return f"{Decimal(value):.2f}"
 
+    Money = Annotated[
+        Decimal,
+        PlainSerializer(_format_money, return_type=str, when_used="json"),
+    ]
+    ZERO_MONEY: Any = Decimal("0.00")
 
-class ORMModel(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    class CompatBase(BaseModel):
+        pass
+
+    class ORMModel(CompatBase):
+        model_config = ConfigDict(from_attributes=True)
+
+    def _pattern(regex: str) -> Dict[str, Any]:
+        return {"pattern": regex}
+
+else:  # Pydantic v1
+
+    class Money(str):
+        """Decimal uang yang diserialisasi sebagai string dua desimal."""
+
+        @classmethod
+        def __get_validators__(cls):
+            yield cls.validate
+
+        @classmethod
+        def validate(cls, value: Any) -> "Money":
+            if isinstance(value, Money):
+                return value
+            return cls(f"{Decimal(value):.2f}")
+
+        @classmethod
+        def __modify_schema__(cls, field_schema: Dict[str, Any]) -> None:
+            field_schema.update(type="string", example="0.00")
+
+    ZERO_MONEY = Money("0.00")
+
+    class CompatBase(BaseModel):
+        class Config:
+            orm_mode = True
+
+        @classmethod
+        def model_validate(cls, obj: Any, **_kwargs: Any):
+            if isinstance(obj, dict):
+                return cls.parse_obj(obj)
+            return cls.from_orm(obj)
+
+        def model_dump(self, **kwargs: Any) -> Dict[str, Any]:
+            return self.dict(**kwargs)
+
+    class ORMModel(CompatBase):
+        pass
+
+    def _pattern(regex: str) -> Dict[str, Any]:
+        return {"regex": regex}
 
 
 # --- CUSTOMER & UNIT ---
-class CustomerCreate(BaseModel):
+class CustomerCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
     nomor_hp: str = Field(..., max_length=64)
     alamat: Optional[str] = Field(default=None, max_length=500)
@@ -45,9 +96,9 @@ class CustomerOut(ORMModel):
     created_at: datetime
 
 
-class UnitCreate(BaseModel):
+class UnitCreate(CompatBase):
     customer_id: int = Field(..., gt=0)
-    unit_type: str = Field(..., pattern="^(MOBIL|RADIATOR_ONLY)$")
+    unit_type: str = Field(..., **_pattern("^(MOBIL|RADIATOR_ONLY)$"))
     nopol: Optional[str] = Field(default=None, max_length=32)
     jenis_mobil: Optional[str] = Field(default=None, max_length=255)
     tahun_mobil: Optional[int] = Field(default=None, ge=1900, le=2100)
@@ -77,7 +128,7 @@ class CustomerOverviewOut(CustomerOut):
 
 
 # --- STOCK & JASA ---
-class StockItemCreate(BaseModel):
+class StockItemCreate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
     nama: str = Field(..., min_length=2, max_length=255)
     harga_modal: Decimal = Field(default=Decimal("0.00"), ge=0)
@@ -85,7 +136,7 @@ class StockItemCreate(BaseModel):
     jumlah: int = Field(default=0, ge=0)
 
 
-class StockItemUpdate(BaseModel):
+class StockItemUpdate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
     nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
     harga_modal: Optional[Decimal] = Field(default=None, ge=0)
@@ -102,12 +153,12 @@ class StockItemOut(ORMModel):
     jumlah: int
 
 
-class HargaJasaCreate(BaseModel):
+class HargaJasaCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
     harga_standar: Decimal = Field(..., ge=0)
 
 
-class HargaJasaUpdate(BaseModel):
+class HargaJasaUpdate(CompatBase):
     nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
     harga_standar: Optional[Decimal] = Field(default=None, ge=0)
 
@@ -119,26 +170,26 @@ class HargaJasaOut(ORMModel):
 
 
 # --- TRANSAKSI POS ---
-class ServiceJobInput(BaseModel):
+class ServiceJobInput(CompatBase):
     harga_jasa_id: Optional[int] = None
     deskripsi: str = Field(..., min_length=1, max_length=255)
     jumlah: int = Field(default=1, ge=1)
     harga: Decimal = Field(..., ge=0)
 
 
-class ServicePartInput(BaseModel):
+class ServicePartInput(CompatBase):
     stock_item_id: Optional[int] = None
     nama_part: str = Field(default="", max_length=255)
     jumlah: int = Field(default=1, ge=1)
     harga_satuan: Decimal = Field(..., ge=0)
 
 
-class CreateServiceTransactionRequest(BaseModel):
+class CreateServiceTransactionRequest(CompatBase):
     unit_id: int = Field(..., gt=0)
     keluhan_awal: str = Field(..., min_length=1, max_length=2000)
     catatan_pengerjaan: Optional[str] = Field(default=None, max_length=2000)
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
-    metode_bayar: str = Field(default="CASH", pattern="^(CASH|TRANSFER)$")
+    metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     bergaransi: bool = True
     garansi_bulan: int = Field(default=1, ge=1, le=120)
@@ -190,7 +241,7 @@ class ServiceRecordOut(ORMModel):
     garansi_aktif: bool
     warranty_status: str
     jumlah_item: int = 0
-    laba_kotor: Money = Decimal("0.00")
+    laba_kotor: Money = ZERO_MONEY
 
 
 class ReceiptOut(ORMModel):
@@ -233,7 +284,7 @@ class ReceiptOut(ORMModel):
     escpos_80_base64: str
 
 
-class TransactionResponse(BaseModel):
+class TransactionResponse(CompatBase):
     record: ServiceRecordOut
     receipt: ReceiptOut
     warnings: List[str] = Field(default_factory=list)
@@ -241,7 +292,7 @@ class TransactionResponse(BaseModel):
 
 
 # --- LAPORAN ---
-class DailySummaryOut(BaseModel):
+class DailySummaryOut(CompatBase):
     tanggal: date
     jumlah_transaksi: int
     jumlah_unit_servis: int
@@ -259,7 +310,7 @@ class DailyReportOut(DailySummaryOut):
     transaksi: List[ServiceRecordOut] = Field(default_factory=list)
 
 
-class PeriodReportOut(BaseModel):
+class PeriodReportOut(CompatBase):
     start: date
     end: date
     jumlah_transaksi: int
@@ -276,7 +327,7 @@ class PeriodReportOut(BaseModel):
     harian: List[DailySummaryOut] = Field(default_factory=list)
 
 
-class SoldPartOut(BaseModel):
+class SoldPartOut(CompatBase):
     id: int
     service_record_id: int
     no_nota: str
@@ -289,7 +340,7 @@ class SoldPartOut(BaseModel):
     unit_deskripsi: str
 
 
-class SoldPartsReportOut(BaseModel):
+class SoldPartsReportOut(CompatBase):
     jumlah_penjualan: int
     total_qty: int
     total_nilai: Money
@@ -297,7 +348,18 @@ class SoldPartsReportOut(BaseModel):
 
 
 # --- KONFIGURASI PUBLIK ---
-class BengkelInfoOut(BaseModel):
+class BengkelInfoIn(CompatBase):
+    nama: str = Field(..., min_length=2, max_length=255)
+    tagline: str = Field(default="", max_length=255)
+    alamat: str = Field(default="", max_length=500)
+    telepon: str = Field(default="", max_length=64)
+    wa: str = Field(default="", max_length=64)
+    bank_nama: str = Field(default="", max_length=255)
+    no_rekening: str = Field(default="", max_length=64)
+    atas_nama: str = Field(default="", max_length=255)
+
+
+class BengkelInfoOut(CompatBase):
     nama: str
     tagline: str
     alamat: str
@@ -308,15 +370,32 @@ class BengkelInfoOut(BaseModel):
     atas_nama: str
 
 
-class PrinterInfoOut(BaseModel):
+class TelegramSettingsIn(CompatBase):
+    enabled: bool = False
+    jam: str = Field(default="21:00", **_pattern(r"^([01]\d|2[0-3]):[0-5]\d$"))
+    chat_id: str = Field(default="", max_length=64)
+    bot_token: str = Field(default="", max_length=200)
+
+
+class TelegramInfoOut(CompatBase):
+    enabled: bool
+    jam: str
+    chat_id: str
+    configured: bool
+    last_sent_at: Optional[str] = None
+    last_error: Optional[str] = None
+
+
+class PrinterInfoOut(CompatBase):
     paper_width: int
     encoding: str
     auto_cut: bool
 
 
-class ConfigOut(BaseModel):
+class ConfigOut(CompatBase):
     version: str
     bengkel: BengkelInfoOut
+    telegram: TelegramInfoOut
     printer: PrinterInfoOut
     default_garansi_bulan: int
     garansi_syarat: str

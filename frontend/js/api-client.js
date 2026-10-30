@@ -114,6 +114,59 @@
     claim: (id) =>
       request('/api/service-records/' + id + '/claim', { method: 'PUT' }),
 
+    updateBengkel: (data, token) =>
+      request('/api/settings/bengkel', {
+        method: 'PUT',
+        body: data,
+        headers: token ? { 'X-Admin-Token': token } : {},
+      }),
+
+    updateTelegram: (data, token) =>
+      request('/api/settings/telegram', {
+        method: 'PUT',
+        body: data,
+        headers: token ? { 'X-Admin-Token': token } : {},
+      }),
+
+    sendTelegramBackup: (token) =>
+      request('/api/admin/telegram-backup', {
+        method: 'POST',
+        headers: token ? { 'X-Admin-Token': token } : {},
+      }),
+
+    restoreDatabase: async (file, token) => {
+      const form = new FormData();
+      form.append('file', file);
+
+      let response;
+      try {
+        response = await fetch('/api/admin/restore', {
+          method: 'POST',
+          headers: token ? { 'X-Admin-Token': token } : {},
+          body: form,
+          cache: 'no-store',
+        });
+      } catch (err) {
+        throw new ApiError('Tidak dapat menghubungi server lokal.', 0, null);
+      }
+
+      if (!response.ok) {
+        let detail = null;
+        try {
+          const data = await response.json();
+          detail = data ? data.detail : null;
+        } catch (err) {
+          detail = null;
+        }
+        throw new ApiError(
+          extractMessage(detail, 'Restore gagal (HTTP ' + response.status + ').'),
+          response.status,
+          detail
+        );
+      }
+      return response.json();
+    },
+
     daily: (dateStr) =>
       request('/api/reports/daily-cash?tanggal=' + qs(dateStr || '')),
     period: (start, end) =>
