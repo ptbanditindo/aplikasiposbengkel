@@ -31,20 +31,13 @@ def test_config_memakai_default_env(client):
     assert bengkel["no_rekening"] == "987-654-3210"
 
 
-def test_ubah_identitas_wajib_token_admin(client):
-    assert client.put("/api/settings/bengkel", json=bengkel_payload()).status_code == 401
+def test_ubah_identitas_wajib_sesi(client, anon_client):
     assert (
-        client.put(
-            "/api/settings/bengkel",
-            json=bengkel_payload(),
-            headers={"X-Admin-Token": "salah"},
-        ).status_code
+        anon_client.put("/api/settings/bengkel", json=bengkel_payload()).status_code
         == 401
     )
 
-    response = client.put(
-        "/api/settings/bengkel", json=bengkel_payload(), headers=ADMIN_HEADERS
-    )
+    response = client.put("/api/settings/bengkel", json=bengkel_payload())
     assert response.status_code == 200, response.text
     assert response.json()["nama"] == "BENGKEL RADIATOR JAYA"
 

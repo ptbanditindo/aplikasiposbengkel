@@ -43,6 +43,7 @@ class Settings:
     app_env: str
     app_host: str
     app_port: int
+    auth_mode: str
     ui_access_token: str
 
     database_url: str
@@ -87,8 +88,9 @@ def load_settings() -> Settings:
     # Ref: PRD FR-PRN-05 / FR-POS-07 - identitas bengkel & rekening transfer
     return Settings(
         app_env=os.getenv("APP_ENV", "development").strip(),
-        app_host=os.getenv("APP_HOST", "0.0.0.0").strip(),
+        app_host=os.getenv("APP_HOST", "127.0.0.1").strip(),
         app_port=_as_int("APP_PORT", 8000),
+        auth_mode=os.getenv("AUTH_MODE", "session-pin").strip().lower(),
         ui_access_token=os.getenv("UI_ACCESS_TOKEN", "").strip(),
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///./data/bengkel_radiator.db"
@@ -125,3 +127,29 @@ def load_settings() -> Settings:
 
 
 settings = load_settings()
+
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+SUPPORTED_AUTH_MODES = frozenset({"session-pin"})
+
+
+def validate_runtime(candidate: Settings | None = None) -> None:
+    """Gagal cepat dengan pesan jelas bila konfigurasi membuka akses jaringan.
+
+    Web lokal hanya untuk PC kasir itu sendiri; bind ke `0.0.0.0` atau IP LAN
+    ditolak agar data bengkel tidak terbuka untuk perangkat lain.
+    """
+    runtime = candidate or settings
+
+    host = runtime.app_host.strip().lower()
+    if host not in LOOPBACK_HOSTS:
+        raise RuntimeError(
+            f"APP_HOST '{runtime.app_host}' tidak diizinkan. Web lokal hanya "
+            "boleh diakses dari PC ini: gunakan APP_HOST=127.0.0.1."
+        )
+
+    if runtime.auth_mode not in SUPPORTED_AUTH_MODES:
+        raise RuntimeError(
+            f"AUTH_MODE '{runtime.auth_mode}' tidak dikenal. Gunakan salah "
+            f"satu dari: {', '.join(sorted(SUPPORTED_AUTH_MODES))}."
+        )
+

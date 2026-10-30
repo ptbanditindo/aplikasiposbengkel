@@ -1,37 +1,32 @@
-"""Dependency FastAPI: proteksi endpoint admin dengan token lokal."""
+"""Dependency FastAPI: autentikasi semua endpoint /api.
+
+Mode `session-pin` (web lokal) memakai cookie sesi dari login PIN kasir.
+Dependency ini memakai sesi database sendiri yang singkat agar tidak
+membuka transaksi pada sesi request (POS memakai `db.begin()`).
+"""
 from __future__ import annotations
 
-import hmac
-
-from fastapi import Header, HTTPException, status
+from fastapi import HTTPException, Request, status
 
 from config import settings
+from database.session import SessionLocal
+from services import auth_service
 
 
-def require_admin_token(
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-) -> None:
-    """Ref: PROMPT_AUDIT FASE 1.3 - endpoint sensitif wajib token.
+def require_auth(request: Request) -> None:
+    if settings.auth_mode == "session-pin":
+        token = request.cookies.get(auth_service.COOKIE_NAME)
+        with SessionLocal() as db:
+            valid = auth_service.verify_session_token(db, token)
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Silakan masuk dengan PIN kasir terlebih dahulu.",
+                headers={"WWW-Authenticate": "Session"},
+            )
+        return
 
-    Token tidak pernah dibandingkan dengan `==` biasa agar tidak bocor lewat
-    timing attack. Bila server belum dikonfigurasi, endpoint sensitif ditutup
-    total (fail-closed) alih-alih terbuka tanpa autentikasi.
-    """
-    expected = settings.ui_access_token.strip()
-    if not expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Token admin belum dikonfigurasi di server. "
-                "Set UI_ACCESS_TOKEN pada berkas .env lalu jalankan ulang aplikasi."
-            ),
-        )
-
-    provided = (x_admin_token or "").strip()
-    if not provided or not hmac.compare_digest(
-        provided.encode("utf-8", "ignore"), expected.encode("utf-8")
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token admin tidak valid atau belum diisi.",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Mode autentikasi server tidak dikenal.",
+    )

@@ -23,12 +23,23 @@
     return fallback;
   }
 
+  function friendlyStatusMessage(status) {
+    if (status === 401) return 'Sesi berakhir. Silakan masukkan PIN lagi.';
+    if (status === 403) return 'Permintaan dari alamat lain ditolak.';
+    if (status === 429) return 'Terlalu banyak percobaan. Tunggu sebentar.';
+    if (status === 503) {
+      return 'Server belum siap. Tutup lalu buka lagi aplikasi.';
+    }
+    return null;
+  }
+
   async function request(path, options) {
     const opts = options || {};
     const init = {
       method: opts.method || 'GET',
       headers: Object.assign({}, opts.headers || {}),
       cache: 'no-store',
+      credentials: 'same-origin',
     };
     if (opts.body !== undefined && opts.body !== null) {
       init.headers['Content-Type'] = 'application/json';
@@ -46,6 +57,10 @@
       );
     }
 
+    if (response.status === 401 && !path.startsWith('/api/auth/')) {
+      window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
+    }
+
     if (response.status === 204) return null;
 
     if (!response.ok) {
@@ -56,10 +71,10 @@
       } catch (err) {
         detail = null;
       }
-      const message = extractMessage(
-        detail,
-        'Permintaan gagal (HTTP ' + response.status + ').'
-      );
+      const fallback =
+        friendlyStatusMessage(response.status) ||
+        'Permintaan gagal (HTTP ' + response.status + ').';
+      const message = extractMessage(detail, fallback);
       throw new ApiError(message, response.status, detail);
     }
 
@@ -74,6 +89,13 @@
 
   window.API = {
     ApiError: ApiError,
+
+    authStatus: () => request('/api/auth/status'),
+    authSetup: (pin) =>
+      request('/api/auth/setup', { method: 'POST', body: { pin: pin } }),
+    authLogin: (pin) =>
+      request('/api/auth/login', { method: 'POST', body: { pin: pin } }),
+    authLogout: () => request('/api/auth/logout', { method: 'POST' }),
 
     getConfig: () => request('/api/config'),
     health: () => request('/api/health'),
@@ -90,22 +112,16 @@
     createStock: (data) => request('/api/stock', { method: 'POST', body: data }),
     updateStock: (id, data) =>
       request('/api/stock/' + id, { method: 'PUT', body: data }),
-    deleteStock: (id, token) =>
-      request('/api/stock/' + id, {
-        method: 'DELETE',
-        headers: token ? { 'X-Admin-Token': token } : {},
-      }),
+    deleteStock: (id) =>
+      request('/api/stock/' + id, { method: 'DELETE' }),
 
     jasa: () => request('/api/harga-jasa'),
     createJasa: (data) =>
       request('/api/harga-jasa', { method: 'POST', body: data }),
     updateJasa: (id, data) =>
       request('/api/harga-jasa/' + id, { method: 'PUT', body: data }),
-    deleteJasa: (id, token) =>
-      request('/api/harga-jasa/' + id, {
-        method: 'DELETE',
-        headers: token ? { 'X-Admin-Token': token } : {},
-      }),
+    deleteJasa: (id) =>
+      request('/api/harga-jasa/' + id, { method: 'DELETE' }),
 
     createTransaction: (data) =>
       request('/api/pos/transaction', { method: 'POST', body: data }),
@@ -114,27 +130,16 @@
     claim: (id) =>
       request('/api/service-records/' + id + '/claim', { method: 'PUT' }),
 
-    updateBengkel: (data, token) =>
-      request('/api/settings/bengkel', {
-        method: 'PUT',
-        body: data,
-        headers: token ? { 'X-Admin-Token': token } : {},
-      }),
+    updateBengkel: (data) =>
+      request('/api/settings/bengkel', { method: 'PUT', body: data }),
 
-    updateTelegram: (data, token) =>
-      request('/api/settings/telegram', {
-        method: 'PUT',
-        body: data,
-        headers: token ? { 'X-Admin-Token': token } : {},
-      }),
+    updateTelegram: (data) =>
+      request('/api/settings/telegram', { method: 'PUT', body: data }),
 
-    sendTelegramBackup: (token) =>
-      request('/api/admin/telegram-backup', {
-        method: 'POST',
-        headers: token ? { 'X-Admin-Token': token } : {},
-      }),
+    sendTelegramBackup: () =>
+      request('/api/admin/telegram-backup', { method: 'POST' }),
 
-    restoreDatabase: async (file, token) => {
+    restoreDatabase: async (file) => {
       const form = new FormData();
       form.append('file', file);
 
@@ -142,12 +147,16 @@
       try {
         response = await fetch('/api/admin/restore', {
           method: 'POST',
-          headers: token ? { 'X-Admin-Token': token } : {},
+          credentials: 'same-origin',
           body: form,
           cache: 'no-store',
         });
       } catch (err) {
         throw new ApiError('Tidak dapat menghubungi server lokal.', 0, null);
+      }
+
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
       }
 
       if (!response.ok) {
@@ -179,19 +188,20 @@
             : '')
       ),
 
-    downloadBackup: async (token) => {
-      const headers = {};
-      if (token) headers['X-Admin-Token'] = token;
-
+    downloadBackup: async () => {
       let response;
       try {
         response = await fetch('/api/admin/backup', {
           method: 'POST',
-          headers: headers,
+          credentials: 'same-origin',
           cache: 'no-store',
         });
       } catch (err) {
         throw new ApiError('Tidak dapat menghubungi server lokal.', 0, null);
+      }
+
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
       }
 
       if (!response.ok) {

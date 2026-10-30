@@ -404,3 +404,14 @@ class ConfigOut(CompatBase):
     metode_bayar: List[str]
     keluhan_presets: List[str]
     admin_token_required: bool
+
+
+class PinRequest(CompatBase):
+    pin: str = Field(min_length=4, max_length=12)
+
+
+class AuthStatusOut(CompatBase):
+    mode: str
+    pin_configured: bool
+    authenticated: bool
+    locked_seconds: int = 0

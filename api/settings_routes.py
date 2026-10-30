@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from api.deps import require_admin_token
+from api.deps import require_auth
 from api.schemas import (
     BengkelInfoIn,
     BengkelInfoOut,
@@ -14,13 +14,12 @@ from api.schemas import (
 from database.session import get_db
 from services import settings_service, telegram_backup_service
 
-router = APIRouter(tags=["Pengaturan"])
+router = APIRouter(tags=["Pengaturan"], dependencies=[Depends(require_auth)])
 
 
 @router.put(
     "/settings/bengkel",
     response_model=BengkelInfoOut,
-    dependencies=[Depends(require_admin_token)],
 )
 def update_bengkel(payload: BengkelInfoIn, db: Session = Depends(get_db)):
     info = settings_service.update_bengkel_info(db, payload.model_dump())
@@ -30,7 +29,6 @@ def update_bengkel(payload: BengkelInfoIn, db: Session = Depends(get_db)):
 @router.put(
     "/settings/telegram",
     response_model=TelegramInfoOut,
-    dependencies=[Depends(require_admin_token)],
 )
 def update_telegram(payload: TelegramSettingsIn, db: Session = Depends(get_db)):
     config = settings_service.update_telegram_config(db, payload.model_dump())
@@ -39,7 +37,6 @@ def update_telegram(payload: TelegramSettingsIn, db: Session = Depends(get_db)):
 
 @router.post(
     "/admin/telegram-backup",
-    dependencies=[Depends(require_admin_token)],
 )
 def send_telegram_backup(db: Session = Depends(get_db)):
     result = telegram_backup_service.send_backup(db)

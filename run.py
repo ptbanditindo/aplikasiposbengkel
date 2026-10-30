@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 
 import uvicorn
 
-from config import settings
+from config import settings, validate_runtime
 
 
 def main() -> None:
@@ -18,6 +19,17 @@ def main() -> None:
         help="Mode pengembangan (auto reload).",
     )
     args = parser.parse_args()
+
+    try:
+        validate_runtime(replace(settings, app_host=args.host))
+    except RuntimeError as exc:
+        print("=" * 58)
+        print("  APLIKASI TIDAK DAPAT DIJALANKAN")
+        print("=" * 58)
+        print(f"  {exc}")
+        print("  Web lokal hanya untuk PC kasir ini, bukan jaringan toko.")
+        print("=" * 58)
+        raise SystemExit(1) from None
 
     print("=" * 58)
     print(f"  {settings.bengkel_nama}")

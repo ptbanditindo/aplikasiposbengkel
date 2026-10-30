@@ -6,6 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from api.deps import require_auth
 from api.schemas import (
     CustomerCreate,
     CustomerOut,
@@ -18,7 +19,9 @@ from database.session import get_db
 from services import customer_service
 from services.customer_service import describe_unit
 
-router = APIRouter(tags=["Pelanggan & Unit"])
+router = APIRouter(
+    tags=["Pelanggan & Unit"], dependencies=[Depends(require_auth)]
+)
 
 
 def _unit_out(unit: VehicleOrUnit) -> UnitOut:

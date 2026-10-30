@@ -6,6 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from api.deps import require_auth
 from api.schemas import (
     CreateServiceTransactionRequest,
     ReceiptOut,
@@ -18,7 +19,9 @@ from services import pos_service, settings_service, warranty_service
 from services.errors import NotFoundError
 from services.receipt_service import build_receipt_payload, record_summary
 
-router = APIRouter(tags=["Transaksi & Servis"])
+router = APIRouter(
+    tags=["Transaksi & Servis"], dependencies=[Depends(require_auth)]
+)
 
 
 @router.post("/pos/transaction", response_model=TransactionResponse, status_code=201)

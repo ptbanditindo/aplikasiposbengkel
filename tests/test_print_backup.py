@@ -123,16 +123,11 @@ def test_tc19_cetak_ulang_nota_lama(
     assert missing.status_code == 404
 
 
-def test_tc20_ekspor_backup_database_sqlite(client):
-    unauthorized = client.post("/api/admin/backup")
+def test_tc20_ekspor_backup_database_sqlite(client, anon_client):
+    unauthorized = anon_client.post("/api/admin/backup")
     assert unauthorized.status_code == 401
 
-    wrong_token = client.post(
-        "/api/admin/backup", headers={"X-Admin-Token": "salah"}
-    )
-    assert wrong_token.status_code == 401
-
-    response = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/backup")
     assert response.status_code == 200, response.text
     assert response.content.startswith(b"SQLite format 3\x00")
     assert "attachment" in response.headers.get("content-disposition", "")

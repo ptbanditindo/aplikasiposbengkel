@@ -18,8 +18,10 @@ TEST_DB = TEST_ROOT / "bengkel_test.db"
 TEST_BACKUP_DIR = TEST_ROOT / "backups"
 
 os.environ["APP_ENV"] = "test"
+os.environ["APP_HOST"] = "127.0.0.1"
+os.environ["APP_PORT"] = "8000"
+os.environ["AUTH_MODE"] = "session-pin"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
-os.environ["UI_ACCESS_TOKEN"] = "test-admin-token"
 os.environ["BACKUP_DIR"] = str(TEST_BACKUP_DIR)
 os.environ["BENGKEL_NAMA"] = "BENGKEL RADIATOR TEST"
 os.environ["BENGKEL_TAGLINE"] = "Spesialis Servis & Las Radiator"
@@ -43,22 +45,35 @@ from database.base import Base  # noqa: E402
 from database.seed import seed_defaults  # noqa: E402
 from database.session import SessionLocal, engine  # noqa: E402
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
+BASE_URL = "http://127.0.0.1:8000"
+TEST_PIN = "2468"
+
+# Endpoint sensitif kini memakai sesi PIN; header lama tidak lagi dipakai.
+ADMIN_HEADERS = {}
 
 
 @pytest.fixture(scope="session")
 def client():
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url=BASE_URL) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def anon_client():
+    """Klien tanpa cookie sesi, untuk menguji penolakan akses."""
+    with TestClient(app, base_url=BASE_URL) as test_client:
         yield test_client
 
 
 @pytest.fixture(autouse=True)
 def reset_database(client):
-    """Skema bersih + seed standar untuk setiap skenario uji."""
+    """Skema bersih + seed standar + PIN kasir untuk setiap skenario uji."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_defaults(db)
+    response = client.post("/api/auth/setup", json={"pin": TEST_PIN})
+    assert response.status_code == 201, response.text
     yield
 
 

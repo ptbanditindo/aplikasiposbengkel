@@ -6,33 +6,37 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from api import (
+    auth_routes,
     customer_routes,
     pos_routes,
     report_routes,
     settings_routes,
     stock_routes,
 )
+from api.deps import require_auth
 from api.schemas import (
     BengkelInfoOut,
     ConfigOut,
     PrinterInfoOut,
     TelegramInfoOut,
 )
-from config import BASE_DIR, settings
+from api.security import UNSAFE_METHODS, allowed_origins, host_header_allowed
+from config import BASE_DIR, settings, validate_runtime
 from database.seed import seed_defaults
 from database.session import SessionLocal, get_db, init_db
 from services import settings_service, telegram_backup_service
 from services.errors import (
+    AuthenticationError,
     ConflictError,
     DomainError,
     InsufficientStockError,
     NotFoundError,
+    RateLimitError,
 )
 
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -68,6 +72,8 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    validate_runtime()
+
     app = FastAPI(
         title="BengkelPOS Radiator",
         description=(
@@ -76,20 +82,60 @@ def create_app() -> FastAPI:
         ),
         version=APP_VERSION,
         lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost", "http://127.0.0.1"],
-        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Ref: K-02 - frontend selalu disajikan dari origin yang sama, jadi CORS
+    # dimatikan total dan permintaan lintas-origin ditolak oleh middleware.
+    @app.middleware("http")
+    async def _access_guard(request: Request, call_next):
+        host_header = request.headers.get("host", "")
+        if not host_header_allowed(host_header, settings.app_port):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": (
+                        "Alamat server tidak diizinkan. Buka aplikasi dari "
+                        f"http://127.0.0.1:{settings.app_port} pada PC ini."
+                    )
+                },
+            )
+
+        if request.method in UNSAFE_METHODS:
+            origin = request.headers.get("origin", "")
+            if origin and origin.rstrip("/") not in allowed_origins(
+                settings.app_port
+            ):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Permintaan dari alamat lain ditolak."
+                    },
+                )
+
+        return await call_next(request)
 
     @app.exception_handler(NotFoundError)
     async def _not_found(_request: Request, exc: NotFoundError):
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(AuthenticationError)
+    async def _authentication(_request: Request, exc: AuthenticationError):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": str(exc)},
+            headers={"WWW-Authenticate": "Session"},
+        )
+
+    @app.exception_handler(RateLimitError)
+    async def _rate_limit(_request: Request, exc: RateLimitError):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": str(exc)},
+            headers={"Retry-After": str(exc.retry_after)},
+        )
 
     @app.exception_handler(InsufficientStockError)
     async def _insufficient_stock(_request: Request, exc: InsufficientStockError):
@@ -112,6 +158,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     api_prefix = "/api"
+    app.include_router(auth_routes.router, prefix=api_prefix)
     app.include_router(customer_routes.router, prefix=api_prefix)
     app.include_router(pos_routes.router, prefix=api_prefix)
     app.include_router(stock_routes.router, prefix=api_prefix)
@@ -122,7 +169,12 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok", "app": "BengkelPOS Radiator", "version": APP_VERSION}
 
-    @app.get("/api/config", response_model=ConfigOut, tags=["Sistem"])
+    @app.get(
+        "/api/config",
+        response_model=ConfigOut,
+        tags=["Sistem"],
+        dependencies=[Depends(require_auth)],
+    )
     def app_config(db: Session = Depends(get_db)):
         return ConfigOut(
             version=APP_VERSION,

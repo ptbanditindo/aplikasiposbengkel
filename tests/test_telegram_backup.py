@@ -47,9 +47,11 @@ def test_config_telegram_default_nonaktif(client):
     }
 
 
-def test_simpan_pengaturan_telegram_wajib_token(client, db_session):
+def test_simpan_pengaturan_telegram_wajib_sesi(client, anon_client, db_session):
     assert (
-        client.put("/api/settings/telegram", json=telegram_payload()).status_code
+        anon_client.put(
+            "/api/settings/telegram", json=telegram_payload()
+        ).status_code
         == 401
     )
 
@@ -105,8 +107,8 @@ def test_jam_token_dan_chat_tidak_valid_ditolak(client):
     assert "chat id" in invalid_chat.json()["detail"].lower()
 
 
-def test_kirim_manual_tanpa_konfigurasi_ditolak(client):
-    assert client.post("/api/admin/telegram-backup").status_code == 401
+def test_kirim_manual_tanpa_konfigurasi_ditolak(client, anon_client):
+    assert anon_client.post("/api/admin/telegram-backup").status_code == 401
 
     response = client.post("/api/admin/telegram-backup", headers=ADMIN_HEADERS)
     assert response.status_code == 400

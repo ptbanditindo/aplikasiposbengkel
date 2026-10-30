@@ -42,20 +42,22 @@ pip install -r requirements.txt
 cp .env.example .env      # Windows: copy .env.example .env
 ```
 
-Sesuaikan `.env` (minimal `UI_ACCESS_TOKEN`), lalu:
+Sesuaikan `.env` bila perlu (default sudah aman untuk satu PC kasir), lalu:
 
 ```bash
 python run.py
 ```
 
-Buka `http://127.0.0.1:8000`. Data tersimpan di `data/bengkel_radiator.db`,
-backup di `backups/`.
+Buka `http://127.0.0.1:8000`. Saat pertama kali dibuka, aplikasi meminta Anda
+membuat PIN kasir 4&ndash;12 angka. Data tersimpan di
+`data/bengkel_radiator.db`, backup di `backups/`.
 
 ## Konfigurasi penting (`.env`)
 
 | Variabel | Fungsi |
 | --- | --- |
-| `UI_ACCESS_TOKEN` | Token admin untuk endpoint sensitif. Kosong = endpoint sensitif ditolak (fail-closed). |
+| `APP_HOST` | Alamat server. Hanya `127.0.0.1`, `localhost`, atau `::1` yang diterima; nilai lain menggagalkan startup. |
+| `APP_PORT` | Port web lokal (default 8000). |
 | `DATABASE_URL` | Default `sqlite:///./data/bengkel_radiator.db`. |
 | `BENGKEL_*` | Identitas bengkel & rekening; nilai awal, bisa diubah dari menu Pengaturan. |
 | `BACKUP_DIR` | Folder backup lokal. |
@@ -69,10 +71,24 @@ flag `AUTO_BACKUP_ENABLED` dan `SECRET_KEY` sudah dihapus karena tidak dipakai.
 dan konfigurasi Telegram yang disimpan lewat UI berada di database dan
 menimpa nilai default `.env`.
 
-Endpoint yang mengubah data/settings memakai header `X-Admin-Token`. Di versi
-web, token diminta sekali lalu disimpan di `sessionStorage`. Di APK, token
-dibuat acak per instalasi, disimpan terenkripsi, dan disuntikkan otomatis ke
-halaman tanpa prompt.
+## Keamanan akses web
+
+Web lokal hanya untuk PC kasir itu sendiri; tidak ada mode LAN. Server menolak
+startup bila `APP_HOST` bukan loopback, menolak header `Host` asing, menolak
+permintaan tulis dari `Origin` lain, dan mematikan `/docs`, `/redoc`, serta
+`/openapi.json`.
+
+Akses aplikasi dijaga PIN kasir:
+
+- PIN dibuat saat aplikasi pertama kali dibuka, disimpan sebagai hash PBKDF2 +
+  salt di database (bukan plaintext).
+- Login menghasilkan cookie sesi `HttpOnly` + `SameSite=Strict` berlaka 12 jam;
+  semua endpoint `/api` mensyaratkan sesi tersebut, kecuali `/api/health` dan
+  endpoint setup/login.
+- Salah PIN 5 kali memicu jeda bertahap (30 detik, berlipat hingga 15 menit).
+- Lupa PIN: jalankan `python reset_pin.py` di PC kasir. Skrip hanya menghapus
+  hash PIN setelah konfirmasi; pelanggan, transaksi, stok, dan pengaturan tidak
+  tersentuh. Buka ulang aplikasi untuk membuat PIN baru.
 
 ## APK Android
 
@@ -98,7 +114,7 @@ berjalan selama aplikasi terbuka.
 ## Struktur proyek
 
 ```
-api/            router FastAPI, skema Pydantic (kompatibel v1 & v2), dependency token
+api/            router FastAPI, skema Pydantic (kompatibel v1 & v2), dependency auth
 services/       logika bisnis: POS, laporan, garansi, struk, backup, Telegram
 repositories/   akses data SQLAlchemy
 database/       engine/session, model, seed
@@ -114,15 +130,17 @@ run.py          runner lokal
 pytest -q
 ```
 
-64 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
-Telegram, dan pemeriksaan keamanan endpoint. Suite yang sama lulus di dua jalur
+108 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
+Telegram, serta pemeriksaan keamanan akses (PIN, sesi, loopback, host/origin). Suite yang sama lulus di dua jalur
 dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 + FastAPI 0.115
 (kombinasi yang dipakai APK).
 
 ## Keamanan dan data
 
-- Token admin dibandingkan constant-time (`hmac.compare_digest`) dan
-  fail-closed bila belum dikonfigurasi.
+- PIN kasir di-hash PBKDF2-HMAC-SHA256 + salt; sesi ditandatangani HMAC dengan
+  rahasia yang tersimpan di database, sehingga reset PIN membatalkan sesi lama.
+- Server hanya mendengar loopback, memvalidasi `Host`, menolak `Origin` asing
+  untuk permintaan tulis, dan tidak membuka dokumentasi API otomatis.
 - File backup meredaksi token bot Telegram; database aktif tetap menyimpan
   token karena dibutuhkan untuk pengiriman.
 - Di APK: hash PIN + salt di EncryptedSharedPreferences, `FLAG_SECURE`,

@@ -8,7 +8,55 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body class="auth-locked">
+  <!-- ============================ GERBANG PIN ============================ -->
+  <div class="auth-gate hidden" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+            <rect x="4" y="8" width="24" height="17" rx="2.5"></rect>
+            <path d="M8 11v11M12 11v11M16 11v11M20 11v11M24 11v11"></path>
+            <circle cx="16" cy="27" r="2.2"></circle>
+          </svg>
+        </div>
+        <p class="auth-brand-name">BengkelPOS Radiator</p>
+        <p class="auth-brand-sub">Data bengkel hanya untuk PC kasir ini</p>
+      </div>
+
+      <section id="authSetup" class="hidden">
+        <h1 class="auth-title" id="authTitle">Buat PIN Kasir</h1>
+        <p class="muted auth-lead">PIN 4&ndash;12 angka ini menjaga data bengkel. Hanya pemilik yang perlu tahu.</p>
+        <form id="authSetupForm" autocomplete="off">
+          <label class="field">
+            <span>PIN baru</span>
+            <input class="input" type="password" id="authSetupPin" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
+          </label>
+          <label class="field">
+            <span>Ulangi PIN</span>
+            <input class="input" type="password" id="authSetupPinConfirm" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
+          </label>
+          <p class="auth-error hidden" id="authSetupError" role="alert"></p>
+          <button type="submit" class="btn btn-primary auth-submit" id="authSetupSubmit">Simpan PIN</button>
+        </form>
+      </section>
+
+      <section id="authLogin" class="hidden">
+        <h1 class="auth-title">Masuk</h1>
+        <p class="muted auth-lead">Masukkan PIN kasir untuk membuka bengkel.</p>
+        <form id="authLoginForm" autocomplete="off">
+          <label class="field">
+            <span>PIN</span>
+            <input class="input" type="password" id="authLoginPin" inputmode="numeric" autocomplete="current-password" maxlength="12" required>
+          </label>
+          <p class="auth-error hidden" id="authLoginError" role="alert"></p>
+          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka Kasir</button>
+        </form>
+        <p class="auth-help">Lupa PIN? Jalankan <code>python reset_pin.py</code> di PC kasir. Data transaksi tidak hilang.</p>
+      </section>
+    </div>
+  </div>
+
   <div class="app-shell">
     <aside class="app-sidebar">
       <div class="brand">

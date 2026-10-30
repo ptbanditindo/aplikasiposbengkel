@@ -2255,18 +2255,11 @@
     if (!item) return;
     if (!window.confirm('Hapus sparepart "' + item.nama + '"?')) return;
 
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     try {
-      await API.deleteStock(id, token);
+      await API.deleteStock(id);
       toast('Sparepart dihapus.', 'success');
       await loadStock();
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast(err.message, 'error', 6000);
     }
   }
@@ -2307,18 +2300,11 @@
     if (!jasa) return;
     if (!window.confirm('Hapus tarif jasa "' + jasa.nama + '"?')) return;
 
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     try {
-      await API.deleteJasa(id, token);
+      await API.deleteJasa(id);
       toast('Tarif jasa dihapus.', 'success');
       await loadStock();
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast(err.message, 'error', 6000);
     }
   }
@@ -2606,24 +2592,136 @@
     }
   }
 
-  function adminTokenRequired() {
-    return Boolean(state.config && state.config.admin_token_required);
+  /* ---------------------------- Gerbang PIN ------------------------------- */
+  const authState = {
+    mode: 'session-pin',
+    started: false,
+  };
+
+  let lastUnauthorizedAt = 0;
+
+  function normalizePin(value) {
+    return String(value == null ? '' : value).replace(/[^\d]/g, '').slice(0, 12);
   }
 
-  function ensureAdminToken() {
-    if (!adminTokenRequired()) return '';
+  function setAuthError(element, message) {
+    if (!element) return;
+    element.textContent = message || '';
+    element.classList.toggle('hidden', !message);
+  }
 
-    // APK Android menyuntikkan token per-instalasi sebelum halaman dimuat.
-    const injected = window.__BENGKEL_ADMIN_TOKEN__;
-    if (typeof injected === 'string' && injected.trim()) return injected.trim();
+  function showAuthGate(screen, message) {
+    const gate = $('#authGate');
+    if (!gate) return;
+    document.body.classList.add('auth-locked');
+    gate.classList.remove('hidden');
+    $('#authSetup').classList.toggle('hidden', screen !== 'setup');
+    $('#authLogin').classList.toggle('hidden', screen !== 'login');
+    setAuthError($('#authSetupError'), screen === 'setup' ? message : '');
+    setAuthError($('#authLoginError'), screen === 'login' ? message : '');
+    const target = screen === 'setup' ? $('#authSetupPin') : $('#authLoginPin');
+    if (target) setTimeout(() => target.focus(), 80);
+  }
 
-    const stored = sessionStorage.getItem('adminToken') || '';
-    if (stored) return stored;
+  function hideAuthGate() {
+    const gate = $('#authGate');
+    if (gate) gate.classList.add('hidden');
+    document.body.classList.remove('auth-locked');
+  }
 
-    const answer = window.prompt('Masukkan token admin untuk operasi ini:');
-    const token = answer ? answer.trim() : '';
-    if (token) sessionStorage.setItem('adminToken', token);
-    return token;
+  function handleUnauthorized() {
+    const now = Date.now();
+    if (now - lastUnauthorizedAt < 1500) return;
+    lastUnauthorizedAt = now;
+    authState.started = false;
+    showAuthGate('login', 'Sesi berakhir. Masukkan PIN lagi.');
+  }
+
+  async function ensureAuthenticated() {
+    let status;
+    try {
+      status = await API.authStatus();
+    } catch (err) {
+      const message =
+        err.status === 503
+          ? 'Server lokal belum siap. Tutup lalu buka lagi aplikasi.'
+          : err.message;
+      showAuthGate('login', message);
+      return false;
+    }
+
+    authState.mode = status.mode || 'session-pin';
+    if (authState.mode !== 'session-pin') {
+      // APK memakai token per-instalasi dan PIN native, bukan PIN web.
+      hideAuthGate();
+      return true;
+    }
+    if (status.authenticated) {
+      hideAuthGate();
+      return true;
+    }
+
+    const lockMessage =
+      Number(status.locked_seconds) > 0
+        ? 'Terlalu banyak percobaan. Tunggu ' + status.locked_seconds + ' detik.'
+        : '';
+    showAuthGate(status.pin_configured ? 'login' : 'setup', lockMessage);
+    return false;
+  }
+
+  async function handleAuthSetupSubmit(event) {
+    event.preventDefault();
+    const pin = normalizePin($('#authSetupPin').value);
+    const confirmPin = normalizePin($('#authSetupPinConfirm').value);
+    const button = $('#authSetupSubmit');
+
+    if (pin.length < 4) {
+      setAuthError($('#authSetupError'), 'PIN minimal 4 angka.');
+      return;
+    }
+    if (pin !== confirmPin) {
+      setAuthError($('#authSetupError'), 'Ulangi PIN belum sama.');
+      return;
+    }
+
+    setAuthError($('#authSetupError'), '');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.authSetup(pin);
+      $('#authSetupPin').value = '';
+      $('#authSetupPinConfirm').value = '';
+      await startApp();
+    } catch (err) {
+      setAuthError($('#authSetupError'), err.message);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleAuthLoginSubmit(event) {
+    event.preventDefault();
+    const input = $('#authLoginPin');
+    const pin = normalizePin(input.value);
+    const button = $('#authLoginSubmit');
+
+    if (pin.length < 4) {
+      setAuthError($('#authLoginError'), 'PIN minimal 4 angka.');
+      return;
+    }
+
+    setAuthError($('#authLoginError'), '');
+    setBusy(button, true, 'Memeriksa...');
+    try {
+      await API.authLogin(pin);
+      input.value = '';
+      await startApp();
+    } catch (err) {
+      input.value = '';
+      setAuthError($('#authLoginError'), err.message);
+      input.focus();
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   /* ----------------------------- Settings --------------------------------- */
@@ -2648,9 +2746,8 @@
 
     const note = $('#settingsAdminNote');
     if (note) {
-      note.textContent = adminTokenRequired()
-        ? 'Perubahan disimpan di database lokal dan memerlukan token admin.'
-        : 'Perubahan disimpan di database lokal.';
+      note.textContent =
+        'Perubahan disimpan di database lokal pada PC kasir ini.';
     }
   }
 
@@ -2674,19 +2771,12 @@
       return;
     }
 
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     setBusy(button, true, 'Menyimpan...');
     try {
-      state.config.bengkel = await API.updateBengkel(payload, token);
+      state.config.bengkel = await API.updateBengkel(payload);
       applyConfig();
       toast('Pengaturan bengkel tersimpan.', 'success');
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast('Gagal menyimpan pengaturan: ' + err.message, 'error', 6000);
     } finally {
       setBusy(button, false);
@@ -2750,20 +2840,13 @@
       bot_token: $('#telegramToken').value.trim(),
     };
 
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     setBusy(button, true, 'Menyimpan...');
     try {
-      state.config.telegram = await API.updateTelegram(payload, token);
+      state.config.telegram = await API.updateTelegram(payload);
       $('#telegramToken').value = '';
       fillTelegramForm();
       toast('Pengaturan Telegram tersimpan.', 'success');
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast('Gagal menyimpan Telegram: ' + err.message, 'error', 6000);
     } finally {
       setBusy(button, false);
@@ -2776,15 +2859,10 @@
       toast('Simpan bot token dan chat ID terlebih dahulu.', 'warning');
       return;
     }
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
 
     setBusy(button, true, 'Mengirim...');
     try {
-      const result = await API.sendTelegramBackup(token);
+      const result = await API.sendTelegramBackup();
       toast(
         'Backup terkirim: ' + result.filename + ' (' + result.jumlah_nota + ' nota).',
         'success',
@@ -2793,7 +2871,6 @@
       state.config = await API.getConfig();
       applyConfig();
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast('Gagal mengirim backup: ' + err.message, 'error', 7000);
     } finally {
       setBusy(button, false);
@@ -2819,37 +2896,23 @@
     );
     if (!confirmed) return;
 
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     const button = $('#settingsRestore');
     setBusy(button, true, 'Memulihkan...');
     try {
-      await API.restoreDatabase(file, token);
+      await API.restoreDatabase(file);
       toast('Database berhasil dipulihkan. Memuat ulang aplikasi...', 'success', 4000);
       setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast('Gagal memulihkan database: ' + err.message, 'error', 7000);
       setBusy(button, false);
     }
   }
 
   async function handleBackup() {
-    const token = ensureAdminToken();
-    if (adminTokenRequired() && !token) {
-      toast('Token admin wajib diisi.', 'warning');
-      return;
-    }
-
     try {
-      await API.downloadBackup(token);
+      await API.downloadBackup();
       toast('File backup database berhasil diunduh.', 'success', 5000);
     } catch (err) {
-      if (err.status === 401) sessionStorage.removeItem('adminToken');
       toast(err.message, 'error', 6000);
     }
   }
@@ -3055,6 +3118,15 @@
     $('#telegramForm').addEventListener('submit', handleTelegramSubmit);
     $('#telegramSendNow').addEventListener('click', handleTelegramSendNow);
 
+    $('#authSetupForm').addEventListener('submit', handleAuthSetupSubmit);
+    $('#authLoginForm').addEventListener('submit', handleAuthLoginSubmit);
+    $$('#authSetupPin, #authSetupPinConfirm, #authLoginPin').forEach((input) => {
+      input.addEventListener('input', () => {
+        const digits = normalizePin(input.value);
+        if (input.value !== digits) input.value = digits;
+      });
+    });
+
     document.addEventListener('click', handleGlobalClick);
     document.addEventListener('input', handleGlobalInput);
     document.addEventListener('change', handleGlobalChange);
@@ -3099,12 +3171,8 @@
   }
 
   /* --------------------------------- Init --------------------------------- */
-  async function init() {
-    bindEvents();
-    startClock();
-    initPrinter();
-    initPinSecurityCard();
-
+  async function startApp() {
+    hideAuthGate();
     try {
       const results = await Promise.all([
         API.getConfig(),
@@ -3119,16 +3187,28 @@
       renderStock();
       renderJasa();
     } catch (err) {
-      toast(
-        'Gagal memuat konfigurasi awal: ' + err.message,
-        'error',
-        8000
-      );
+      if (err.status !== 401) {
+        toast('Gagal memuat konfigurasi awal: ' + err.message, 'error', 8000);
+      }
+      return;
     }
 
+    authState.started = true;
     resetPosState();
     updateReceiptNotice();
     await loadDashboard();
+  }
+
+  async function init() {
+    bindEvents();
+    startClock();
+    initPrinter();
+    initPinSecurityCard();
+    window.addEventListener('bengkel:unauthorized', handleUnauthorized);
+
+    const ready = await ensureAuthenticated();
+    if (!ready) return;
+    await startApp();
   }
 
   document.addEventListener('DOMContentLoaded', init);

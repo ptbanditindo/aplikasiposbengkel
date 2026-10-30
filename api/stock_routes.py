@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
-from api.deps import require_admin_token
+from api.deps import require_auth
 from api.schemas import (
     HargaJasaCreate,
     HargaJasaOut,
@@ -18,7 +18,9 @@ from api.schemas import (
 from database.session import get_db
 from services import stock_service
 
-router = APIRouter(tags=["Stok & Tarif Jasa"])
+router = APIRouter(
+    tags=["Stok & Tarif Jasa"], dependencies=[Depends(require_auth)]
+)
 
 
 @router.get("/stock", response_model=List[StockItemOut])
@@ -50,7 +52,6 @@ def update_stock(stock_id: int, payload: StockItemUpdate, db: Session = Depends(
 @router.delete(
     "/stock/{stock_id}",
     status_code=204,
-    dependencies=[Depends(require_admin_token)],
 )
 def delete_stock(stock_id: int, db: Session = Depends(get_db)):
     stock_service.delete_stock(db, stock_id)
@@ -79,7 +80,6 @@ def update_jasa(jasa_id: int, payload: HargaJasaUpdate, db: Session = Depends(ge
 @router.delete(
     "/harga-jasa/{jasa_id}",
     status_code=204,
-    dependencies=[Depends(require_admin_token)],
 )
 def delete_jasa(jasa_id: int, db: Session = Depends(get_db)):
     stock_service.delete_jasa(db, jasa_id)

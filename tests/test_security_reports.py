@@ -1,12 +1,10 @@
-"""Audit keamanan & laporan: token admin, XSS, SQL injection, rekap kas."""
+"""Audit keamanan & laporan: sesi PIN, XSS, SQL injection, rekap kas."""
 from __future__ import annotations
 
 from datetime import date
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 
-
-def test_hapus_stok_wajib_token_admin(client):
+def test_hapus_stok_wajib_sesi(client, anon_client):
     created = client.post(
         "/api/stock",
         json={
@@ -20,21 +18,15 @@ def test_hapus_stok_wajib_token_admin(client):
     assert created.status_code == 201, created.text
     stock_id = created.json()["id"]
 
-    assert client.delete(f"/api/stock/{stock_id}").status_code == 401
-    assert (
-        client.delete(
-            f"/api/stock/{stock_id}", headers={"X-Admin-Token": "salah"}
-        ).status_code
-        == 401
-    )
+    assert anon_client.delete(f"/api/stock/{stock_id}").status_code == 401
 
-    deleted = client.delete(f"/api/stock/{stock_id}", headers=ADMIN_HEADERS)
+    deleted = client.delete(f"/api/stock/{stock_id}")
     assert deleted.status_code == 204
     listed = client.get("/api/stock").json()
     assert all(item["id"] != stock_id for item in listed)
 
 
-def test_hapus_tarif_jasa_wajib_token_admin(client):
+def test_hapus_tarif_jasa_wajib_sesi(client, anon_client):
     created = client.post(
         "/api/harga-jasa",
         json={"nama": "Jasa Uji Keamanan", "harga_standar": "50000"},
@@ -42,33 +34,27 @@ def test_hapus_tarif_jasa_wajib_token_admin(client):
     assert created.status_code == 201, created.text
     jasa_id = created.json()["id"]
 
-    assert client.delete(f"/api/harga-jasa/{jasa_id}").status_code == 401
-    assert (
-        client.delete(
-            f"/api/harga-jasa/{jasa_id}", headers=ADMIN_HEADERS
-        ).status_code
-        == 204
-    )
+    assert anon_client.delete(f"/api/harga-jasa/{jasa_id}").status_code == 401
+    assert client.delete(f"/api/harga-jasa/{jasa_id}").status_code == 204
 
 
-def test_endpoint_admin_fail_closed_saat_token_belum_dikonfigurasi(
-    client, monkeypatch
-):
-    from types import SimpleNamespace
+def test_endpoint_admin_fail_closed_saat_pin_belum_dibuat(client, anon_client):
+    from sqlalchemy import delete
 
-    monkeypatch.setattr(
-        "api.deps.settings", SimpleNamespace(ui_access_token="")
-    )
+    from database.models import AppSetting
+    from database.session import SessionLocal
 
-    response = client.post("/api/admin/backup")
-    assert response.status_code == 503
-    assert "belum dikonfigurasi" in response.json()["detail"]
+    with SessionLocal() as db:
+        db.execute(delete(AppSetting).where(AppSetting.key.like("auth.%")))
+        db.commit()
+
+    response = anon_client.post("/api/admin/backup")
+    assert response.status_code == 401
 
 
-def test_token_admin_tidak_menerima_prefix_sebagian(client):
-    prefix = "test-admin-token"[:10]
-    response = client.post(
-        "/api/admin/backup", headers={"X-Admin-Token": prefix}
+def test_header_token_admin_lama_tidak_lagi_diterima(anon_client):
+    response = anon_client.post(
+        "/api/admin/backup", headers={"X-Admin-Token": "test-admin-token"}
     )
     assert response.status_code == 401
 

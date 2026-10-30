@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from api.deps import require_admin_token
+from api.deps import require_auth
 from api.schemas import DailyReportOut, PeriodReportOut, SoldPartsReportOut
 from database.session import get_db
 from services import backup_service, report_service
 
-router = APIRouter(tags=["Laporan & Administrasi"])
+router = APIRouter(
+    tags=["Laporan & Administrasi"], dependencies=[Depends(require_auth)]
+)
 
 
 @router.get("/reports/daily-cash", response_model=DailyReportOut)
@@ -66,7 +68,6 @@ def sold_parts(
 
 @router.post(
     "/admin/backup",
-    dependencies=[Depends(require_admin_token)],
     response_class=FileResponse,
 )
 def backup_database():
@@ -81,7 +82,6 @@ def backup_database():
 
 @router.post(
     "/admin/restore",
-    dependencies=[Depends(require_admin_token)],
 )
 async def restore_database(file: UploadFile = File(...)):
     data = await file.read()

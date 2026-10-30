@@ -16,9 +16,11 @@ sys.path.insert(0, str(ROOT))
 
 TMP = Path(tempfile.mkdtemp(prefix="bengkelpos_load_"))
 os.environ["APP_ENV"] = "test"
+os.environ["APP_HOST"] = "127.0.0.1"
+os.environ["APP_PORT"] = "8000"
+os.environ["AUTH_MODE"] = "session-pin"
 os.environ["DATABASE_URL"] = f"sqlite:///{(TMP / 'load.db').as_posix()}"
 os.environ["BACKUP_DIR"] = str(TMP / "backups")
-os.environ["UI_ACCESS_TOKEN"] = "load-token"
 os.environ["TELEGRAM_BOT_TOKEN"] = ""
 os.environ["TELEGRAM_CHAT_ID"] = ""
 os.environ["TELEGRAM_BACKUP_ENABLED"] = "false"
@@ -31,6 +33,8 @@ from database.seed import seed_defaults  # noqa: E402
 from database.session import SessionLocal, init_db  # noqa: E402
 
 WORKERS = 20
+BASE_URL = "http://127.0.0.1:8000"
+PIN = "2468"
 
 
 def main() -> None:
@@ -38,7 +42,11 @@ def main() -> None:
     with SessionLocal() as db:
         seed_defaults(db)
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url=BASE_URL) as client:
+        setup = client.post("/api/auth/setup", json={"pin": PIN})
+        if setup.status_code != 201:
+            raise SystemExit(f"Gagal membuat PIN uji beban: {setup.status_code}")
+
         customer = client.post(
             "/api/customers",
             json={"nama": "Pelanggan Beban", "nomor_hp": "081200000099"},

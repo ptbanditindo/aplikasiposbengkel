@@ -20,6 +20,21 @@ class ConflictError(DomainError):
     """Konflik data (duplikat / status tidak valid)."""
 
 
+class AuthenticationError(DomainError):
+    """Sesi atau PIN tidak valid."""
+
+
+class RateLimitError(DomainError):
+    """Terlalu banyak percobaan; pengguna harus menunggu jeda."""
+
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, int(retry_after))
+        super().__init__(
+            f"Terlalu banyak percobaan PIN. Coba lagi dalam "
+            f"{self.retry_after} detik."
+        )
+
+
 class PaymentError(BusinessValidationError):
     """Nominal pembayaran tidak valid."""
 
