@@ -65,18 +65,11 @@ def _pending_backup(db: Session) -> Optional[Path]:
         or stored_date != date.today().isoformat()
         or not path.exists()
     ):
-        if path is not None:
-            path.unlink(missing_ok=True)
+        # File lama tetap disimpan sebagai backup lokal; retensi yang mengurus.
         _clear_pending_backup(db)
         db.commit()
         return None
     return path
-
-
-def _discard_pending_backup(db: Session, path: Path) -> None:
-    path.unlink(missing_ok=True)
-    _clear_pending_backup(db)
-    db.commit()
 
 
 def data_range(db: Session) -> tuple[date, date]:
@@ -169,10 +162,12 @@ def _send_backup(db: Session) -> Dict[str, Any]:
         db.commit()
 
     if backup_path.stat().st_size > MAX_DOCUMENT_BYTES:
-        _discard_pending_backup(db, backup_path)
+        # Snapshot lokal tetap disimpan; hanya pengiriman Telegram yang batal.
+        _clear_pending_backup(db)
+        db.commit()
         raise BusinessValidationError(
-            "Ukuran backup melebihi 50 MB (batas kirim bot Telegram). "
-            "Unduh backup manual dari menu Pengaturan."
+            "Backup lokal tersimpan, tetapi ukuran melebihi 50 MB (batas kirim "
+            "bot Telegram). Unduh backup manual dari menu Pengaturan."
         )
 
     filename = backup_filename(start, end)
@@ -196,7 +191,8 @@ def _send_backup(db: Session) -> Dict[str, Any]:
         raise BusinessValidationError(message) from exc
 
     sent_at = now.isoformat(timespec="seconds")
-    backup_path.unlink(missing_ok=True)
+    # Snapshot lokal tidak dihapus setelah terkirim: backup lokal adalah
+    # artefak utama, sedangkan Telegram hanya pengiriman tambahan.
     _clear_pending_backup(db)
     settings_service.set_setting(db, "telegram.last_sent_at", sent_at)
     settings_service.set_setting(db, "telegram.last_attempt_at", sent_at)
@@ -227,9 +223,15 @@ def _same_day_backup(db: Session, moment: datetime) -> Optional[Path]:
     if pending is not None:
         return pending
 
-    path = _safe_backup_path(
-        settings_service.get_setting(db, settings_service.BACKUP_LAST_FILENAME_KEY)
+    stored_name = settings_service.get_setting(
+        db, settings_service.BACKUP_LAST_FILENAME_KEY
     )
+    path = _safe_backup_path(stored_name)
+    if path is None and stored_name:
+        # Backend menyimpan nama berkas (bukan path) untuk ditampilkan di UI.
+        candidate = settings.backup_dir / Path(stored_name).name
+        if candidate.exists():
+            path = candidate
     last_at = settings_service.get_setting(
         db, settings_service.BACKUP_LAST_AT_KEY
     )
@@ -321,18 +323,6 @@ def run_scheduled_backup_now(
         )
 
         last_sent = _parse_datetime(config.get("last_sent_at"))
-        if (
-            telegram_ready
-            and last_sent is not None
-            and last_sent.date() == moment.date()
-        ):
-            return _scheduled_response(
-                "ok",
-                moment,
-                telegram_enabled=True,
-                telegram_sent=True,
-                message="Backup hari ini sudah dikirim ke Telegram.",
-            )
 
         path = _same_day_backup(db, moment)
         if path is None:
@@ -351,6 +341,24 @@ def run_scheduled_backup_now(
                     message=message,
                 )
             _remember_pending_backup(db, path)
+
+        if (
+            telegram_ready
+            and last_sent is not None
+            and last_sent.date() == moment.date()
+        ):
+            _record_backup_status(
+                db, moment, "ok", filename=path.name, telegram_sent=True
+            )
+            return _scheduled_response(
+                "ok",
+                moment,
+                path=path,
+                local_saved=True,
+                telegram_enabled=True,
+                telegram_sent=True,
+                message="Backup lokal tersimpan; hari ini sudah dikirim ke Telegram.",
+            )
 
         if not telegram_ready:
             _record_backup_status(
@@ -400,11 +408,12 @@ def run_scheduled_backup_now(
             )
 
         _record_backup_status(
-            db, moment, "ok", filename="", telegram_sent=True
+            db, moment, "ok", filename=path.name, telegram_sent=True
         )
         return _scheduled_response(
             "ok",
             moment,
+            path=path,
             local_saved=True,
             telegram_enabled=True,
             telegram_sent=True,
@@ -478,16 +487,36 @@ def should_send(now: datetime, config: Dict[str, Any]) -> bool:
     return True
 
 
+def local_backup_due(now: datetime, config: Dict[str, Any], last_local_at: Any) -> bool:
+    """True bila snapshot lokal harian belum dibuat setelah jam jadwal.
+
+    Jadwal lokal memakai jam yang sama dengan pengaturan Telegram, tetapi tidak
+    bergantung pada status aktif Telegram.
+    """
+    target = _parse_jam(config.get("jam") or "21:00")
+    if target is None:
+        return False
+    last = _parse_datetime(last_local_at)
+    return now.time() >= target and (last is None or last.date() < now.date())
+
+
 def run_scheduled_backup(now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     moment = now or datetime.now()
     with SessionLocal() as db:
         config = settings_service.get_telegram_config(db)
-        if not should_send(moment, config):
+        last_local_at = settings_service.get_setting(
+            db, settings_service.BACKUP_LAST_AT_KEY
+        )
+        # Backup lokal selalu terjadwal; pengiriman Telegram hanya tambahan.
+        if not (
+            local_backup_due(moment, config, last_local_at)
+            or should_send(moment, config)
+        ):
             return None
         try:
-            return send_backup(db)
+            return run_scheduled_backup_now(db, moment)
         except BusinessValidationError as exc:
-            logger.warning("Backup Telegram gagal: %s", exc)
+            logger.warning("Backup terjadwal gagal: %s", exc)
             return None
 
 
@@ -513,6 +542,7 @@ __all__ = [
     "BACKUP_LOCK",
     "backup_filename",
     "data_range",
+    "local_backup_due",
     "run_scheduled_backup",
     "run_scheduled_backup_now",
     "scheduler_loop",

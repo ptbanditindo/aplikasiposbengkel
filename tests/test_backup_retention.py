@@ -90,8 +90,9 @@ def test_retry_telegram_memakai_ulang_satu_file(client, db_session, monkeypatch)
     )
     telegram_backup_service.send_backup(db_session)
 
-    # File sementara dihapus setelah berhasil dikirim ke Telegram.
-    assert _backup_files() == []
+    # Snapshot lokal tetap tersimpan setelah berhasil dikirim ke Telegram;
+    # retensi berkas yang mengatur pemangkasan berikutnya.
+    assert len(_backup_files()) == 1
 
 
 def test_backup_dibatalkan_saat_ruang_disk_kurang(client, monkeypatch):

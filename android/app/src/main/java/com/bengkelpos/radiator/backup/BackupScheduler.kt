@@ -32,13 +32,8 @@ object BackupScheduler {
     fun sync(context: Context, enabled: Boolean, jam: String?) {
         val app = context.applicationContext
         val prefs = prefs(app)
-        val normalized = BackupPolicy.normalizeJam(jam)
-        if (normalized == null) {
-            prefs.edit().putBoolean(KEY_ENABLED, false).apply()
-            cancel(app)
-            return
-        }
-
+        // Jam tidak valid tidak boleh mematikan backup lokal; pakai default.
+        val normalized = BackupPolicy.normalizeJam(jam) ?: (21 to 0)
         val text = BackupPolicy.formatJam(normalized)
         prefs.edit()
             .putBoolean(KEY_ENABLED, enabled)
@@ -55,8 +50,14 @@ object BackupScheduler {
     fun ensureScheduled(context: Context) {
         val app = context.applicationContext
         val prefs = prefs(app)
-        if (!prefs.getBoolean(KEY_ENABLED, false)) return
-        val jam = prefs.getString(KEY_JAM, null) ?: return
+        // Backup lokal selalu terjadwal, termasuk saat Telegram tidak dipakai.
+        val normalized =
+            BackupPolicy.normalizeJam(prefs.getString(KEY_JAM, null)) ?: (21 to 0)
+        val jam = BackupPolicy.formatJam(normalized)
+        prefs.edit()
+            .putBoolean(KEY_ENABLED, true)
+            .putString(KEY_JAM, jam)
+            .apply()
         enqueue(app, prefs, jam)
     }
 

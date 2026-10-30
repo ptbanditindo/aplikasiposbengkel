@@ -8,6 +8,7 @@ WorkManager memanggil satu endpoint yang:
 """
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timedelta
 
 from config import settings
@@ -132,6 +133,56 @@ def test_telegram_gagal_tetap_menyimpan_backup_lokal(
     assert backup_files() - before == {path}
 
 
+def test_penjadwal_lokal_berjalan_tanpa_telegram(client, db_session):
+    telegram = client.get("/api/config").json()["telegram"]
+    assert telegram["enabled"] is False
+
+    assert (
+        telegram_backup_service.run_scheduled_backup(
+            datetime(2026, 10, 30, 20, 0)
+        )
+        is None
+    )
+
+    before = backup_files()
+    result = telegram_backup_service.run_scheduled_backup(
+        datetime(2026, 10, 30, 21, 0)
+    )
+    assert result is not None
+    assert result["status"] == "ok"
+    assert result["local_saved"] is True
+    assert result["telegram_enabled"] is False
+    assert result["telegram_sent"] is False
+
+    created = backup_files() - before
+    assert len(created) == 1
+    path = created.pop()
+    assert path == settings.backup_dir / result["filename"]
+
+    connection = sqlite3.connect(str(path))
+    try:
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute("SELECT COUNT(*) FROM stock_items").fetchone()[0] > 0
+    finally:
+        connection.close()
+
+    db_session.expire_all()
+    assert settings_service.get_setting(db_session, "backup.last_status") == "ok"
+    assert (
+        settings_service.get_setting(db_session, "backup.last_local_filename")
+        == path.name
+    )
+
+    # Jadwal hari yang sama tidak membuat snapshot kedua.
+    assert (
+        telegram_backup_service.run_scheduled_backup(
+            datetime(2026, 10, 30, 22, 0)
+        )
+        is None
+    )
+    assert backup_files() - before == {path}
+
+
 def test_telegram_sukses_mencatat_status_dan_tidak_menduplikasi(
     client, db_session, monkeypatch
 ):
@@ -156,19 +207,31 @@ def test_telegram_sukses_mencatat_status_dan_tidak_menduplikasi(
     assert len(sent) == 1
     assert sent[0][4].startswith(b"SQLite format 3\x00")
 
+    created = backup_files() - before
+    assert len(created) == 1
+    path = created.pop()
+    assert body["filename"] == path.name
+    assert body["size_bytes"] > 0
+    assert path.exists()
+
     db_session.expire_all()
     assert settings_service.get_setting(db_session, "backup.last_status") == "ok"
     assert settings_service.get_setting(db_session, "telegram.last_sent_at")
     assert settings_service.get_setting(db_session, "telegram.last_error") == ""
     assert settings_service.get_setting(db_session, "backup.last_local_at")
+    assert (
+        settings_service.get_setting(db_session, "backup.last_local_filename")
+        == path.name
+    )
 
-    # Sudah terkirim hari ini: pemicu berikutnya tidak membuat file baru.
+    # Sudah terkirim hari ini: pemicu berikutnya tidak membuat file baru dan
+    # snapshot lokal tetap tersedia.
     again = client.post("/api/admin/scheduled-backup")
     assert again.status_code == 200, again.text
     assert again.json()["status"] == "ok"
     assert again.json()["telegram_sent"] is True
     assert len(sent) == 1
-    assert backup_files() - before == set()
+    assert backup_files() - before == {path}
 
 
 def test_ruang_penyimpanan_penuh_gagal_dengan_aman(client, db_session, monkeypatch):

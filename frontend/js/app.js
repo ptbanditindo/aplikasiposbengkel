@@ -3148,14 +3148,15 @@
   }
 
   function syncNativeBackupSchedule() {
-    // APK: WorkManager memegang jadwal harian, termasuk saat aplikasi ditutup.
+    // APK: WorkManager memegang jadwal backup lokal, termasuk saat aplikasi
+    // ditutup. Telegram hanya pengiriman tambahan yang diputuskan backend,
+    // jadi jadwal ini tidak bergantung pada telegram.enabled.
     if (!window.BengkelBridge || !window.BengkelBridge.available()) return;
-    const telegram = state.config && state.config.telegram;
-    if (!telegram) return;
+    const telegram = (state.config && state.config.telegram) || {};
     window.BengkelBridge.call(
       'syncScheduledBackup',
       {
-        enabled: Boolean(telegram.enabled),
+        enabled: true,
         jam: telegram.jam || '21:00',
       },
       15000
