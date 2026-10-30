@@ -50,7 +50,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.0 |
+| Versi | BengkelPOS Radiator v2.1 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -75,6 +75,7 @@ Aturan yang dipakai:
 | Keterangan | Harga jasa dan sparepart bisa disesuaikan di kolom harga deal. |
 | Tombol | Kosongkan form |
 | Langkah 1 | Pilih pelanggan. Cari berdasarkan nama atau nomor HP. |
+| Pencarian pelanggan | Cari nama atau no. HP |
 | Tombol | + Pelanggan baru |
 | Langkah 2 | Pilih unit servis. Mobil lengkap atau radiator copotan tanpa nopol. |
 | Tautan | atau daftarkan unit baru |
@@ -109,6 +110,7 @@ Aturan yang dipakai:
 | --- | --- |
 | Judul | Riwayat servis |
 | Pencarian | Cari nota, nopol, label radiator, atau nama pelanggan. |
+| Placeholder pencarian | Cari nota, nopol, atau nama |
 | Tombol | Muat ulang |
 | Jumlah | N nota |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode, Garansi, Aksi |
@@ -162,6 +164,7 @@ Aturan yang dipakai:
 | Judul | Pelanggan |
 | Keterangan | Daftar pelanggan bengkel beserta unit mobil dan radiatornya. |
 | Pencarian | Cari nama, nomor HP, atau alamat |
+| Placeholder pencarian | Cari nama atau nomor HP pelanggan |
 | Tombol | Muat ulang, + Pelanggan baru |
 | Kartu | Total pelanggan, Total unit terdaftar, Unit mobil, Radiator copotan |
 | Jumlah | N pelanggan |
@@ -248,7 +251,16 @@ Aturan yang dipakai:
 | Validasi | Nama bengkel minimal 2 karakter. |
 | Gagal | Pengaturan gagal disimpan. Coba lagi. |
 
-### 12.1 Printer
+### 12.1 Tampilan
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Tampilan |
+| Keterangan | Pilih warna antarmuka. Pilihan tersimpan di perangkat ini. |
+| Label | Warna aplikasi |
+| Pilihan | Terang, Gelap |
+
+### 12.2 Printer
 
 | Lokasi | Teks |
 | --- | --- |
@@ -267,7 +279,7 @@ Aturan yang dipakai:
 | Gagal | <pesan singkat dari perangkat> |
 | Peringatan pengaturan | Pengaturan printer hanya untuk pemilik. |
 
-### 12.2 Popup printer
+### 12.3 Popup printer
 
 | Lokasi | Teks |
 | --- | --- |
@@ -291,7 +303,7 @@ Aturan yang dipakai:
 | Pencarian tidak tersedia | Pencarian printer ini tidak tersedia di perangkat. |
 | Info masukan | Data printer dimasukkan. Periksa lalu simpan. |
 
-### 12.3 Backup dan pemulihan
+### 12.4 Backup dan pemulihan
 
 | Lokasi | Teks |
 | --- | --- |
@@ -309,7 +321,7 @@ Aturan yang dipakai:
 | Gagal backup | Backup gagal dibuat. Periksa ruang penyimpanan lalu coba lagi. |
 | Gagal bagikan | Backup gagal dibagikan. Coba lagi. |
 
-### 12.4 Backup otomatis Telegram
+### 12.5 Backup otomatis Telegram
 
 | Lokasi | Teks |
 | --- | --- |
@@ -330,7 +342,7 @@ Aturan yang dipakai:
 | Sukses simpan | Pengaturan Telegram tersimpan. |
 | Gagal simpan | Pengaturan Telegram gagal disimpan. Coba lagi. |
 
-### 12.5 PIN kasir dan keamanan
+### 12.6 PIN kasir dan keamanan
 
 | Lokasi | Teks |
 | --- | --- |

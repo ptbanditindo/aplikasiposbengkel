@@ -3,7 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f1ea">
+  <meta name="theme-color" content="#f7f7f7">
+  <script>
+    (function () {
+      try {
+        if (window.localStorage.getItem('bengkel.theme') === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', '#0d0d0e');
+        }
+      } catch (error) {}
+    })();
+  </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/style.css">
@@ -214,7 +225,7 @@
               </div>
               <div class="search-row">
                 <div class="autocomplete">
-                  <input type="text" class="input" id="customerSearch" placeholder="Nama atau nomor HP pelanggan" autocomplete="off">
+                  <input type="text" class="input" id="customerSearch" placeholder="Cari nama atau no. HP" autocomplete="off">
                   <div class="autocomplete-list hidden" id="customerResults"></div>
                 </div>
                 <button type="button" class="btn btn-outline" id="btnNewCustomerPos">+ Pelanggan baru</button>
@@ -452,7 +463,7 @@
         </div>
         <div class="card">
           <div class="search-row">
-            <input type="text" class="input" id="historySearch" placeholder="Cari nomor nota, nopol, label radiator, nama, atau HP">
+            <input type="text" class="input" id="historySearch" placeholder="Cari nota, nopol, atau nama">
             <span class="pill-count" id="historyCount">0 nota</span>
           </div>
           <div class="table-wrap">
@@ -644,6 +655,22 @@
           </div>
         </div>
 
+        <section class="card" id="appearanceCard">
+          <div class="card-head">
+            <div>
+              <h2>Tampilan</h2>
+              <p class="muted">Pilih warna antarmuka. Pilihan tersimpan di perangkat ini.</p>
+            </div>
+          </div>
+          <div class="field">
+            <span>Warna aplikasi</span>
+            <div class="segmented theme-switch" id="themeSwitch" role="group" aria-label="Warna aplikasi">
+              <button type="button" data-theme-value="light" aria-pressed="true">Terang</button>
+              <button type="button" data-theme-value="dark" aria-pressed="false">Gelap</button>
+            </div>
+          </div>
+        </section>
+
         <form class="card" id="settingsForm">
           <div class="card-head">
             <div>
@@ -779,7 +806,7 @@
 
           <label class="field">
             <span>Bot token Telegram</span>
-            <input type="password" class="input" id="telegramToken" maxlength="200" autocomplete="new-password" placeholder="Biarkan kosong untuk memakai token yang tersimpan">
+            <input type="password" class="input" id="telegramToken" maxlength="200" autocomplete="new-password" placeholder="Kosongkan jika token sudah ada">
           </label>
 
           <p class="tiny muted">
@@ -883,7 +910,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.0</span>
+        <span>BengkelPOS Radiator v2.1</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>

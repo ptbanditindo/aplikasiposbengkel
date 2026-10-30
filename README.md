@@ -34,9 +34,14 @@ build step) di `http://127.0.0.1:8000`.
   opsional ke Telegram.
 - **Pengaturan** — identitas bengkel, rekening transfer, token/jadwal Telegram,
   printer, dan batas kunci aplikasi dapat diubah dari UI tanpa mengedit `.env`.
+- **Tampilan terang/gelap** — antarmuka berbasis kertas putih dengan aksen
+  warna pada angka dan status penting; pilihan Terang atau Gelap tersimpan per
+  perangkat di Pengaturan dan langsung berlaku tanpa memuat ulang halaman.
 - **APK Android** — gerbang PIN 6 angka native (PBKDF2 + salt, lockout
   bertingkat), shell WebView, backend berjalan di dalam aplikasi. Layar utama
-  dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi.
+  dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
+  mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
+  tidak tertutup sistem, dan warna status bar ikut tema terang/gelap.
 
 ## Menjalankan versi web/desktop
 

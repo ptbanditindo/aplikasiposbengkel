@@ -5019,6 +5019,62 @@
     });
   }
 
+  /* ------------------------------ Tampilan -------------------------------- */
+  const THEME_KEY = 'bengkel.theme';
+  const THEME_COLOR = { light: '#f7f7f7', dark: '#0d0d0e' };
+
+  function normalizeTheme(value) {
+    return String(value) === 'dark' ? 'dark' : 'light';
+  }
+
+  function storedTheme() {
+    try {
+      return normalizeTheme(window.localStorage.getItem(THEME_KEY));
+    } catch (error) {
+      return 'light';
+    }
+  }
+
+  function syncThemeUI(theme) {
+    $$('#themeSwitch button').forEach((button) => {
+      const active = button.dataset.themeValue === theme;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function applyTheme(theme, persist) {
+    const next = normalizeTheme(theme);
+    document.documentElement.setAttribute('data-theme', next);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLOR[next]);
+    if (persist) {
+      try {
+        window.localStorage.setItem(THEME_KEY, next);
+      } catch (error) {
+        // Mode tetap berlaku untuk sesi ini meski penyimpanan diblokir.
+      }
+    }
+    const shell = window.BengkelPin;
+    if (shell && typeof shell.applyChromeTheme === 'function') {
+      try {
+        shell.applyChromeTheme(next);
+      } catch (error) {
+        // Status bar native memakai warna bawaan bila jembatan tidak tersedia.
+      }
+    }
+    syncThemeUI(next);
+  }
+
+  function initTheme() {
+    applyTheme(storedTheme(), false);
+    $$('#themeSwitch button').forEach((button) => {
+      button.addEventListener('click', () =>
+        applyTheme(button.dataset.themeValue, true)
+      );
+    });
+  }
+
   /* ---------------------------- PIN keamanan APK --------------------------- */
   function initPinSecurityCard() {
     const bridge = window.BengkelPin;
@@ -5068,6 +5124,7 @@
   }
 
   async function init() {
+    initTheme();
     bindEvents();
     startClock();
     initPrinter();

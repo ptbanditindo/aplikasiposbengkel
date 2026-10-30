@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +29,9 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.bengkelpos.radiator.backend.BackendManager
@@ -116,6 +120,8 @@ class MainActivity : AppCompatActivity() {
         offlinePanel = findViewById(R.id.offlinePanel)
         offlineText = findViewById(R.id.offlineText)
         privacyCover = findViewById(R.id.privacyCover)
+        configureWindowInsets()
+        applyAppTheme(dark = false)
         pinSettings = PinSettings(this)
         adminToken = resolveAdminToken()
         bluetoothPrinter = BluetoothPrinterController(AndroidBluetoothGateway(this))
@@ -187,6 +193,43 @@ class MainActivity : AppCompatActivity() {
         webView.removeAllViews()
         webView.destroy()
         super.onDestroy()
+    }
+
+    /**
+     * targetSdk 35 menggambar konten sampai ke balik status bar. Padding root
+     * memakai inset sistem agar header tidak tertutup dan halaman tetap utuh.
+     */
+    private fun configureWindowInsets() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val root = findViewById<View>(R.id.appRoot)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+    }
+
+    private fun applyAppTheme(dark: Boolean) {
+        val ground = Color.parseColor(if (dark) "#0D0D0E" else "#F7F7F7")
+        val surface = Color.parseColor(if (dark) "#161618" else "#FFFFFF")
+        val textColor = Color.parseColor(if (dark) "#F4F4F5" else "#0A0A0A")
+        val accent = Color.parseColor(if (dark) "#6EA8FF" else "#1D5FBF")
+
+        findViewById<View>(R.id.appRoot).setBackgroundColor(ground)
+        findViewById<View>(R.id.privacyCover).setBackgroundColor(ground)
+        findViewById<View>(R.id.offlinePanel).setBackgroundColor(surface)
+        findViewById<TextView>(R.id.offlineText).setTextColor(textColor)
+        findViewById<Button>(R.id.retryButton).setTextColor(accent)
+
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.isAppearanceLightStatusBars = !dark
+        controller.isAppearanceLightNavigationBars = !dark
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
     }
 
     private fun configureWebView() {
@@ -457,6 +500,11 @@ class MainActivity : AppCompatActivity() {
                     startActivity(Intent(this@MainActivity, PinActivity::class.java))
                 }
             }
+        }
+
+        @JavascriptInterface
+        fun applyChromeTheme(theme: String) {
+            runOnUiThread { applyAppTheme(dark = theme == "dark") }
         }
     }
 

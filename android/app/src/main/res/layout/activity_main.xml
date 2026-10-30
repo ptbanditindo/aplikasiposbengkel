@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/appRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/surface">
+    android:background="@color/ground">
 
     <WebView
         android:id="@+id/webView"
@@ -41,5 +42,5 @@
         android:id="@+id/privacyCover"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/surface" />
+        android:background="@color/ground" />
 </FrameLayout>

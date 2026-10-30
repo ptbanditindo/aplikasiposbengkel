@@ -54,6 +54,13 @@ WorkManager (ScheduledBackupWorker)
   dengan periode 24 jam, initial delay mengikuti jam pengaturan, dan retry
   eksponensial maksimal 5 percobaan. Worker dapat menyalakan backend sebentar
   lalu mematikannya lagi bila aplikasi tidak sedang di depan.
+- **Tampilan dan area aman**: UI 2.1 memakai dasar kertas putih dengan aksen
+  warna pada angka dan status. Pilihan Terang/Gelap di Pengaturan disimpan di
+  `localStorage` (`bengkel.theme`) dan diteruskan ke shell lewat
+  `BengkelPin.applyChromeTheme` agar warna status bar dan navigation bar ikut
+  berubah. `MainActivity` memakai edge-to-edge dengan padding
+  `systemBars() or displayCutout()` pada `appRoot`, sehingga konten tidak
+  tertutup status bar atau notch.
 
 ## Versi Python dan dependensi
 
@@ -118,13 +125,16 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.202.017 byte
-- SHA-256: `ccecba81981e22a8af8adc7f4e4f7f18ebf75f7ef8be34b59c629767957e8d37`
-- Paket: `com.bengkelpos.radiator`, versionName `2.0.0`, versionCode `1`,
+- Ukuran: 45.219.668 byte
+- SHA-256: `a3c9635c2cd813db6dbf81f29a1b6011c2550310ce55947464bff27ba73d02a7`
+- Paket: `com.bengkelpos.radiator`, versionName `2.1.0`, versionCode `2`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `frontend/index.html`, `style.css`, `app.js`, `api-client.js`, dan
-  `printer-manager.js` di dalam ZIP sudah dicocokkan hash-nya dengan working
-  tree saat build.
+- Asset `assets/bengkel_backend.zip`: 205.387 byte, SHA-256
+  `61ed84306bce0a749cd33822527db2a7714c7b39d2b6160d40722bd2d58229fb`.
+  `frontend/index.html` di dalam ZIP dicocokkan hash-nya dengan working tree
+  saat build dan memuat footer v2.1, kontrol Terang/Gelap, serta placeholder
+  baru. `style.css`, `app.js`, `api-client.js`, dan `printer-manager.js` juga
+  ikut dalam ZIP yang sama.
 - Unit test JVM: **143 test lulus**. Pytest backend: **226 test lulus** di
   masing-masing stack (Pydantic v2 dan Pydantic 1.10).
 - APK belum dipasang/diuji di perangkat Android fisik.
@@ -138,11 +148,15 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 4. Tutup paksa aplikasi lalu buka lagi: PIN diminta, data tetap ada.
 5. Coba screenshot layar kasir/nota (harus berhasil) dan layar PIN (harus
    kosong/hitam karena `FLAG_SECURE`).
-6. Buka Pengaturan → Printer, tambahkan printer Bluetooth/Wi-Fi/USB, lalu
+6. Buka Pengaturan, ganti Warna aplikasi ke Gelap lalu Terang. Warna status
+   bar ikut berubah dan pilihan tetap tersimpan setelah aplikasi dibuka lagi.
+7. Pastikan judul halaman dan tombol aksi tidak tertutup status bar, kamera
+   punch-hole, atau navigation bar pada perangkat dengan layar penuh.
+8. Buka Pengaturan → Printer, tambahkan printer Bluetooth/Wi-Fi/USB, lalu
    lakukan tes cetak pada perangkat nyata.
-7. Lupa PIN → RESET → buat PIN baru → data dan token instalasi tetap ada.
-8. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN serta jadwal
-   backup WorkManager.
+9. Lupa PIN → RESET → buat PIN baru → data dan token instalasi tetap ada.
+10. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN serta jadwal
+    backup WorkManager.
 
 Jika muncul "Server lokal gagal dijalankan", periksa logcat:
 
