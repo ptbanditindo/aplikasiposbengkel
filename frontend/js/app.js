@@ -3116,6 +3116,52 @@
     $('#telegramJam').value = telegram.jam || '21:00';
     $('#telegramChatId').value = telegram.chat_id || '';
     renderTelegramStatus(telegram);
+    renderBackupStatus();
+    syncNativeBackupSchedule();
+  }
+
+  function renderBackupStatus() {
+    const status = $('#backupStatus');
+    if (!status) return;
+    const backup = (state.config && state.config.backup) || {};
+
+    const parts = [];
+    parts.push(
+      backup.last_local_at
+        ? 'Backup terakhir: ' + fmtDateTime(backup.last_local_at) + '.'
+        : 'Belum ada backup otomatis tersimpan.'
+    );
+    if (backup.last_status === 'failed' && backup.last_error) {
+      parts.push('Kegagalan terakhir: ' + backup.last_error);
+    }
+    status.textContent = parts.join(' ');
+
+    const banner = $('#backupStaleBanner');
+    if (!banner) return;
+    banner.classList.toggle('hidden', !backup.stale);
+    if (backup.stale) {
+      banner.textContent =
+        'Backup terakhir lebih dari ' +
+        (backup.stale_days || 2) +
+        ' hari. Periksa jadwal, koneksi, dan ruang penyimpanan.';
+    }
+  }
+
+  function syncNativeBackupSchedule() {
+    // APK: WorkManager memegang jadwal harian, termasuk saat aplikasi ditutup.
+    if (!window.BengkelBridge || !window.BengkelBridge.available()) return;
+    const telegram = state.config && state.config.telegram;
+    if (!telegram) return;
+    window.BengkelBridge.call(
+      'syncScheduledBackup',
+      {
+        enabled: Boolean(telegram.enabled),
+        jam: telegram.jam || '21:00',
+      },
+      15000
+    ).catch(function () {
+      // Penjadwalan native opsional; halaman tetap berfungsi tanpa APK.
+    });
   }
 
   async function handleTelegramSubmit(event) {

@@ -3,6 +3,7 @@ package com.bengkelpos.radiator
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import com.bengkelpos.radiator.backup.BackupScheduler
 import com.bengkelpos.radiator.pin.PinSession
 import com.bengkelpos.radiator.pin.SystemLockoutClock
 import com.chaquo.python.Python
@@ -15,15 +16,19 @@ class BengkelApp : Application() {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(this))
         }
+        // WorkManager menyimpan jadwal di disk; daftarkan ulang setelah restart.
+        BackupScheduler.ensureScheduled(this)
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             private var startedActivities = 0
 
             override fun onActivityStarted(activity: Activity) {
                 startedActivities++
+                ForegroundState.set(true)
             }
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivities = (startedActivities - 1).coerceAtLeast(0)
+                ForegroundState.set(startedActivities > 0)
                 if (startedActivities == 0) {
                     PinSession.markBackground(SystemLockoutClock)
                 }

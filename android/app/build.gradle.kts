@@ -119,6 +119,8 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.2")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.webkit:webkit:1.12.1")
+    // T-06: backup harian harus tetap terjadwal tanpa WebView/thread Python.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     testImplementation("junit:junit:4.13.2")
 }

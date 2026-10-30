@@ -20,6 +20,7 @@ from api import (
 )
 from api.deps import require_auth
 from api.schemas import (
+    BackupStatusOut,
     BengkelInfoOut,
     ConfigOut,
     PrinterInfoOut,
@@ -61,7 +62,7 @@ async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
         seed_defaults(db)
     scheduler = None
-    if settings.app_env != "test":
+    if settings.app_env != "test" and settings.backup_scheduler != "workmanager":
         scheduler = asyncio.create_task(telegram_backup_service.scheduler_loop())
     try:
         yield
@@ -194,13 +195,15 @@ def create_app() -> FastAPI:
         dependencies=[Depends(require_auth)],
     )
     def app_config(db: Session = Depends(get_db)):
+        telegram_config = settings_service.get_telegram_config(db)
         return ConfigOut(
             version=APP_VERSION,
             bengkel=BengkelInfoOut(**settings_service.get_bengkel_info(db)),
             telegram=TelegramInfoOut(
-                **settings_service.telegram_public_info(
-                    settings_service.get_telegram_config(db)
-                )
+                **settings_service.telegram_public_info(telegram_config)
+            ),
+            backup=BackupStatusOut(
+                **settings_service.get_backup_status(db, telegram_config)
             ),
             printer=PrinterInfoOut(
                 paper_width=settings.printer_paper_width,

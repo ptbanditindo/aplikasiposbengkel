@@ -8,6 +8,7 @@ from api.deps import require_auth
 from api.schemas import (
     BengkelInfoIn,
     BengkelInfoOut,
+    ScheduledBackupOut,
     TelegramInfoOut,
     TelegramSettingsIn,
 )
@@ -33,6 +34,17 @@ def update_bengkel(payload: BengkelInfoIn, db: Session = Depends(get_db)):
 def update_telegram(payload: TelegramSettingsIn, db: Session = Depends(get_db)):
     config = settings_service.update_telegram_config(db, payload.model_dump())
     return TelegramInfoOut(**settings_service.telegram_public_info(config))
+
+
+@router.post(
+    "/admin/scheduled-backup",
+    response_model=ScheduledBackupOut,
+)
+def scheduled_backup(db: Session = Depends(get_db)):
+    """Dipicu WorkManager Android; aman diulang tanpa membuat file ganda."""
+    return ScheduledBackupOut(
+        **telegram_backup_service.run_scheduled_backup_now(db)
+    )
 
 
 @router.post(

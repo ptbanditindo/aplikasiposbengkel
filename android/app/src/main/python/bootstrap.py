@@ -38,6 +38,9 @@ def start(backend_dir: str, files_dir: str, port: int, admin_token: str) -> None
         "sqlite:///" + os.path.join(files_dir, "data", "bengkel_radiator.db")
     )
     os.environ["BACKUP_DIR"] = os.path.join(files_dir, "backups")
+    # Penjadwalan dipegang WorkManager Android, bukan thread Python yang ikut
+    # mati saat proses aplikasi dibunuh sistem.
+    os.environ["BACKUP_SCHEDULER"] = "workmanager"
     # APK memakai PIN native + token per-instalasi, bukan PIN web.
     os.environ["AUTH_MODE"] = "install-token"
     os.environ["APP_INSTALL_TOKEN"] = admin_token

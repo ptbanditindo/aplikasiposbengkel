@@ -473,6 +473,28 @@ class TelegramInfoOut(CompatBase):
     last_error: Optional[str] = None
 
 
+class BackupStatusOut(CompatBase):
+    last_local_at: Optional[str] = None
+    last_local_filename: Optional[str] = None
+    last_status: Optional[str] = None
+    last_error: Optional[str] = None
+    last_telegram_at: Optional[str] = None
+    stale: bool = False
+    stale_days: int = 2
+
+
+class ScheduledBackupOut(CompatBase):
+    status: str
+    local_saved: bool = False
+    filename: Optional[str] = None
+    size_bytes: int = 0
+    created_at: Optional[str] = None
+    telegram_enabled: bool = False
+    telegram_sent: bool = False
+    telegram_error: Optional[str] = None
+    message: str = ""
+
+
 class PrinterInfoOut(CompatBase):
     paper_width: int
     encoding: str
@@ -483,6 +505,7 @@ class ConfigOut(CompatBase):
     version: str
     bengkel: BengkelInfoOut
     telegram: TelegramInfoOut
+    backup: BackupStatusOut
     printer: PrinterInfoOut
     default_garansi_bulan: int
     garansi_syarat: str

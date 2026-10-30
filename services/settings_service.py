@@ -6,7 +6,8 @@ Nilai default berasal dari `.env`; perubahan dari UI disimpan di tabel
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -42,6 +43,12 @@ FIELD_MAX_LENGTH = {
 KEY_PREFIX = "bengkel."
 
 TELEGRAM_PREFIX = "telegram."
+BACKUP_STALE_DAYS = 2
+BACKUP_LAST_AT_KEY = "backup.last_local_at"
+BACKUP_LAST_FILENAME_KEY = "backup.last_local_filename"
+BACKUP_LAST_STATUS_KEY = "backup.last_status"
+BACKUP_LAST_ERROR_KEY = "backup.last_error"
+BACKUP_LAST_TELEGRAM_KEY = "backup.last_telegram_at"
 _TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 _BOT_TOKEN_PATTERN = re.compile(r"^\d+:[A-Za-z0-9_-]{10,}$")
 _CHAT_ID_PATTERN = re.compile(r"^(-?\d+|@[A-Za-z0-9_]{4,})$")
@@ -137,6 +144,48 @@ def telegram_public_info(config: Dict[str, Any]) -> Dict[str, Any]:
         "needs_reconfig": bool(config.get("needs_reconfig")),
         "last_sent_at": config.get("last_sent_at") or None,
         "last_error": config.get("last_error") or None,
+    }
+
+
+def _parse_iso(value: Any) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def get_backup_status(
+    db: Session,
+    config: Optional[Dict[str, Any]] = None,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Status backup terakhir + penanda basi untuk peringatan di UI.
+
+    Backup manual Telegram dari versi sebelumnya tidak menulis kunci
+    `backup.*`; nilainya jatuh ke `telegram.last_sent_at` agar pengguna lama
+    tidak langsung melihat peringatan palsu.
+    """
+    moment = now or datetime.now()
+    telegram = config if config is not None else get_telegram_config(db)
+    last_at = (
+        get_setting(db, BACKUP_LAST_AT_KEY)
+        or telegram.get("last_sent_at")
+        or ""
+    )
+    last_dt = _parse_iso(last_at)
+    stale = last_dt is None or moment - last_dt > timedelta(days=BACKUP_STALE_DAYS)
+    return {
+        "last_local_at": last_at or None,
+        "last_local_filename": get_setting(db, BACKUP_LAST_FILENAME_KEY) or None,
+        "last_status": get_setting(db, BACKUP_LAST_STATUS_KEY) or None,
+        "last_error": get_setting(db, BACKUP_LAST_ERROR_KEY) or None,
+        "last_telegram_at": (
+            get_setting(db, BACKUP_LAST_TELEGRAM_KEY)
+            or telegram.get("last_sent_at")
+            or None
+        ),
+        "stale": stale,
+        "stale_days": BACKUP_STALE_DAYS,
     }
 
 

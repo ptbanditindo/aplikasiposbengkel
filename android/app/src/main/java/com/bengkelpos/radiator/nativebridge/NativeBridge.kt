@@ -11,6 +11,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.core.content.FileProvider
 import com.bengkelpos.radiator.backend.BackendManager
+import com.bengkelpos.radiator.backup.BackupScheduler
 import com.bengkelpos.radiator.backup.BackupStore
 import org.json.JSONObject
 import java.io.File
@@ -48,6 +49,7 @@ class NativeBridge(
                     "saveBackup" -> saveBackup(requestId)
                     "shareBackup" -> shareBackup(requestId, args)
                     "restartBackend" -> restartBackend(requestId)
+                    "syncScheduledBackup" -> syncScheduledBackup(requestId, args)
                     else -> fail(requestId, "UNKNOWN", "Perintah tidak dikenal.")
                 }
             } catch (error: BridgeError) {
@@ -202,6 +204,21 @@ class NativeBridge(
         }
         reply(requestId, JSONObject().put("ok", true))
         activity.runOnUiThread { onBackendRestarted() }
+    }
+
+    private fun syncScheduledBackup(requestId: String, args: JSONObject) {
+        val enabled = args.optBoolean("enabled", false)
+        BackupScheduler.sync(
+            activity.applicationContext,
+            enabled,
+            args.optString("jam", "21:00"),
+        )
+        reply(
+            requestId,
+            JSONObject()
+                .put("ok", true)
+                .put("scheduled", enabled),
+        )
     }
 
     private fun reply(requestId: String, payload: JSONObject) {
