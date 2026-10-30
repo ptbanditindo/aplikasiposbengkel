@@ -18,8 +18,9 @@ class PinStore private constructor(private val prefs: SharedPreferences) {
     fun hasPin(): Boolean = prefs.getString(KEY_PIN_HASH, null) != null
 
     /**
-     * Token admin per-instalasi untuk REST API lokal (header X-Admin-Token).
-     * Disimpan terenkripsi dan tidak pernah ditampilkan ke pengguna.
+     * Token instalasi per-perangkat untuk REST API lokal
+     * (header X-Install-Token). Disimpan terenkripsi dan tidak pernah
+     * ditampilkan ke pengguna.
      */
     fun getOrCreateAdminToken(): String {
         val existing = prefs.getString(KEY_ADMIN_TOKEN, null)

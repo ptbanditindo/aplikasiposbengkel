@@ -44,6 +44,7 @@ class Settings:
     app_host: str
     app_port: int
     auth_mode: str
+    app_install_token: str
     ui_access_token: str
 
     database_url: str
@@ -91,6 +92,7 @@ def load_settings() -> Settings:
         app_host=os.getenv("APP_HOST", "127.0.0.1").strip(),
         app_port=_as_int("APP_PORT", 8000),
         auth_mode=os.getenv("AUTH_MODE", "session-pin").strip().lower(),
+        app_install_token=os.getenv("APP_INSTALL_TOKEN", "").strip(),
         ui_access_token=os.getenv("UI_ACCESS_TOKEN", "").strip(),
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///./data/bengkel_radiator.db"
@@ -129,7 +131,7 @@ def load_settings() -> Settings:
 settings = load_settings()
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
-SUPPORTED_AUTH_MODES = frozenset({"session-pin"})
+SUPPORTED_AUTH_MODES = frozenset({"session-pin", "install-token"})
 
 
 def validate_runtime(candidate: Settings | None = None) -> None:

@@ -107,6 +107,12 @@ Detail arsitektur, versi dependensi, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md).
 
+Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
+membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
+terenkripsi. Shell WebView hanya mengizinkan navigasi ke `http://127.0.0.1`
+pada port backend aplikasi; layar PIN web tidak dipakai karena PIN sudah
+native.
+
 Batasan APK saat ini: cetak ke printer thermal dari WebView dan tombol unduh
 backup berbasis blob belum diimplementasikan; backup terjadwal Telegram hanya
 berjalan selama aplikasi terbuka.
@@ -130,8 +136,9 @@ run.py          runner lokal
 pytest -q
 ```
 
-108 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
-Telegram, serta pemeriksaan keamanan akses (PIN, sesi, loopback, host/origin). Suite yang sama lulus di dua jalur
+115 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
+Telegram, serta pemeriksaan keamanan akses (PIN, sesi, token instalasi,
+loopback, host/origin). Suite yang sama lulus di dua jalur
 dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 + FastAPI 0.115
 (kombinasi yang dipakai APK).
 

@@ -18,7 +18,7 @@ object LocalDataResetter {
         val appContext = context.applicationContext
 
         // Hentikan server lokal lebih dulu: koneksi SQLite harus ditutup sebelum
-        // file database dihapus, dan token admin lama tidak boleh dipakai lagi.
+        // file database dihapus, dan token instalasi lama tidak boleh dipakai lagi.
         runCatching { BackendManager.stop() }
 
         runCatching { CookieManager.getInstance().removeAllCookies(null) }

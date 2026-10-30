@@ -32,12 +32,14 @@ PinActivity (gerbang PIN)
   `BackendManager.stop()` (menutup koneksi SQLite, dispose engine) sebelum
   menghapus file, lalu `MainActivity` menjalankan server baru dengan database
   kosong dan token admin baru.
-- **Token admin**: 32 byte acak per instalasi, disimpan di
+- **Token instalasi**: 32 byte acak per instalasi, disimpan di
   `EncryptedSharedPreferences` (file yang sama dengan PIN), diteruskan ke
-  Python lewat `UI_ACCESS_TOKEN` dan disuntikkan ke halaman sebagai
-  `window.__BENGKEL_ADMIN_TOKEN__`. Frontend memakai token itu untuk header
-  `X-Admin-Token` tanpa menanyakan ke pengguna. Token lama otomatis tidak
-  berlaku setelah reset/restart karena backend dibangun ulang.
+  Python lewat `AUTH_MODE=install-token` + `APP_INSTALL_TOKEN` dan disuntikkan
+  ke halaman sebagai `window.__BENGKEL_ADMIN_TOKEN__`. Frontend mengirim token
+  itu pada setiap request sebagai header `X-Install-Token` tanpa menanyakan ke
+  pengguna. APK tidak memakai layar PIN web karena PIN-nya sudah native; token
+  lama otomatis tidak berlaku setelah reset/restart karena backend dibangun
+  ulang.
 
 ## Versi Python dan dependensi
 
@@ -52,7 +54,7 @@ FastAPI 0.115.0. `api/schemas.py` sudah dibuat kompatibel untuk v1 dan v2:
 - `model_validate()` / `model_dump()` tersedia sebagai shim di v1.
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
-Versi desktop di `requirements.txt` tetap memakai pydantic v2; seluruh 64 test
+Versi desktop di `requirements.txt` tetap memakai pydantic v2; seluruh 115 test
 lulus di kedua jalur (v2 dan v1 + FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
@@ -85,11 +87,11 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 1. Instal APK, buat PIN, tunggu teks "Menyiapkan server lokal".
 2. Pastikan halaman kasir muncul dan transaksi bisa disimpan.
-3. Simpan pengaturan bengkel/Telegram (butuh token admin) — tidak boleh ada
-   prompt token di APK.
+3. Simpan pengaturan bengkel/Telegram — tidak boleh ada prompt token atau
+   layar PIN web di APK.
 4. Tutup paksa aplikasi lalu buka lagi: PIN diminta, data tetap ada.
 5. Lupa PIN → RESET → buat PIN baru → server berjalan dengan database kosong,
-   token admin baru, lalu pulihkan backup lewat Pengaturan.
+   token instalasi baru, lalu pulihkan backup lewat Pengaturan.
 6. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN.
 
 Jika muncul "Server lokal gagal dijalankan", periksa logcat:

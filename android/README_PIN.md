@@ -9,8 +9,8 @@ di mesin ini (tidak ada JDK, Gradle, Kotlin, maupun Android SDK terpasang).
 - Backend Python **sudah dikemas** ke dalam APK memakai Chaquopy 16 (Python
   3.10). Lihat `README_APK.md` untuk arsitektur, build, dan batasannya.
 - Reset data menghentikan server lokal lebih dulu (menutup SQLite) sebelum
-  menghapus file, lalu server dinyalakan ulang dengan database dan token admin
-  baru.
+  menghapus file, lalu server dinyalakan ulang dengan database dan token
+  instalasi baru.
 - APK belum bisa diuji di perangkat. Unit test sudah ditulis tetapi belum
   dijalankan di mesin ini (tidak ada JDK/Android SDK).
 
@@ -87,12 +87,12 @@ pada iterasi berikutnya.
 ```
 android/app/src/main/java/com/bengkelpos/radiator/
   BengkelApp.kt              start Python + pencatat waktu latar belakang
-  MainActivity.kt            shell WebView, token admin, jembatan "BengkelPin"
+  MainActivity.kt            shell WebView, token instalasi, jembatan "BengkelPin"
   backend/BackendManager.kt  start/stop server uvicorn
   backend/BackendInstaller.kt ekstrak bengkel_backend.zip ke codeCacheDir
   backend/BackendHealth.kt   polling /api/health sebelum loadUrl()
   pin/PinActivity.kt         layar buat/konfirmasi/buka PIN + reset
-  pin/PinStore.kt            hash, hitungan gagal, status kunci, token admin
+  pin/PinStore.kt            hash, hitungan gagal, status kunci, token instalasi
   pin/PinHasher.kt           PBKDF2 + salt
   pin/LockoutPolicy.kt       tabel durasi kunci
   pin/LockoutState.kt        perhitungan sisa kunci dua jam

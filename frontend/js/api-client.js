@@ -33,11 +33,21 @@
     return null;
   }
 
+  function installToken() {
+    // APK Android menyuntikkan token per-instalasi sebelum halaman dimuat.
+    const injected = window.__BENGKEL_ADMIN_TOKEN__;
+    return typeof injected === 'string' ? injected.trim() : '';
+  }
+
   async function request(path, options) {
     const opts = options || {};
+    const headers = Object.assign({}, opts.headers || {});
+    const token = installToken();
+    if (token) headers['X-Install-Token'] = token;
+
     const init = {
       method: opts.method || 'GET',
-      headers: Object.assign({}, opts.headers || {}),
+      headers: headers,
       cache: 'no-store',
       credentials: 'same-origin',
     };
@@ -142,11 +152,15 @@
     restoreDatabase: async (file) => {
       const form = new FormData();
       form.append('file', file);
+      const headers = {};
+      const token = installToken();
+      if (token) headers['X-Install-Token'] = token;
 
       let response;
       try {
         response = await fetch('/api/admin/restore', {
           method: 'POST',
+          headers: headers,
           credentials: 'same-origin',
           body: form,
           cache: 'no-store',
@@ -189,10 +203,15 @@
       ),
 
     downloadBackup: async () => {
+      const headers = {};
+      const token = installToken();
+      if (token) headers['X-Install-Token'] = token;
+
       let response;
       try {
         response = await fetch('/api/admin/backup', {
           method: 'POST',
+          headers: headers,
           credentials: 'same-origin',
           cache: 'no-store',
         });

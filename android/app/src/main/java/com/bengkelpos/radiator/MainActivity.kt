@@ -265,9 +265,10 @@ class MainActivity : AppCompatActivity() {
     private fun isLocalUrl(url: Uri?): Boolean {
         if (url == null) return false
         if (url.scheme == "about") return true
-        if (url.scheme != "http" && url.scheme != "https") return false
-        val host = url.host ?: return false
-        return host == "127.0.0.1" || host == "localhost"
+        if (url.scheme != "http") return false
+        if (url.host != APP_HOST) return false
+        // Hanya port backend aplikasi ini; port localhost lain tetap ditolak.
+        return url.port == APP_PORT
     }
 
     private fun storeHasPin(): Boolean =
@@ -302,7 +303,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val APP_URL = "http://127.0.0.1:8000/"
-        private const val APP_ORIGIN = "http://127.0.0.1:8000"
+        private const val APP_HOST = "127.0.0.1"
+        private const val APP_PORT = BackendManager.PORT
+        private val APP_ORIGIN = "http://$APP_HOST:$APP_PORT"
+        private val APP_URL = "$APP_ORIGIN/"
     }
 }

@@ -5,8 +5,8 @@ Dipanggil dari BackendManager.kt:
     stop()
 
 Modul backend di-purge setiap start/stop supaya konfigurasi (DATABASE_URL,
-UI_ACCESS_TOKEN) dan engine SQLAlchemy dibangun ulang dengan benar setelah
-reset data di proses yang sama.
+AUTH_MODE, APP_INSTALL_TOKEN) dan engine SQLAlchemy dibangun ulang dengan
+benar setelah reset data di proses yang sama.
 """
 from __future__ import annotations
 
@@ -38,7 +38,9 @@ def start(backend_dir: str, files_dir: str, port: int, admin_token: str) -> None
         "sqlite:///" + os.path.join(files_dir, "data", "bengkel_radiator.db")
     )
     os.environ["BACKUP_DIR"] = os.path.join(files_dir, "backups")
-    os.environ["UI_ACCESS_TOKEN"] = admin_token
+    # APK memakai PIN native + token per-instalasi, bukan PIN web.
+    os.environ["AUTH_MODE"] = "install-token"
+    os.environ["APP_INSTALL_TOKEN"] = admin_token
 
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
