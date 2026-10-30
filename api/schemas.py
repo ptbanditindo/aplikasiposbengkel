@@ -212,6 +212,34 @@ class CreateServiceTransactionRequest(CompatBase):
     parts: List[ServicePartInput] = Field(default_factory=list)
 
 
+class TransactionPreviewRequest(CompatBase):
+    diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
+    metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
+    bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
+    jobs: List[ServiceJobInput] = Field(default_factory=list)
+    parts: List[ServicePartInput] = Field(default_factory=list)
+
+
+class TransactionPreviewLineOut(CompatBase):
+    subtotal: Money
+
+
+class TransactionPreviewOut(CompatBase):
+    """Pratinjau kasir; nilai final selalu dari transaksi tersimpan."""
+
+    is_final: bool = False
+    biaya_jasa: Money
+    total_part: Money
+    subtotal: Money
+    diskon: Money
+    total_servis: Money
+    bayar: Money
+    kembalian: Money
+    kekurangan: Money
+    jobs: List[TransactionPreviewLineOut] = Field(default_factory=list)
+    parts: List[TransactionPreviewLineOut] = Field(default_factory=list)
+
+
 class ServiceJobOut(ORMModel):
     id: int
     deskripsi: str

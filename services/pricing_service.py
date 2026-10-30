@@ -73,6 +73,24 @@ def compute_payment(total_servis: Any, metode_bayar: str, bayar: Any) -> Dict[st
     raise BusinessValidationError("Metode pembayaran harus CASH atau TRANSFER.")
 
 
+def compute_payment_preview(
+    total_servis: Any, metode_bayar: str, bayar: Any
+) -> Dict[str, Decimal]:
+    """Perkiraan pembayaran untuk layar kasir.
+
+    Nilai final tetap dihitung compute_payment saat nota disimpan; pratinjau
+    ini sengaja toleran terhadap uang kurang agar kasir melihat kekurangannya.
+    """
+    total = money(total_servis)
+    method = (metode_bayar or "").strip().upper()
+    paid = total if method == "TRANSFER" else money(bayar)
+    return {
+        "bayar": paid,
+        "kembalian": money(max(paid - total, Decimal("0.00"))),
+        "kekurangan": money(max(total - paid, Decimal("0.00"))),
+    }
+
+
 def calculate_gross_profit(part_lines: List[Dict[str, Any]]) -> Decimal:
     """Laba kotor sparepart = (harga jual deal - harga modal master) x qty."""
     profit = Decimal("0.00")

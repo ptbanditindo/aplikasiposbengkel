@@ -13,6 +13,9 @@ from api.schemas import (
     ReceiptOut,
     ServiceRecordOut,
     ServiceReturnOut,
+    TransactionPreviewLineOut,
+    TransactionPreviewOut,
+    TransactionPreviewRequest,
     TransactionResponse,
     VoidRequest,
 )
@@ -20,6 +23,7 @@ from database.session import get_db
 from repositories import service_record_repository as record_repo
 from services import (
     pos_service,
+    pricing_service,
     settings_service,
     void_return_service,
     warranty_service,
@@ -47,6 +51,51 @@ def create_transaction(
         receipt=receipt,
         warnings=result.warnings,
         laba_kotor=result.laba_kotor,
+    )
+
+
+@router.post("/pos/preview", response_model=TransactionPreviewOut)
+def preview_transaction(payload: TransactionPreviewRequest):
+    """Pratinjau total kasir memakai mesin harga yang sama dengan penyimpanan."""
+    job_lines = [
+        {"jumlah": job.jumlah, "harga": job.harga} for job in payload.jobs
+    ]
+    part_lines = [
+        {"jumlah": part.jumlah, "harga_satuan": part.harga_satuan}
+        for part in payload.parts
+    ]
+    totals = pricing_service.compute_invoice(
+        job_lines, part_lines, payload.diskon
+    )
+    payment = pricing_service.compute_payment_preview(
+        totals["total_servis"], payload.metode_bayar, payload.bayar
+    )
+    return TransactionPreviewOut(
+        is_final=False,
+        biaya_jasa=totals["biaya_jasa"],
+        total_part=totals["total_part"],
+        subtotal=totals["subtotal"],
+        diskon=totals["diskon"],
+        total_servis=totals["total_servis"],
+        bayar=payment["bayar"],
+        kembalian=payment["kembalian"],
+        kekurangan=payment["kekurangan"],
+        jobs=[
+            TransactionPreviewLineOut(
+                subtotal=pricing_service.line_subtotal(
+                    line["jumlah"], line["harga"]
+                )
+            )
+            for line in job_lines
+        ],
+        parts=[
+            TransactionPreviewLineOut(
+                subtotal=pricing_service.line_subtotal(
+                    line["jumlah"], line["harga_satuan"]
+                )
+            )
+            for line in part_lines
+        ],
     )
 
 

@@ -24,9 +24,49 @@
     );
   }
 
+  // Uang kasir selalu rupiah bulat. Pemisah ribuan (titik/koma/spasi) boleh,
+  // tetapi format desimal ditolak agar angka yang dikirim tidak ambigu.
+  const MONEY_INPUT_RE = /^\d{1,3}(?:[.,\s]\d{3})*$|^\d+$/;
+
+  function moneyInputValid(value) {
+    const raw = String(value == null ? '' : value).trim();
+    return raw === '' || MONEY_INPUT_RE.test(raw);
+  }
+
   function parseMoney(value) {
-    const digits = String(value == null ? '' : value).replace(/[^\d]/g, '');
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw || !MONEY_INPUT_RE.test(raw)) return 0;
+    const digits = raw.replace(/\D/g, '');
     return digits ? Number(digits) : 0;
+  }
+
+  function readMoneyInput(input, label) {
+    const raw = input ? input.value : '';
+    if (!moneyInputValid(raw)) {
+      toast(
+        label + ' harus rupiah bulat tanpa desimal, mis. 150000.',
+        'warning'
+      );
+      if (input) input.focus();
+      return null;
+    }
+    return parseMoney(raw);
+  }
+
+  // Nilai uang dari API berupa string desimal dua tempat; penjumlahan untuk
+  // tampilan dilakukan dalam sen agar tidak ada galat floating point.
+  function moneyToCents(value) {
+    const text = String(value == null ? '' : value).trim();
+    if (!text) return 0;
+    const negative = text.charAt(0) === '-';
+    const [whole, fraction] = text.replace('-', '').split('.');
+    const cents =
+      Number(whole || 0) * 100 + Number(((fraction || '') + '00').slice(0, 2));
+    return negative ? -cents : cents;
+  }
+
+  function centsToRp(cents) {
+    return fmtRp(Math.round(cents) / 100);
   }
 
   function intValue(value, fallback) {
@@ -128,6 +168,10 @@
     saving: false,
     pendingRequest: null,
     lastBackup: null,
+    preview: null,
+    previewSeq: 0,
+    previewTimer: null,
+    previewError: null,
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -228,13 +272,8 @@
   }
 
   function netTotal(record) {
-    if (record.total_neto !== undefined && record.total_neto !== null) {
-      return record.total_neto;
-    }
-    if (Number(record.total_retur) > 0) {
-      return Number(record.total_servis) - Number(record.total_retur);
-    }
-    return record.total_servis;
+    // Selalu pakai total_neto dari server; frontend tidak menghitung ulang.
+    return record && record.total_neto != null ? record.total_neto : '0.00';
   }
 
   /* ------------------------------- Clock ---------------------------------- */
@@ -881,7 +920,8 @@
     }
 
     const quantity = Math.max(1, intValue($('#jasaQty').value, 1));
-    const price = parseMoney($('#jasaHarga').value);
+    const price = readMoneyInput($('#jasaHarga'), 'Harga jasa');
+    if (price === null) return;
 
     state.jobs.push({
       harga_jasa_id: master ? master.id : null,
@@ -908,9 +948,13 @@
     }
 
     const quantity = Math.max(1, intValue($('#partQty').value, 1));
-    const price = parseMoney($('#partHarga').value);
+    const price = readMoneyInput($('#partHarga'), 'Harga sparepart');
+    if (price === null) return;
     const modalInput = $('#partModal').value.trim();
-    const modal = modalInput ? parseMoney(modalInput) : null;
+    const modal = modalInput
+      ? readMoneyInput($('#partModal'), 'Harga modal')
+      : null;
+    if (modalInput && modal === null) return;
 
     state.parts.push({
       stock_item_id: stock ? stock.id : null,
@@ -936,7 +980,6 @@
 
     jobsBody.innerHTML = state.jobs
       .map((job, index) => {
-        const subtotal = parseMoney(job.harga) * intValue(job.jumlah, 0);
         return (
           '<tr>' +
           '<td><input class="table-input" data-kind="job" data-index="' +
@@ -954,9 +997,9 @@
           '" data-field="harga" value="' +
           esc(job.harga) +
           '"></td>' +
-          '<td class="text-right item-subtotal">' +
-          fmtRp(subtotal) +
-          '</td>' +
+          '<td class="text-right item-subtotal" data-subtotal-kind="job" data-subtotal-index="' +
+          index +
+          '">&mdash;</td>' +
           '<td class="text-right"><button type="button" class="icon-btn danger" data-remove-kind="job" data-index="' +
           index +
           '" aria-label="Hapus jasa">&times;</button></td>' +
@@ -974,8 +1017,6 @@
           stock && intValue(part.jumlah, 0) > stock.jumlah
             ? '<span class="stock-warn">stok ' + stock.jumlah + '</span>'
             : '';
-        const subtotal =
-          parseMoney(part.harga_satuan) * intValue(part.jumlah, 0);
         const modalCell = stock
           ? '<span class="cell-sub">' + fmtRp(stock.harga_modal) + '</span>'
           : '<input class="table-input price" inputmode="numeric" data-kind="part" data-index="' +
@@ -1008,9 +1049,9 @@
           '<td>' +
           modalCell +
           '</td>' +
-          '<td class="text-right item-subtotal">' +
-          fmtRp(subtotal) +
-          '</td>' +
+          '<td class="text-right item-subtotal" data-subtotal-kind="part" data-subtotal-index="' +
+          index +
+          '">&mdash;</td>' +
           '<td class="text-right"><button type="button" class="icon-btn danger" data-remove-kind="part" data-index="' +
           index +
           '" aria-label="Hapus sparepart">&times;</button></td>' +
@@ -1042,71 +1083,144 @@
 
     if (field === 'jumlah' || field === 'harga' || field === 'harga_satuan') {
       const row = target.closest('tr');
-      if (row) {
-        const unitPrice =
-          kind === 'job' ? parseMoney(item.harga) : parseMoney(item.harga_satuan);
-        const subtotal = unitPrice * intValue(item.jumlah, 0);
-        const cell = row.querySelector('.item-subtotal');
-        if (cell) cell.textContent = fmtRp(subtotal);
-      }
+      const cell = row ? row.querySelector('.item-subtotal') : null;
+      if (cell) cell.textContent = '\u2014';
     }
     updateSummary();
   }
 
   /* ------------------------------ Summary --------------------------------- */
-  function calcTotals() {
-    const jobTotal = state.jobs.reduce(
-      (sum, job) => sum + parseMoney(job.harga) * intValue(job.jumlah, 0),
-      0
-    );
-    const partTotal = state.parts.reduce(
-      (sum, part) =>
-        sum + parseMoney(part.harga_satuan) * intValue(part.jumlah, 0),
-      0
-    );
-    const subtotal = jobTotal + partTotal;
-    const discount = Math.min(parseMoney($('#diskonInput').value), subtotal);
-    const grand = Math.max(0, subtotal - discount);
-    return { jobTotal, partTotal, discount, grand };
-  }
-
+  // Semua angka ringkasan berasal dari backend lewat /api/pos/preview yang
+  // memakai mesin harga yang sama dengan penyimpanan transaksi.
   function getMetode() {
     const checked = $('input[name="metode"]:checked');
     return checked ? checked.value : 'CASH';
   }
 
-  function updateSummary() {
-    const jobEl = $('#jobSubtotal');
-    if (!jobEl) return;
+  function buildPreviewPayload() {
+    const metode = getMetode();
+    return {
+      diskon: String(parseMoney($('#diskonInput').value)),
+      metode_bayar: metode,
+      bayar:
+        metode === 'CASH' ? String(parseMoney($('#bayarInput').value)) : '0',
+      jobs: state.jobs.map((job) => ({
+        deskripsi: job.deskripsi || 'Jasa',
+        jumlah: Math.max(1, intValue(job.jumlah, 1)),
+        harga: String(parseMoney(job.harga)),
+      })),
+      parts: state.parts.map((part) => ({
+        nama_part: part.nama_part || '',
+        jumlah: Math.max(1, intValue(part.jumlah, 1)),
+        harga_satuan: String(parseMoney(part.harga_satuan)),
+      })),
+    };
+  }
 
-    const totals = calcTotals();
-    $('#jobSubtotal').textContent = fmtRp(totals.jobTotal);
-    $('#partSubtotal').textContent = fmtRp(totals.partTotal);
-    $('#grandTotalValue').textContent = fmtRp(totals.grand);
+  function setLineSubtotals(kind, lines) {
+    $$('.item-subtotal[data-subtotal-kind="' + kind + '"]').forEach((cell) => {
+      const index = intValue(cell.dataset.subtotalIndex, -1);
+      const line = lines ? lines[index] : null;
+      cell.textContent = line ? fmtRp(line.subtotal) : '\u2014';
+    });
+  }
 
+  function setSummaryNote(message) {
+    const note = $('#summaryPreviewNote');
+    if (!note) return;
+    note.textContent = message || '';
+    note.classList.toggle('hidden', !message);
+  }
+
+  function renderPreview(preview, error) {
     const transfer = getMetode() === 'TRANSFER';
     const paidInput = $('#bayarInput');
     paidInput.disabled = transfer;
     $('#bankInfo').classList.toggle('hidden', !transfer);
 
-    if (transfer) paidInput.value = String(totals.grand);
+    if (error) {
+      $('#jobSubtotal').textContent = '\u2014';
+      $('#partSubtotal').textContent = '\u2014';
+      $('#grandTotalValue').textContent = '\u2014';
+      $('#kembalianValue').textContent = '\u2014';
+      setLineSubtotals('job', null);
+      setLineSubtotals('part', null);
+      setSummaryNote(error);
+      return;
+    }
 
-    const paid = transfer ? totals.grand : parseMoney(paidInput.value);
-    const changeEl = $('#kembalianValue');
-    const changeRow = changeEl ? changeEl.parentElement : null;
-
-    if (changeEl) {
-      if (paid >= totals.grand) {
-        changeEl.textContent = fmtRp(paid - totals.grand);
-        if (changeRow) changeRow.classList.remove('short');
-      } else {
-        changeEl.textContent = 'Kurang ' + fmtRp(totals.grand - paid);
-        if (changeRow) changeRow.classList.add('short');
+    if (!preview) {
+      $('#jobSubtotal').textContent = 'Rp 0';
+      $('#partSubtotal').textContent = 'Rp 0';
+      $('#grandTotalValue').textContent = 'Rp 0';
+      const zeroChange = $('#kembalianValue');
+      zeroChange.textContent = 'Rp 0';
+      if (zeroChange.parentElement) {
+        zeroChange.parentElement.classList.remove('short');
       }
+      setLineSubtotals('job', null);
+      setLineSubtotals('part', null);
+      setSummaryNote('Perkiraan dari server; nilai final dicatat saat nota disimpan.');
+      return;
+    }
+
+    if (transfer) paidInput.value = String(moneyToCents(preview.total_servis) / 100);
+
+    setLineSubtotals('job', preview.jobs);
+    setLineSubtotals('part', preview.parts);
+    $('#jobSubtotal').textContent = fmtRp(preview.biaya_jasa);
+    $('#partSubtotal').textContent = fmtRp(preview.total_part);
+    $('#grandTotalValue').textContent = fmtRp(preview.total_servis);
+
+    const kurang = Number(preview.kekurangan) > 0;
+    const changeEl = $('#kembalianValue');
+    changeEl.textContent = kurang
+      ? 'Kurang ' + fmtRp(preview.kekurangan)
+      : fmtRp(preview.kembalian);
+    const changeRow = changeEl.parentElement;
+    if (changeRow) changeRow.classList.toggle('short', kurang);
+    setSummaryNote('Perkiraan dari server; nilai final dicatat saat nota disimpan.');
+  }
+
+  async function refreshPreview() {
+    state.previewTimer = null;
+    const seq = (state.previewSeq += 1);
+    try {
+      const preview = await API.previewTransaction(buildPreviewPayload());
+      if (seq !== state.previewSeq) return;
+      state.preview = preview;
+      state.previewError = null;
+      renderPreview(preview, null);
+    } catch (err) {
+      if (seq !== state.previewSeq) return;
+      state.preview = null;
+      state.previewError = err.message;
+      renderPreview(null, err.message);
     }
   }
 
+  function updateSummary() {
+    const diskonInput = $('#diskonInput');
+    const bayarInput = $('#bayarInput');
+    const cash = getMetode() === 'CASH';
+    if (
+      !moneyInputValid(diskonInput.value) ||
+      (cash && !moneyInputValid(bayarInput.value))
+    ) {
+      renderPreview(
+        null,
+        'Format angka tidak valid. Gunakan rupiah bulat, mis. 150000.'
+      );
+      return;
+    }
+    if (state.previewTimer) clearTimeout(state.previewTimer);
+    state.previewTimer = setTimeout(refreshPreview, 180);
+  }
+
   function handlePaymentModeChange() {
+    const transfer = getMetode() === 'TRANSFER';
+    $('#bayarInput').disabled = transfer;
+    $('#bankInfo').classList.toggle('hidden', !transfer);
     updateSummary();
   }
 
@@ -1195,6 +1309,14 @@
     setUnitType('MOBIL');
     resetUnitForm();
     updateGaransiFields();
+    state.preview = null;
+    state.previewError = null;
+    state.previewSeq += 1;
+    if (state.previewTimer) {
+      clearTimeout(state.previewTimer);
+      state.previewTimer = null;
+    }
+    renderPreview(null, null);
     renderSelectedCustomer();
     renderItems();
     updateSummary();
@@ -1202,16 +1324,16 @@
 
   /* ---------------------------- Transaction ------------------------------- */
   function buildTransactionPayload() {
-    const totals = calcTotals();
     const metode = getMetode();
+    // Server menghitung nilai final; frontend hanya mengirim angka mentah.
     const paid =
-      metode === 'CASH' ? parseMoney($('#bayarInput').value) : totals.grand;
+      metode === 'CASH' ? parseMoney($('#bayarInput').value) : 0;
 
     return {
       unit_id: state.selectedUnit.id,
       keluhan_awal: $('#keluhanInput').value.trim(),
       catatan_pengerjaan: $('#catatanPengerjaan').value.trim() || null,
-      diskon: String(totals.discount),
+      diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar: String(paid),
       bergaransi: $('#garansiAktif').checked,
@@ -1255,15 +1377,18 @@
       toast('Tambahkan minimal satu jasa atau sparepart.', 'warning');
       return;
     }
-
-    const totals = calcTotals();
-    if (getMetode() === 'CASH') {
-      const paid = parseMoney($('#bayarInput').value);
-      if (paid < totals.grand) {
-        toast('Uang diterima kurang dari grand total.', 'warning');
-        $('#bayarInput').focus();
-        return;
-      }
+    if (
+      !moneyInputValid($('#diskonInput').value) ||
+      (getMetode() === 'CASH' && !moneyInputValid($('#bayarInput').value)) ||
+      state.jobs.some((job) => !moneyInputValid(job.harga)) ||
+      state.parts.some((part) => !moneyInputValid(part.harga_satuan))
+    ) {
+      toast('Angka uang harus rupiah bulat tanpa desimal.', 'warning');
+      return;
+    }
+    if (state.previewError) {
+      toast(state.previewError, 'warning');
+      return;
     }
 
     const payload = buildTransactionPayload();
@@ -1763,17 +1888,19 @@
 
     const totals = list.reduce(
       (acc, record) => {
-        acc.omset += Number(netTotal(record)) || 0;
-        acc.profit += Number(record.laba_kotor) || 0;
+        acc.omsetCents += moneyToCents(netTotal(record));
+        acc.profitCents += moneyToCents(record.laba_kotor);
         return acc;
       },
-      { omset: 0, profit: 0 }
+      { omsetCents: 0, profitCents: 0 }
     );
 
     $('#notaListTitle').textContent = title;
-    const meta = [list.length + ' nota', 'total ' + fmtRp(totals.omset)];
+    const meta = [list.length + ' nota', 'total ' + centsToRp(totals.omsetCents)];
     if (opts.note) meta.push(opts.note);
-    if (opts.showProfit) meta.push('laba kotor ' + fmtRp(totals.profit));
+    if (opts.showProfit) {
+      meta.push('laba kotor ' + centsToRp(totals.profitCents));
+    }
     $('#notaListSubtitle').textContent = meta.join(' · ');
 
     const body = $('#notaListBody');

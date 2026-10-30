@@ -137,6 +137,8 @@
     deleteJasa: (id) =>
       request('/api/harga-jasa/' + id, { method: 'DELETE' }),
 
+    previewTransaction: (data) =>
+      request('/api/pos/preview', { method: 'POST', body: data }),
     createTransaction: (data) =>
       request('/api/pos/transaction', { method: 'POST', body: data }),
     records: (q) => request('/api/service-records?q=' + qs(q || '')),
