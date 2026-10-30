@@ -202,6 +202,11 @@ class ServicePart(Base):
     harga_modal: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(14, 2), nullable=True
     )
+    # True bila modal diisi dari backfill migrasi (estimasi harga master),
+    # bukan snapshot saat transaksi terjadi.
+    harga_modal_estimasi: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="parts")
     stock_item: Mapped[Optional["StockItem"]] = relationship()

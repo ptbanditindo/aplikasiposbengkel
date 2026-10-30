@@ -245,6 +245,7 @@ class ServiceRecordOut(ORMModel):
     jumlah_item: int = 0
     laba_kotor: Money = ZERO_MONEY
     modal_tidak_diketahui: bool = False
+    modal_estimasi: bool = False
 
 
 class ReceiptOut(ORMModel):
@@ -308,6 +309,7 @@ class DailySummaryOut(CompatBase):
     laba_kotor: Money
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
+    transaksi_modal_estimasi: int = 0
 
 
 class DailyReportOut(DailySummaryOut):
@@ -328,6 +330,7 @@ class PeriodReportOut(CompatBase):
     laba_kotor: Money
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
+    transaksi_modal_estimasi: int = 0
     transaksi: List[ServiceRecordOut] = Field(default_factory=list)
     harian: List[DailySummaryOut] = Field(default_factory=list)
 

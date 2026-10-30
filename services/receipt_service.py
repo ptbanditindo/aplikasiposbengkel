@@ -182,7 +182,10 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
     customer = unit.customer
     laba_kotor = Decimal("0.00")
     modal_tidak_diketahui = False
+    modal_estimasi = False
     for part in record.parts:
+        if part.harga_modal_estimasi:
+            modal_estimasi = True
         modal = part.harga_modal
         if modal is None and part.stock_item is not None:
             modal = part.stock_item.harga_modal
@@ -217,6 +220,7 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "jumlah_item": len(record.jobs) + len(record.parts),
         "laba_kotor": laba_kotor,
         "modal_tidak_diketahui": modal_tidak_diketahui,
+        "modal_estimasi": modal_estimasi,
     }
 
 

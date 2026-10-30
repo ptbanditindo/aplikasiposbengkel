@@ -260,6 +260,7 @@ def _create_transaction_locked(
                     harga_satuan=line["harga_satuan"],
                     subtotal=money(Decimal(line["jumlah"]) * line["harga_satuan"]),
                     harga_modal=line["harga_modal"],
+                    harga_modal_estimasi=False,
                 )
             )
 

@@ -1776,6 +1776,7 @@
               ? '<span class="cell-sub">Laba ' +
                 fmtRp(record.laba_kotor) +
                 (record.modal_tidak_diketahui ? ' · modal belum diisi' : '') +
+                (record.modal_estimasi ? ' · modal estimasi' : '') +
                 '</span>'
               : '') +
             '</td>' +
@@ -2492,6 +2493,11 @@
           ? '<span class="meta-chip">Laba belum lengkap: <strong>' +
             data.transaksi_tanpa_modal +
             '</strong> nota tanpa modal</span>'
+          : '') +
+        (intValue(data.transaksi_modal_estimasi, 0) > 0
+          ? '<span class="meta-chip">Modal estimasi: <strong>' +
+            data.transaksi_modal_estimasi +
+            '</strong> nota</span>'
           : '');
 
       const body = $('#reportBody');
@@ -2529,6 +2535,7 @@
               (record.modal_tidak_diketahui
                 ? ' · modal part belum diisi'
                 : '') +
+              (record.modal_estimasi ? ' · modal estimasi' : '') +
               '</span></td>' +
               '<td>' +
               metodeBadge(record.metode_bayar) +

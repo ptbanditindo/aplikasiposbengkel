@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 def get_user_version(conn) -> int:
@@ -66,15 +66,7 @@ def _migrate_001_harga_modal(cursor) -> None:
         cursor.execute(
             "ALTER TABLE service_parts ADD COLUMN harga_modal NUMERIC(14, 2)"
         )
-    if "stock_items" not in tables:
-        return
-    # Isi snapshot modal untuk nota lama memakai master yang tersedia.
-    cursor.execute(
-        "UPDATE service_parts SET harga_modal = ("
-        "SELECT harga_modal FROM stock_items "
-        "WHERE stock_items.id = service_parts.stock_item_id"
-        ") WHERE harga_modal IS NULL AND stock_item_id IS NOT NULL"
-    )
+    # Backfill data lama dilakukan sekali di migrasi 005 beserta penanda estimasi.
 
 
 def _migrate_002_nota_counters(cursor) -> None:
@@ -127,11 +119,34 @@ def _migrate_004_unique_label(cursor) -> None:
     )
 
 
+def _migrate_005_modal_estimasi(cursor) -> None:
+    tables = _tables(cursor)
+    if "service_parts" not in tables:
+        return
+    if "harga_modal_estimasi" not in _columns(cursor, "service_parts"):
+        cursor.execute(
+            "ALTER TABLE service_parts ADD COLUMN harga_modal_estimasi "
+            "BOOLEAN NOT NULL DEFAULT 0"
+        )
+    if "stock_items" not in tables:
+        return
+    # Backfill sekali: modal master saat migrasi adalah estimasi, bukan
+    # snapshot saat transaksi. Baris dengan snapshot asli tidak disentuh.
+    cursor.execute(
+        "UPDATE service_parts SET harga_modal = ("
+        "SELECT harga_modal FROM stock_items "
+        "WHERE stock_items.id = service_parts.stock_item_id"
+        "), harga_modal_estimasi = 1 "
+        "WHERE harga_modal IS NULL AND stock_item_id IS NOT NULL"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
     (3, _migrate_003_request_id),
     (4, _migrate_004_unique_label),
+    (5, _migrate_005_modal_estimasi),
 ]
 
 
