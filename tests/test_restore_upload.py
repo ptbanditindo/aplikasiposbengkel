@@ -129,7 +129,7 @@ def test_backup_rusak_ditolak(client):
 
 
 def test_backup_sah_dipulihkan_tanpa_menyisakan_file_sementara(
-    client, create_customer
+    client, create_customer, reauth
 ):
     customer = create_customer(nama="Pelanggan Sebelum Restore", nomor_hp="081200000080")
     backup = client.post("/api/admin/backup")
@@ -139,5 +139,6 @@ def test_backup_sah_dipulihkan_tanpa_menyisakan_file_sementara(
 
     assert response.status_code == 200, response.text
     assert _upload_files() == []
+    reauth()
     hasil = client.get("/api/customers/search", params={"q": "Sebelum Restore"})
     assert [item["id"] for item in hasil.json()] == [customer["id"]]

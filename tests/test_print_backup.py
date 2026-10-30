@@ -160,7 +160,7 @@ def test_tc20_ekspor_backup_database_sqlite(client, anon_client):
         connection.close()
 
 
-def test_restore_backup_roundtrip(client, create_customer):
+def test_restore_backup_roundtrip(client, create_customer, reauth):
     customer = create_customer(nama="Sebelum Backup")
 
     backup = client.post("/api/admin/backup")
@@ -171,6 +171,7 @@ def test_restore_backup_roundtrip(client, create_customer):
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text
+    reauth()
 
     restored = client.get("/api/customers/search", params={"q": "Sebelum Backup"})
     assert [item["id"] for item in restored.json()] == [customer["id"]]

@@ -30,6 +30,9 @@ def _backup_and_restore(client):
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text
+    # Restore membuang PIN lama, jadi sesi uji harus dibuat ulang.
+    reauth = client.post("/api/auth/setup", json={"pin": "1357"})
+    assert reauth.status_code == 201, reauth.text
 
 
 def test_restore_memakai_fallback_env(client, monkeypatch):
@@ -50,7 +53,8 @@ def test_restore_memakai_fallback_env(client, monkeypatch):
     telegram = client.get("/api/config").json()["telegram"]
     assert telegram["configured"] is True
     assert telegram["needs_reconfig"] is False
-    assert telegram["chat_id"] == "987654321"
+    # chat_id diredaksi dari backup, jadi fallback konfigurasi env yang dipakai.
+    assert telegram["chat_id"] == "555000111"
 
 
 def test_restore_tanpa_token_menandai_perlu_konfigurasi(client):

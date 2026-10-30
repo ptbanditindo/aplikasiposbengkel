@@ -45,6 +45,54 @@ RESTORE_BACKUP_KEEP = 3
 MIGRATION_BACKUP_KEEP = 3
 MIN_FREE_MARGIN_BYTES = 20 * 1024 * 1024
 
+# Rahasia yang tidak boleh ikut ke berkas backup yang dapat dibagikan.
+# Konfigurasi bisnis (bengkel.*) dan data transaksi tetap disalin apa adanya.
+SENSITIVE_SETTING_KEYS = (
+    "auth.pin_hash",
+    "auth.pin_salt",
+    "auth.pin_epoch",
+    "auth.session_secret",
+    "telegram.bot_token",
+    "telegram.chat_id",
+)
+
+# Rahasia yang diredaksi dari salinan pra-restore, tetapi harus dikembalikan
+# bila restore gagal agar PIN dan sesi pengguna tidak ikut hilang.
+AUTH_ROLLBACK_KEYS = (
+    "auth.pin_hash",
+    "auth.pin_salt",
+    "auth.pin_iterations",
+    "auth.pin_epoch",
+    "auth.session_secret",
+    "auth.failed_attempts",
+    "auth.lock_until",
+)
+
+
+def _read_settings(path: Path, keys) -> dict:
+    connection = sqlite3.connect(str(path))
+    try:
+        rows = dict(
+            connection.execute("SELECT key, value FROM app_settings").fetchall()
+        )
+    finally:
+        connection.close()
+    return {key: rows[key] for key in keys if key in rows}
+
+
+def _write_settings(path: Path, values: dict) -> None:
+    if not values:
+        return
+    connection = sqlite3.connect(str(path))
+    try:
+        for key, value in values.items():
+            connection.execute(
+                "UPDATE app_settings SET value = ? WHERE key = ?", (value, key)
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
 
 def _prune(pattern: str, keep: int) -> None:
     files = sorted(
@@ -85,10 +133,10 @@ def database_file_path() -> Path:
 
 
 def _redact_secrets(path: Path) -> None:
-    """Token bot tidak boleh ikut tersimpan di file backup yang dibagikan.
+    """Rahasia autentikasi & Telegram tidak boleh ikut di file backup.
 
     `secure_delete` menimpa isi halaman yang dihapus, lalu `VACUUM` menulis ulang
-    file sehingga sisa token tidak tertinggal di free page.
+    file sehingga sisa nilai rahasia tidak tertinggal di free page.
     """
     connection = sqlite3.connect(str(path))
     try:
@@ -100,9 +148,10 @@ def _redact_secrets(path: Path) -> None:
             ).fetchall()
         }
         if "app_settings" in tables:
-            connection.execute(
-                "UPDATE app_settings SET value = '' WHERE key = 'telegram.bot_token'"
-            )
+            for key in SENSITIVE_SETTING_KEYS:
+                connection.execute(
+                    "UPDATE app_settings SET value = '' WHERE key = ?", (key,)
+                )
             connection.commit()
             connection.execute("VACUUM")
     finally:
@@ -234,14 +283,19 @@ def restore_backup(file_path: Path) -> None:
         _redact_secrets(safety)
 
     # Siapkan berkas di folder database yang sama agar penggantian atomik.
+    # Berkas unggahan juga diredaksi agar backup lama tanpa redaksi tidak
+    # memasukkan kembali hash PIN/session secret ke database aktif.
     staged = target.with_name(target.name + ".restore.new")
     try:
         shutil.copy2(upload, staged)
-    except OSError as exc:
+        _redact_secrets(staged)
+    except (OSError, sqlite3.DatabaseError) as exc:
         staged.unlink(missing_ok=True)
         raise BusinessValidationError(
             "Gagal menyiapkan berkas restore di folder database."
         ) from exc
+
+    auth_snapshot = _read_settings(target, AUTH_ROLLBACK_KEYS)
 
     try:
         db_session.engine.dispose()
@@ -262,6 +316,9 @@ def restore_backup(file_path: Path) -> None:
             shutil.copy2(safety, rollback)
             os.replace(str(rollback), str(target))
             db_session.init_db()
+            # Salinan pengaman diredaksi, jadi kredensial pengguna dikembalikan
+            # dari snapshot memori agar PIN/sesi tetap berlaku setelah gagal.
+            _write_settings(target, auth_snapshot)
         except Exception:
             rollback.unlink(missing_ok=True)
             logger.exception(
@@ -278,11 +335,16 @@ def restore_backup(file_path: Path) -> None:
         ) from exc
 
     from database.seed import mark_seed_done
-    from services import settings_service
+    from services import auth_service, settings_service
 
     # Restore harus menyalin kondisi backup apa adanya: tanpa seed ulang.
     with db_session.SessionLocal() as db:
         mark_seed_done(db)
+
+        # Backup tidak membawa hash PIN/sesi; pastikan status terkunci yang
+        # mungkin tersimpan di backup tidak membuat aplikasi tak dapat diakses.
+        settings_service.set_setting(db, auth_service.FAILED_KEY, "0")
+        settings_service.set_setting(db, auth_service.LOCK_UNTIL_KEY, "0")
 
         # Backup sengaja tidak menyimpan token; tandai agar UI meminta token ulang
         # bila konfigurasi aktif tidak lagi lengkap setelah restore.

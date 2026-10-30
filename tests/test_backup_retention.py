@@ -41,7 +41,7 @@ def test_create_backup_memangkas_sampai_batas_retensi(client):
     assert settings.backup_keep == 14
 
 
-def test_restore_memangkas_salinan_sebelum_restore(client):
+def test_restore_memangkas_salinan_sebelum_restore(client, reauth):
     backup = client.post("/api/admin/backup")
     assert backup.status_code == 200, backup.text
 
@@ -51,6 +51,7 @@ def test_restore_memangkas_salinan_sebelum_restore(client):
             files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
         )
         assert restore.status_code == 200, restore.text
+        reauth()
 
     assert len(_safety_files()) == backup_service.RESTORE_BACKUP_KEEP
     assert backup_service.RESTORE_BACKUP_KEEP == 3

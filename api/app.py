@@ -118,6 +118,18 @@ def create_app() -> FastAPI:
                 )
 
         path = request.url.path
+        if path == RESTORE_PATH and gate.is_restoring():
+            # Restore kedua ditolak sebelum autentikasi: data sesi di database
+            # lama mungkin sudah diganti saat restore pertama berjalan.
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": (
+                        "Sedang memulihkan database. Tunggu sampai proses "
+                        "selesai lalu coba lagi."
+                    )
+                },
+            )
         counted = path not in (HEALTH_PATH, RESTORE_PATH)
         if counted and not gate.try_enter():
             return JSONResponse(

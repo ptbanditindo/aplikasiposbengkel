@@ -81,6 +81,18 @@ def db_session():
 
 
 @pytest.fixture()
+def reauth(client):
+    """Buat PIN baru setelah restore (backup tidak membawa kredensial lama)."""
+
+    def _reauth(pin=TEST_PIN):
+        response = client.post("/api/auth/setup", json={"pin": pin})
+        assert response.status_code == 201, response.text
+        return response
+
+    return _reauth
+
+
+@pytest.fixture()
 def create_customer(client):
     def _create(nama="Budi Santoso", nomor_hp="0812-3456-7890", alamat="Jl. Mawar 1"):
         response = client.post(

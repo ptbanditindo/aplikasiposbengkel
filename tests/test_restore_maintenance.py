@@ -22,7 +22,7 @@ def _backup(client):
 
 
 def test_permintaan_baru_ditolak_503_selama_restore(
-    client, create_customer, create_unit, make_transaction, monkeypatch
+    client, create_customer, create_unit, make_transaction, monkeypatch, reauth
 ):
     customer = create_customer(nama="Pelanggan Maintenance", nomor_hp="081200000070")
     unit = create_unit(customer["id"], nopol="B 7070 MNT")
@@ -63,6 +63,7 @@ def test_permintaan_baru_ditolak_503_selama_restore(
         thread.join(timeout=15)
 
     assert hasil["restore"].status_code == 200, hasil["restore"].text
+    reauth()
     assert client.get("/api/stock").status_code == 200
 
 

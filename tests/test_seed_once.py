@@ -48,7 +48,7 @@ def test_database_lama_dengan_data_hanya_ditandai(client, db_session, create_cus
     assert marker is not None and marker.value == "1"
 
 
-def test_restore_backup_katalog_kosong_tetap_kosong(client, db_session):
+def test_restore_backup_katalog_kosong_tetap_kosong(client, db_session, reauth):
     _delete_catalog(db_session)
     _remove_seed_marker(db_session)
 
@@ -60,6 +60,7 @@ def test_restore_backup_katalog_kosong_tetap_kosong(client, db_session):
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text
+    reauth()
 
     assert client.get("/api/stock").json() == []
     assert client.get("/api/harga-jasa").json() == []
