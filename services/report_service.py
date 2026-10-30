@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
 
-from database.models import ServiceRecord, StockItem
+from database.models import ServiceRecord
 from repositories import service_record_repository as record_repo
 from services import warranty_service
 from services.customer_service import describe_unit
@@ -25,8 +25,6 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
     units = set()
     active_warranty = 0
 
-    stock_cache: Dict[int, StockItem | None] = {}
-
     for record in records:
         units.add(record.unit_id)
         if warranty_service.is_active(record):
@@ -41,14 +39,8 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
 
         for part in record.parts:
             modal = part.harga_modal
-            if modal is None and part.stock_item_id is not None:
-                if part.stock_item_id not in stock_cache:
-                    stock_cache[part.stock_item_id] = db.get(
-                        StockItem, part.stock_item_id
-                    )
-                stock = stock_cache[part.stock_item_id]
-                if stock is not None:
-                    modal = stock.harga_modal
+            if modal is None and part.stock_item is not None:
+                modal = part.stock_item.harga_modal
             if modal is not None:
                 laba_kotor += (part.harga_satuan - modal) * part.jumlah
 
@@ -83,13 +75,14 @@ def period_report(db: Session, start_day: date, end_day: date) -> Dict[str, Any]
     records = record_repo.records_between(db, start, end)
     summary = _summarize_records(db, records)
 
+    by_day: Dict[date, List[ServiceRecord]] = {}
+    for record in records:
+        by_day.setdefault(record.waktu_service.date(), []).append(record)
+
     daily: List[Dict[str, Any]] = []
     cursor = start_day
     while cursor <= end_day:
-        day_records = [
-            record for record in records if record.waktu_service.date() == cursor
-        ]
-        daily_summary = _summarize_records(db, day_records)
+        daily_summary = _summarize_records(db, by_day.get(cursor, []))
         daily_summary.pop("transaksi", None)
         daily_summary["tanggal"] = cursor
         daily.append(daily_summary)

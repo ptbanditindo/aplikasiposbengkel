@@ -6,9 +6,23 @@ from typing import List, Optional
 
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from database.models import Customer, NotaCounter, ServiceRecord, VehicleOrUnit
+from database.models import (
+    Customer,
+    NotaCounter,
+    ServicePart,
+    ServiceRecord,
+    VehicleOrUnit,
+)
+
+
+def _with_details():
+    return (
+        selectinload(ServiceRecord.parts).selectinload(ServicePart.stock_item),
+        selectinload(ServiceRecord.jobs),
+        selectinload(ServiceRecord.unit).selectinload(VehicleOrUnit.customer),
+    )
 
 
 def get_record(db: Session, record_id: int) -> Optional[ServiceRecord]:
@@ -25,6 +39,7 @@ def list_records(db: Session, query: str = "", limit: int = 200) -> List[Service
         select(ServiceRecord)
         .join(VehicleOrUnit, ServiceRecord.unit_id == VehicleOrUnit.id)
         .join(Customer, VehicleOrUnit.customer_id == Customer.id)
+        .options(*_with_details())
     )
     term = (query or "").strip()
     if term:
@@ -50,14 +65,17 @@ def records_between(db: Session, start: datetime, end: datetime) -> List[Service
     statement = (
         select(ServiceRecord)
         .where(ServiceRecord.waktu_service >= start, ServiceRecord.waktu_service < end)
+        .options(*_with_details())
         .order_by(ServiceRecord.waktu_service.desc(), ServiceRecord.id.desc())
     )
     return list(db.scalars(statement).all())
 
 
 def all_records(db: Session) -> List[ServiceRecord]:
-    statement = select(ServiceRecord).order_by(
-        ServiceRecord.waktu_service.desc(), ServiceRecord.id.desc()
+    statement = (
+        select(ServiceRecord)
+        .options(*_with_details())
+        .order_by(ServiceRecord.waktu_service.desc(), ServiceRecord.id.desc())
     )
     return list(db.scalars(statement).all())
 
