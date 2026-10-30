@@ -139,6 +139,18 @@
     receipt: (id) => request('/api/service-records/' + id + '/receipt'),
     claim: (id) =>
       request('/api/service-records/' + id + '/claim', { method: 'PUT' }),
+    voidRecord: (id, data) =>
+      request('/api/service-records/' + id + '/void', {
+        method: 'POST',
+        body: data,
+      }),
+    createReturn: (id, data) =>
+      request('/api/service-records/' + id + '/returns', {
+        method: 'POST',
+        body: data,
+      }),
+    returns: (id) =>
+      request('/api/service-records/' + id + '/returns'),
 
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),

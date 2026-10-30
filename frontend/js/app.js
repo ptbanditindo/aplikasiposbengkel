@@ -116,6 +116,8 @@
     notaList: [],
     detailRecord: null,
     detailRecordCustomerId: null,
+    detailReturns: [],
+    returnMode: false,
     detailCustomer: null,
     receipt: null,
     receiptWidth: 58,
@@ -199,6 +201,9 @@
   }
 
   function warrantyBadge(record) {
+    if (record.status === 'VOID') {
+      return '<span class="badge red">Dibatalkan</span>';
+    }
     if (!record.bergaransi) {
       return '<span class="badge gray">Tanpa garansi</span>';
     }
@@ -213,6 +218,23 @@
       );
     }
     return '<span class="badge red">Kedaluwarsa</span>';
+  }
+
+  function statusBadge(record) {
+    if (record.status === 'VOID') {
+      return '<span class="badge red">VOID</span>';
+    }
+    return '';
+  }
+
+  function netTotal(record) {
+    if (record.total_neto !== undefined && record.total_neto !== null) {
+      return record.total_neto;
+    }
+    if (Number(record.total_retur) > 0) {
+      return Number(record.total_servis) - Number(record.total_retur);
+    }
+    return record.total_servis;
   }
 
   /* ------------------------------- Clock ---------------------------------- */
@@ -1589,7 +1611,9 @@
           record.id +
           '">' +
           esc(record.no_nota) +
-          '</button></td>' +
+          '</button>' +
+          statusBadge(record) +
+          '</td>' +
           '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
           record.customer_id +
           '">' +
@@ -1601,7 +1625,7 @@
           esc(record.unit_deskripsi) +
           '</td>' +
           '<td class="text-right money">' +
-          fmtRp(record.total_servis) +
+          fmtRp(netTotal(record)) +
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
@@ -1640,7 +1664,9 @@
     body.innerHTML = state.history
       .map((record) => {
         const claimable =
-          record.bergaransi && record.status_klaim !== 'Sudah claim';
+          record.status !== 'VOID' &&
+          record.bergaransi &&
+          record.status_klaim !== 'Sudah claim';
         return (
           '<tr class="is-clickable" data-action="record-detail" data-id="' +
           record.id +
@@ -1652,7 +1678,9 @@
           record.id +
           '">' +
           esc(record.no_nota) +
-          '</button></td>' +
+          '</button>' +
+          statusBadge(record) +
+          '</td>' +
           '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
           record.customer_id +
           '">' +
@@ -1666,7 +1694,12 @@
           esc((record.keluhan_awal || '').slice(0, 56)) +
           '</span></td>' +
           '<td class="text-right money">' +
-          fmtRp(record.total_servis) +
+          fmtRp(netTotal(record)) +
+          (Number(record.total_retur) > 0
+            ? '<span class="cell-sub">Retur -' +
+              fmtRp(record.total_retur) +
+              '</span>'
+            : '') +
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
@@ -1730,7 +1763,7 @@
 
     const totals = list.reduce(
       (acc, record) => {
-        acc.omset += Number(record.total_servis) || 0;
+        acc.omset += Number(netTotal(record)) || 0;
         acc.profit += Number(record.laba_kotor) || 0;
         return acc;
       },
@@ -1762,7 +1795,9 @@
             record.id +
             '">' +
             esc(record.no_nota) +
-            '</button></td>' +
+            '</button>' +
+            statusBadge(record) +
+            '</td>' +
             '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
             record.customer_id +
             '">' +
@@ -1771,7 +1806,12 @@
             esc(record.customer_hp) +
             '</span></td>' +
             '<td class="text-right money">' +
-            fmtRp(record.total_servis) +
+            fmtRp(netTotal(record)) +
+            (Number(record.total_retur) > 0
+              ? '<span class="cell-sub">Retur -' +
+                fmtRp(record.total_retur) +
+                '</span>'
+              : '') +
             (opts.showProfit
               ? '<span class="cell-sub">Laba ' +
                 fmtRp(record.laba_kotor) +
@@ -1801,9 +1841,132 @@
     );
   }
 
+  function remainingQty(item) {
+    return Math.max(
+      intValue(item.jumlah, 0) - intValue(item.jumlah_retur, 0),
+      0
+    );
+  }
+
+  function qtyCell(item) {
+    const returned = intValue(item.jumlah_retur, 0);
+    return (
+      intValue(item.jumlah, 0) +
+      (returned > 0
+        ? '<span class="cell-sub">retur ' + returned + '</span>'
+        : '')
+    );
+  }
+
+  function returnFormHtml(receipt) {
+    const lines = [];
+    (receipt.jobs || []).forEach((job) => {
+      const sisa = remainingQty(job);
+      if (sisa <= 0) return;
+      lines.push(
+        '<label class="return-line"><span class="cell-primary">' +
+          esc(job.deskripsi) +
+          '</span><span class="cell-sub">jasa · sisa ' +
+          sisa +
+          '</span><input type="number" class="input return-qty" min="0" max="' +
+          sisa +
+          '" value="0" data-return-kind="job" data-return-id="' +
+          job.id +
+          '"></label>'
+      );
+    });
+    (receipt.parts || []).forEach((part) => {
+      const sisa = remainingQty(part);
+      if (sisa <= 0) return;
+      lines.push(
+        '<label class="return-line"><span class="cell-primary">' +
+          esc(part.nama_part) +
+          '</span><span class="cell-sub">sparepart · sisa ' +
+          sisa +
+          '</span><input type="number" class="input return-qty" min="0" max="' +
+          sisa +
+          '" value="0" data-return-kind="part" data-return-id="' +
+          part.id +
+          '"></label>'
+      );
+    });
+
+    if (!lines.length) {
+      return (
+        '<div class="detail-section"><h4 class="detail-section-title">Retur</h4>' +
+        '<p class="muted">Semua item nota ini sudah diretur.</p></div>'
+      );
+    }
+
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Retur jasa / sparepart</h4>' +
+      '<p class="muted">Isi jumlah yang diretur. Stok sparepart kembali otomatis dan tidak bisa diretur dua kali.</p>' +
+      '<div class="return-lines">' +
+      lines.join('') +
+      '</div>' +
+      '<label class="detail-label" for="returnReason">Alasan retur</label>' +
+      '<input type="text" class="input" id="returnReason" maxlength="500" placeholder="Contoh: barang tidak cocok / salah pasang">' +
+      '<label class="detail-label" for="returnBy">Dicatat oleh</label>' +
+      '<input type="text" class="input" id="returnBy" maxlength="64" value="Kasir">' +
+      '<div class="return-actions">' +
+      '<button type="button" class="btn btn-ghost" data-action="return-cancel" data-id="' +
+      receipt.id +
+      '">Batal</button>' +
+      '<button type="button" class="btn btn-primary" data-action="return-submit" data-id="' +
+      receipt.id +
+      '">Simpan retur</button>' +
+      '</div></div>'
+    );
+  }
+
+  function returnHistoryHtml(returns) {
+    if (!returns.length) return '';
+    const entries = returns
+      .map((retur) => {
+        const items = (retur.items || [])
+          .map(
+            (item) =>
+              '<div class="cell-sub">' +
+              esc(item.nama_item) +
+              ' x' +
+              intValue(item.jumlah, 0) +
+              ' · ' +
+              fmtRp(item.subtotal) +
+              '</div>'
+          )
+          .join('');
+        return (
+          '<div class="return-entry"><div class="return-entry-head"><strong>' +
+          fmtRp(retur.total_nilai) +
+          '</strong><span class="cell-sub">' +
+          esc(fmtDateTime(retur.created_at)) +
+          ' · ' +
+          esc(retur.oleh || '-') +
+          '</span></div>' +
+          '<div class="detail-text">' +
+          esc(retur.alasan) +
+          '</div>' +
+          items +
+          '</div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Riwayat retur (' +
+      returns.length +
+      ')</h4>' +
+      '<div class="return-history">' +
+      entries +
+      '</div></div>'
+    );
+  }
+
   function renderRecordDetail(receipt) {
     const jobs = receipt.jobs || [];
     const parts = receipt.parts || [];
+    const isVoid = receipt.status === 'VOID';
     const jobsHtml = jobs.length
       ? jobs
           .map(
@@ -1811,7 +1974,7 @@
               '<tr><td>' +
               esc(job.deskripsi) +
               '</td><td class="text-center">' +
-              intValue(job.jumlah, 0) +
+              qtyCell(job) +
               '</td><td class="text-right money">' +
               fmtRp(job.harga) +
               '</td><td class="text-right money">' +
@@ -1827,7 +1990,7 @@
               '<tr><td>' +
               esc(part.nama_part) +
               '</td><td class="text-center">' +
-              intValue(part.jumlah, 0) +
+              qtyCell(part) +
               '</td><td class="text-right money">' +
               fmtRp(part.harga_satuan) +
               '</td><td class="text-right money">' +
@@ -1837,11 +2000,36 @@
           .join('')
       : '<tr><td colspan="4" class="muted">Tidak ada sparepart.</td></tr>';
 
+    const voidBanner = isVoid
+      ? '<div class="void-banner"><strong>Nota DIBATALKAN (VOID)</strong>' +
+        '<span>' +
+        esc(receipt.void_reason || '-') +
+        '</span><span class="cell-sub">' +
+        esc(fmtDateTime(receipt.voided_at)) +
+        ' · ' +
+        esc(receipt.voided_by || '-') +
+        '</span></div>'
+      : '';
+
+    const returTotal =
+      '<div class="detail-total-row is-grand"><span>Total servis</span><strong>' +
+      fmtRp(receipt.total_servis) +
+      '</strong></div>' +
+      (Number(receipt.total_retur) > 0
+        ? '<div class="detail-total-row"><span>Retur</span><strong>-' +
+          fmtRp(receipt.total_retur) +
+          '</strong></div>' +
+          '<div class="detail-total-row is-grand"><span>Total neto</span><strong>' +
+          fmtRp(netTotal(receipt)) +
+          '</strong></div>'
+        : '');
+
     $('#recordTitle').textContent = 'Nota ' + receipt.no_nota;
     $('#recordSubtitle').textContent =
       receipt.customer_nama + ' · ' + receipt.unit_deskripsi;
 
     $('#recordDetail').innerHTML =
+      voidBanner +
       '<div class="detail-grid">' +
       detailItem('Waktu servis', esc(fmtDateTime(receipt.waktu_service))) +
       detailItem('Metode bayar', metodeBadge(receipt.metode_bayar)) +
@@ -1896,9 +2084,7 @@
       '<div class="detail-total-row"><span>Diskon</span><strong>' +
       fmtRp(receipt.diskon) +
       '</strong></div>' +
-      '<div class="detail-total-row is-grand"><span>Total servis</span><strong>' +
-      fmtRp(receipt.total_servis) +
-      '</strong></div>' +
+      returTotal +
       '<div class="detail-total-row"><span>Bayar</span><strong>' +
       fmtRp(receipt.bayar) +
       '</strong></div>' +
@@ -1912,21 +2098,38 @@
           '<p class="detail-text">' +
           esc(receipt.catatan_garansi) +
           '</p></div>'
-        : '');
+        : '') +
+      returnHistoryHtml(state.detailReturns) +
+      (state.returnMode ? returnFormHtml(receipt) : '');
+
+    const hasReturnable =
+      jobs.some((job) => remainingQty(job) > 0) ||
+      parts.some((part) => remainingQty(part) > 0);
 
     $('#btnRecordCustomer').classList.toggle(
       'hidden',
       !state.detailRecordCustomerId
+    );
+    $('#btnRecordVoid').classList.toggle(
+      'hidden',
+      isVoid || intValue(receipt.retur_count, 0) > 0
+    );
+    $('#btnRecordReturn').classList.toggle(
+      'hidden',
+      isVoid || !hasReturnable || state.returnMode
     );
   }
 
   async function openRecordDetail(id) {
     if (!id) return;
     try {
-      const receipt = await API.receipt(id);
+      const results = await Promise.all([API.receipt(id), API.returns(id)]);
+      const receipt = results[0];
       const source = findRecordById(id);
       state.detailRecord = receipt;
+      state.detailReturns = results[1] || [];
       state.detailRecordCustomerId = source ? source.customer_id : null;
+      state.returnMode = false;
       renderRecordDetail(receipt);
       openModal('#recordModal');
     } catch (err) {
@@ -2058,6 +2261,90 @@
     openNotaList('Nota ' + fmtDate(date), list, { showProfit: true });
   }
 
+  async function refreshAfterRecordChange(id) {
+    await openRecordDetail(id);
+    loadHistory($('#historySearch').value.trim());
+    loadStock();
+    loadDashboard();
+    loadReport();
+  }
+
+  function collectReturnItems() {
+    const items = [];
+    $$('#recordDetail .return-qty').forEach((input) => {
+      const qty = intValue(input.value, 0);
+      if (qty <= 0) return;
+      const lineId = intValue(input.dataset.returnId, 0);
+      if (!lineId) return;
+      if (input.dataset.returnKind === 'job') {
+        items.push({ service_job_id: lineId, jumlah: qty });
+      } else {
+        items.push({ service_part_id: lineId, jumlah: qty });
+      }
+    });
+    return items;
+  }
+
+  async function submitReturn(recordId) {
+    if (!recordId) return;
+    const items = collectReturnItems();
+    if (!items.length) {
+      toast('Isi jumlah retur minimal satu item.', 'error', 5000);
+      return;
+    }
+    const reasonEl = $('#returnReason');
+    const byEl = $('#returnBy');
+    const reason = (reasonEl ? reasonEl.value : '').trim();
+    if (reason.length < 3) {
+      toast('Alasan retur minimal 3 karakter.', 'error', 5000);
+      if (reasonEl) reasonEl.focus();
+      return;
+    }
+    if (
+      !window.confirm(
+        'Simpan retur ' + items.length + ' item? Stok akan diperbarui.'
+      )
+    ) {
+      return;
+    }
+    const oleh = ((byEl ? byEl.value : '') || 'Kasir').trim() || 'Kasir';
+    try {
+      await API.createReturn(recordId, {
+        alasan: reason,
+        oleh: oleh,
+        items: items,
+      });
+      state.returnMode = false;
+      toast('Retur tersimpan.', 'success');
+      await refreshAfterRecordChange(recordId);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  async function voidRecord(recordId) {
+    const record = state.detailRecord;
+    if (!record || record.status === 'VOID') return;
+    if (
+      !window.confirm(
+        'Batalkan nota ' +
+          record.no_nota +
+          '? Stok dikembalikan dan nota tetap tersimpan di riwayat.'
+      )
+    ) {
+      return;
+    }
+    const reason = window.prompt('Alasan pembatalan (minimal 3 karakter):', '');
+    if (reason === null) return;
+    try {
+      await API.voidRecord(recordId, { alasan: reason.trim(), oleh: 'Kasir' });
+      toast('Nota dibatalkan.', 'success');
+      await refreshAfterRecordChange(recordId);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
   async function handleAction(action, id, dataset) {
     const data = dataset || {};
 
@@ -2104,6 +2391,29 @@
       } catch (err) {
         toast(err.message, 'error', 7000);
       }
+      return;
+    }
+
+    if (action === 'record-void') {
+      await voidRecord(id);
+      return;
+    }
+
+    if (action === 'record-return-start') {
+      if (!state.detailRecord) return;
+      state.returnMode = true;
+      renderRecordDetail(state.detailRecord);
+      return;
+    }
+
+    if (action === 'return-cancel') {
+      state.returnMode = false;
+      if (state.detailRecord) renderRecordDetail(state.detailRecord);
+      return;
+    }
+
+    if (action === 'return-submit') {
+      await submitReturn(id);
       return;
     }
 
@@ -2489,6 +2799,20 @@
         '<span class="meta-chip">Garansi aktif <strong>' +
         data.garansi_aktif +
         '</strong></span>' +
+        (intValue(data.jumlah_retur, 0) > 0
+          ? '<span class="meta-chip">Retur <strong>' +
+            fmtRp(data.total_retur) +
+            '</strong> · ' +
+            data.jumlah_retur +
+            ' nota</span>'
+          : '') +
+        (intValue(data.jumlah_void, 0) > 0
+          ? '<span class="meta-chip">Void <strong>' +
+            fmtRp(data.total_void) +
+            '</strong> · ' +
+            data.jumlah_void +
+            ' nota</span>'
+          : '') +
         (intValue(data.transaksi_tanpa_modal, 0) > 0
           ? '<span class="meta-chip">Laba belum lengkap: <strong>' +
             data.transaksi_tanpa_modal +
@@ -2529,9 +2853,12 @@
               esc(record.unit_deskripsi) +
               '</td>' +
               '<td class="text-right money">' +
-              fmtRp(record.total_servis) +
+              fmtRp(netTotal(record)) +
               '<span class="cell-sub">Laba kotor ' +
               fmtRp(record.laba_kotor) +
+              (Number(record.total_retur) > 0
+                ? ' · retur -' + fmtRp(record.total_retur)
+                : '') +
               (record.modal_tidak_diketahui
                 ? ' · modal part belum diisi'
                 : '') +
@@ -3091,6 +3418,14 @@
     $('#btnRecordCustomer').addEventListener('click', () => {
       if (state.detailRecordCustomerId) {
         openCustomerDetail(state.detailRecordCustomerId);
+      }
+    });
+    $('#btnRecordVoid').addEventListener('click', () => {
+      if (state.detailRecord) handleAction('record-void', state.detailRecord.id);
+    });
+    $('#btnRecordReturn').addEventListener('click', () => {
+      if (state.detailRecord) {
+        handleAction('record-return-start', state.detailRecord.id);
       }
     });
     $('#customerDetailClose').addEventListener('click', () =>

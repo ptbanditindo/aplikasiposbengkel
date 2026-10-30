@@ -151,6 +151,26 @@ class ServiceRecord(Base):
         String(32), default="Belum claim", nullable=False
     )
     tanggal_klaim: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # NORMAL | VOID. Nota VOID tetap tersimpan sebagai riwayat, tetapi tidak
+    # dihitung sebagai penjualan pada laporan.
+    status: Mapped[str] = mapped_column(
+        String(16), default="NORMAL", nullable=False, index=True
+    )
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    voided_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Akumulasi retur (nilai deal) agar laporan tidak perlu memuat seluruh
+    # baris retur untuk setiap nota.
+    total_retur: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    total_retur_jasa: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    total_retur_part: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    retur_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -162,6 +182,11 @@ class ServiceRecord(Base):
     )
     parts: Mapped[List["ServicePart"]] = relationship(
         back_populates="service_record", cascade="all, delete-orphan"
+    )
+    returns: Mapped[List["ServiceReturn"]] = relationship(
+        back_populates="service_record",
+        cascade="all, delete-orphan",
+        order_by="ServiceReturn.created_at",
     )
 
 
@@ -179,6 +204,7 @@ class ServiceJob(Base):
     jumlah: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     harga: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # harga deal
     subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    jumlah_retur: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="jobs")
 
@@ -207,9 +233,86 @@ class ServicePart(Base):
     harga_modal_estimasi: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    jumlah_retur: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="parts")
     stock_item: Mapped[Optional["StockItem"]] = relationship()
+
+
+class ServiceReturn(Base):
+    """Satu peristiwa retur untuk sebuah nota (sebagian atau seluruh item)."""
+
+    __tablename__ = "service_returns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[int] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alasan: Mapped[str] = mapped_column(Text, nullable=False)
+    oleh: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    total_nilai: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    service_record: Mapped["ServiceRecord"] = relationship(back_populates="returns")
+    items: Mapped[List["ServiceReturnItem"]] = relationship(
+        back_populates="service_return",
+        cascade="all, delete-orphan",
+        order_by="ServiceReturnItem.id",
+    )
+
+
+class ServiceReturnItem(Base):
+    """Rincian item yang diretur: jasa atau sparepart (snapshot nilai deal)."""
+
+    __tablename__ = "service_return_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_return_id: Mapped[int] = mapped_column(
+        ForeignKey("service_returns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    service_part_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_parts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    service_job_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    stock_item_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("stock_items.id", ondelete="SET NULL"), nullable=True
+    )
+    nama_item: Mapped[str] = mapped_column(String(255), nullable=False)
+    jumlah: Mapped[int] = mapped_column(Integer, nullable=False)
+    harga_satuan: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    harga_modal: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+
+    service_return: Mapped["ServiceReturn"] = relationship(back_populates="items")
+
+
+class StockMovement(Base):
+    """Ledger pergerakan stok; jumlah positif = stok bertambah."""
+
+    __tablename__ = "stock_movements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stock_item_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("stock_items.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    nama_item: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    jenis: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    jumlah: Mapped[int] = mapped_column(Integer, nullable=False)
+    alasan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    oleh: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    service_record_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    service_return_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_returns.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
 class AppSetting(Base):

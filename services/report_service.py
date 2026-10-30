@@ -16,33 +16,52 @@ from services.receipt_service import record_summary
 from services.utils import money
 
 
+def _is_void(record: ServiceRecord) -> bool:
+    return (record.status or "NORMAL") == "VOID"
+
+
 def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, Any]:
     total_cash = Decimal("0.00")
     total_transfer = Decimal("0.00")
     total_jasa = Decimal("0.00")
     total_part = Decimal("0.00")
     total_diskon = Decimal("0.00")
+    total_retur = Decimal("0.00")
+    total_void = Decimal("0.00")
     laba_kotor = Decimal("0.00")
     units = set()
     active_warranty = 0
     transaksi_tanpa_modal = 0
     transaksi_modal_estimasi = 0
+    jumlah_retur = 0
+    jumlah_void = 0
 
-    for record in records:
+    normal_records = [record for record in records if not _is_void(record)]
+    void_records = [record for record in records if _is_void(record)]
+
+    for record in normal_records:
         units.add(record.unit_id)
         if warranty_service.is_active(record):
             active_warranty += 1
         modal_lengkap = True
         modal_estimasi = False
-        total_jasa += record.biaya_jasa
-        total_part += record.total_part
+        retur = record.total_retur or Decimal("0.00")
+        total_retur += retur
+        jumlah_retur += int(record.retur_count or 0)
+        # Retur jasa/part mengurangi komponen laporan sesuai jenisnya.
+        total_jasa += record.biaya_jasa - (record.total_retur_jasa or Decimal("0.00"))
+        total_part += record.total_part - (record.total_retur_part or Decimal("0.00"))
         total_diskon += record.diskon
+        net_revenue = record.total_servis - retur
         if record.metode_bayar == "TRANSFER":
-            total_transfer += record.total_servis
+            total_transfer += net_revenue
         else:
-            total_cash += record.total_servis
+            total_cash += net_revenue
 
         for part in record.parts:
+            net_qty = int(part.jumlah) - int(getattr(part, "jumlah_retur", 0) or 0)
+            if net_qty <= 0:
+                continue
             if part.harga_modal_estimasi:
                 modal_estimasi = True
             modal = part.harga_modal
@@ -51,14 +70,20 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
             if modal is None:
                 modal_lengkap = False
                 continue
-            laba_kotor += (part.harga_satuan - modal) * part.jumlah
+            laba_kotor += (part.harga_satuan - modal) * net_qty
         if not modal_lengkap:
             transaksi_tanpa_modal += 1
         if modal_estimasi:
             transaksi_modal_estimasi += 1
 
+    # VOID tidak dihitung sebagai penjualan, tetapi nilainya tetap dilaporkan
+    # sebagai pengurang/informasi agar koreksi tidak menghapus jejak.
+    for record in void_records:
+        total_void += record.total_servis
+        jumlah_void += 1
+
     return {
-        "jumlah_transaksi": len(records),
+        "jumlah_transaksi": len(normal_records),
         "jumlah_unit_servis": len(units),
         "total_omset": money(total_cash + total_transfer),
         "total_cash": money(total_cash),
@@ -70,7 +95,11 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
         "garansi_aktif": int(active_warranty),
         "transaksi_tanpa_modal": transaksi_tanpa_modal,
         "transaksi_modal_estimasi": transaksi_modal_estimasi,
-        "transaksi": [record_summary(record) for record in records],
+        "total_retur": money(total_retur),
+        "jumlah_retur": jumlah_retur,
+        "total_void": money(total_void),
+        "jumlah_void": jumlah_void,
+        "transaksi": [record_summary(record) for record in normal_records],
     }
 
 
@@ -141,11 +170,18 @@ def sold_parts_report(
     total_nilai = Decimal("0.00")
 
     for record in records:
+        if _is_void(record):
+            continue
         unit_desc = describe_unit(record.unit)
         customer_nama = record.unit.customer.nama if record.unit.customer else "-"
         for part in record.parts:
-            total_qty += part.jumlah
-            total_nilai += part.subtotal
+            retur_qty = int(getattr(part, "jumlah_retur", 0) or 0)
+            net_qty = int(part.jumlah) - retur_qty
+            if net_qty <= 0:
+                continue
+            subtotal = money(part.harga_satuan * net_qty)
+            total_qty += net_qty
+            total_nilai += subtotal
             items.append(
                 {
                     "id": part.id,
@@ -153,9 +189,10 @@ def sold_parts_report(
                     "no_nota": record.no_nota,
                     "waktu_service": record.waktu_service,
                     "nama_part": part.nama_part,
-                    "jumlah": part.jumlah,
+                    "jumlah": net_qty,
+                    "jumlah_retur": retur_qty,
                     "harga_satuan": part.harga_satuan,
-                    "subtotal": part.subtotal,
+                    "subtotal": subtotal,
                     "customer_nama": customer_nama,
                     "unit_deskripsi": unit_desc,
                 }

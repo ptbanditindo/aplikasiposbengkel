@@ -142,6 +142,7 @@ class StockItemUpdate(CompatBase):
     harga_modal: Optional[Decimal] = Field(default=None, ge=0)
     harga_jual: Optional[Decimal] = Field(default=None, ge=0)
     jumlah: Optional[int] = Field(default=None, ge=0)
+    alasan: Optional[str] = Field(default=None, max_length=255)
 
 
 class StockItemOut(ORMModel):
@@ -206,6 +207,7 @@ class ServiceJobOut(ORMModel):
     id: int
     deskripsi: str
     jumlah: int
+    jumlah_retur: int = 0
     harga: Money
     subtotal: Money
 
@@ -214,8 +216,61 @@ class ServicePartOut(ORMModel):
     id: int
     nama_part: str
     jumlah: int
+    jumlah_retur: int = 0
     harga_satuan: Money
     subtotal: Money
+
+
+class VoidRequest(CompatBase):
+    alasan: str = Field(..., min_length=3, max_length=500)
+    oleh: str = Field(default="Kasir", max_length=64)
+
+
+class ServiceReturnItemInput(CompatBase):
+    service_part_id: Optional[int] = Field(default=None, gt=0)
+    service_job_id: Optional[int] = Field(default=None, gt=0)
+    jumlah: int = Field(..., ge=1)
+
+
+class CreateServiceReturnRequest(CompatBase):
+    alasan: str = Field(..., min_length=3, max_length=500)
+    oleh: str = Field(default="Kasir", max_length=64)
+    items: List[ServiceReturnItemInput] = Field(default_factory=list)
+
+
+class ServiceReturnItemOut(ORMModel):
+    id: int
+    service_part_id: Optional[int] = None
+    service_job_id: Optional[int] = None
+    stock_item_id: Optional[int] = None
+    nama_item: str
+    jumlah: int
+    harga_satuan: Money
+    harga_modal: Optional[Money] = None
+    subtotal: Money
+
+
+class ServiceReturnOut(ORMModel):
+    id: int
+    service_record_id: int
+    alasan: str
+    oleh: str
+    total_nilai: Money
+    created_at: datetime
+    items: List[ServiceReturnItemOut] = Field(default_factory=list)
+
+
+class StockMovementOut(ORMModel):
+    id: int
+    stock_item_id: Optional[int] = None
+    nama_item: Optional[str] = None
+    jenis: str
+    jumlah: int
+    alasan: Optional[str] = None
+    oleh: str
+    service_record_id: Optional[int] = None
+    service_return_id: Optional[int] = None
+    created_at: datetime
 
 
 class ServiceRecordOut(ORMModel):
@@ -246,6 +301,13 @@ class ServiceRecordOut(ORMModel):
     laba_kotor: Money = ZERO_MONEY
     modal_tidak_diketahui: bool = False
     modal_estimasi: bool = False
+    status: str = "NORMAL"
+    void_reason: Optional[str] = None
+    voided_at: Optional[datetime] = None
+    voided_by: Optional[str] = None
+    total_retur: Money = ZERO_MONEY
+    retur_count: int = 0
+    total_neto: Money = ZERO_MONEY
 
 
 class ReceiptOut(ORMModel):
@@ -271,6 +333,13 @@ class ReceiptOut(ORMModel):
     tanggal_klaim: Optional[date] = None
     garansi_aktif: bool
     warranty_status: str
+    status: str = "NORMAL"
+    void_reason: Optional[str] = None
+    voided_at: Optional[datetime] = None
+    voided_by: Optional[str] = None
+    total_retur: Money = ZERO_MONEY
+    retur_count: int = 0
+    total_neto: Money = ZERO_MONEY
     jobs: List[ServiceJobOut] = Field(default_factory=list)
     parts: List[ServicePartOut] = Field(default_factory=list)
     bengkel_nama: str
@@ -310,6 +379,10 @@ class DailySummaryOut(CompatBase):
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
     transaksi_modal_estimasi: int = 0
+    total_retur: Money = ZERO_MONEY
+    jumlah_retur: int = 0
+    total_void: Money = ZERO_MONEY
+    jumlah_void: int = 0
 
 
 class DailyReportOut(DailySummaryOut):
@@ -331,6 +404,10 @@ class PeriodReportOut(CompatBase):
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
     transaksi_modal_estimasi: int = 0
+    total_retur: Money = ZERO_MONEY
+    jumlah_retur: int = 0
+    total_void: Money = ZERO_MONEY
+    jumlah_void: int = 0
     transaksi: List[ServiceRecordOut] = Field(default_factory=list)
     harian: List[DailySummaryOut] = Field(default_factory=list)
 
@@ -342,6 +419,7 @@ class SoldPartOut(CompatBase):
     waktu_service: datetime
     nama_part: str
     jumlah: int
+    jumlah_retur: int = 0
     harga_satuan: Money
     subtotal: Money
     customer_nama: str

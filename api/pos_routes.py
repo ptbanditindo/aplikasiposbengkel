@@ -8,14 +8,22 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    CreateServiceReturnRequest,
     CreateServiceTransactionRequest,
     ReceiptOut,
     ServiceRecordOut,
+    ServiceReturnOut,
     TransactionResponse,
+    VoidRequest,
 )
 from database.session import get_db
 from repositories import service_record_repository as record_repo
-from services import pos_service, settings_service, warranty_service
+from services import (
+    pos_service,
+    settings_service,
+    void_return_service,
+    warranty_service,
+)
 from services.errors import NotFoundError
 from services.receipt_service import build_receipt_payload, record_summary
 
@@ -75,3 +83,44 @@ def get_receipt(record_id: int, db: Session = Depends(get_db)):
 def claim_warranty(record_id: int, db: Session = Depends(get_db)):
     record = warranty_service.claim_warranty(db, record_id)
     return ServiceRecordOut.model_validate(record_summary(record))
+
+
+@router.post("/service-records/{record_id}/void", response_model=ServiceRecordOut)
+def void_service_record(
+    record_id: int, payload: VoidRequest, db: Session = Depends(get_db)
+):
+    record = void_return_service.void_record(
+        db, record_id, payload.alasan, payload.oleh
+    )
+    return ServiceRecordOut.model_validate(record_summary(record))
+
+
+@router.post(
+    "/service-records/{record_id}/returns",
+    response_model=ServiceReturnOut,
+    status_code=201,
+)
+def create_service_return(
+    record_id: int,
+    payload: CreateServiceReturnRequest,
+    db: Session = Depends(get_db),
+):
+    retur = void_return_service.create_return(
+        db,
+        record_id,
+        payload.alasan,
+        payload.items,
+        payload.oleh,
+    )
+    return ServiceReturnOut.model_validate(retur)
+
+
+@router.get(
+    "/service-records/{record_id}/returns",
+    response_model=List[ServiceReturnOut],
+)
+def list_service_returns(record_id: int, db: Session = Depends(get_db)):
+    return [
+        ServiceReturnOut.model_validate(retur)
+        for retur in void_return_service.list_returns(db, record_id)
+    ]

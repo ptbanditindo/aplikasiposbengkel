@@ -36,6 +36,8 @@ def warranty_end_date(
 
 
 def is_active(record: ServiceRecord, today: Optional[date] = None) -> bool:
+    if (getattr(record, "status", "NORMAL") or "NORMAL") == "VOID":
+        return False
     if not record.bergaransi or record.garansi_sampai is None:
         return False
     if record.status_klaim == "Sudah claim":
@@ -44,6 +46,8 @@ def is_active(record: ServiceRecord, today: Optional[date] = None) -> bool:
 
 
 def warranty_status(record: ServiceRecord, today: Optional[date] = None) -> str:
+    if (getattr(record, "status", "NORMAL") or "NORMAL") == "VOID":
+        return "DIBATALKAN"
     if not record.bergaransi or record.garansi_sampai is None:
         return "TANPA GARANSI"
     if record.status_klaim == "Sudah claim":
@@ -65,6 +69,10 @@ def claim_warranty(
         if record is None:
             raise NotFoundError("Nota servis tidak ditemukan.")
 
+        if (record.status or "NORMAL") == "VOID":
+            raise ConflictError(
+                "Nota sudah dibatalkan (VOID); garansi tidak dapat diklaim."
+            )
         if not record.bergaransi or record.garansi_sampai is None:
             raise WarrantyError("Transaksi ini tidak memiliki garansi servis.")
         if record.status_klaim == "Sudah claim":
@@ -79,6 +87,7 @@ def claim_warranty(
             .where(
                 ServiceRecord.id == record_id,
                 ServiceRecord.status_klaim != "Sudah claim",
+                ServiceRecord.status != "VOID",
             )
             .values(status_klaim="Sudah claim", tanggal_klaim=day)
             .execution_options(synchronize_session=False)

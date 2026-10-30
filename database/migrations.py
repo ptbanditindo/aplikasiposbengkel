@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def get_user_version(conn) -> int:
@@ -141,12 +141,150 @@ def _migrate_005_modal_estimasi(cursor) -> None:
     )
 
 
+def _add_column(cursor, table: str, column: str, ddl: str) -> None:
+    if table not in _tables(cursor):
+        return
+    if column not in _columns(cursor, table):
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
+def _migrate_006_void_retur_ledger(cursor) -> None:
+    """S-06: status VOID, akumulasi retur, dan ledger pergerakan stok."""
+    _add_column(
+        cursor,
+        "service_records",
+        "status",
+        "status VARCHAR(16) NOT NULL DEFAULT 'NORMAL'",
+    )
+    _add_column(cursor, "service_records", "void_reason", "void_reason TEXT")
+    _add_column(cursor, "service_records", "voided_at", "voided_at DATETIME")
+    _add_column(cursor, "service_records", "voided_by", "voided_by VARCHAR(64)")
+    _add_column(
+        cursor,
+        "service_records",
+        "total_retur",
+        "total_retur NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "total_retur_jasa",
+        "total_retur_jasa NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "total_retur_part",
+        "total_retur_part NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "retur_count",
+        "retur_count INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_parts",
+        "jumlah_retur",
+        "jumlah_retur INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_jobs",
+        "jumlah_retur",
+        "jumlah_retur INTEGER NOT NULL DEFAULT 0",
+    )
+
+    if "service_records" in _tables(cursor):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_service_records_status "
+            "ON service_records (status)"
+        )
+
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS service_returns ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER NOT NULL, "
+        "alasan TEXT NOT NULL, "
+        "oleh VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "total_nilai NUMERIC(14, 2) NOT NULL DEFAULT 0, "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE CASCADE)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_returns_service_record_id "
+        "ON service_returns (service_record_id)"
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS service_return_items ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "service_return_id INTEGER NOT NULL, "
+        "service_part_id INTEGER, "
+        "service_job_id INTEGER, "
+        "stock_item_id INTEGER, "
+        "nama_item VARCHAR(255) NOT NULL, "
+        "jumlah INTEGER NOT NULL, "
+        "harga_satuan NUMERIC(14, 2) NOT NULL, "
+        "harga_modal NUMERIC(14, 2), "
+        "subtotal NUMERIC(14, 2) NOT NULL, "
+        "FOREIGN KEY(service_return_id) REFERENCES service_returns (id) "
+        "ON DELETE CASCADE, "
+        "FOREIGN KEY(service_part_id) REFERENCES service_parts (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(service_job_id) REFERENCES service_jobs (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(stock_item_id) REFERENCES stock_items (id) "
+        "ON DELETE SET NULL)"
+    )
+    for column in (
+        "service_return_id",
+        "service_part_id",
+        "service_job_id",
+    ):
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_service_return_items_{column} "
+            f"ON service_return_items ({column})"
+        )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS stock_movements ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "stock_item_id INTEGER, "
+        "nama_item VARCHAR(255), "
+        "jenis VARCHAR(16) NOT NULL, "
+        "jumlah INTEGER NOT NULL, "
+        "alasan TEXT, "
+        "oleh VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "service_record_id INTEGER, "
+        "service_return_id INTEGER, "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(stock_item_id) REFERENCES stock_items (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(service_return_id) REFERENCES service_returns (id) "
+        "ON DELETE SET NULL)"
+    )
+    for column in (
+        "stock_item_id",
+        "jenis",
+        "service_record_id",
+        "service_return_id",
+    ):
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_stock_movements_{column} "
+            f"ON stock_movements ({column})"
+        )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
     (3, _migrate_003_request_id),
     (4, _migrate_004_unique_label),
     (5, _migrate_005_modal_estimasi),
+    (6, _migrate_006_void_retur_ledger),
 ]
 
 

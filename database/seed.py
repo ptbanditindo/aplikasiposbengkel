@@ -15,6 +15,7 @@ from database.models import (
     HargaJasa,
     ServiceRecord,
     StockItem,
+    StockMovement,
     VehicleOrUnit,
 )
 
@@ -85,18 +86,30 @@ def seed_defaults(db: Session) -> None:
 
     stock_count = db.scalar(select(func.count()).select_from(StockItem)) or 0
     if stock_count == 0:
-        db.add_all(
-            [
-                StockItem(
-                    kode=kode,
-                    nama=nama,
-                    harga_modal=Decimal(modal),
-                    harga_jual=Decimal(jual),
-                    jumlah=jumlah,
+        items = [
+            StockItem(
+                kode=kode,
+                nama=nama,
+                harga_modal=Decimal(modal),
+                harga_jual=Decimal(jual),
+                jumlah=jumlah,
+            )
+            for kode, nama, modal, jual, jumlah in DEFAULT_STOCK
+        ]
+        db.add_all(items)
+        db.flush()
+        for item in items:
+            if item.jumlah > 0:
+                db.add(
+                    StockMovement(
+                        stock_item_id=item.id,
+                        nama_item=item.nama,
+                        jenis="MASUK",
+                        jumlah=item.jumlah,
+                        alasan="Stok awal",
+                        oleh="Sistem",
+                    )
                 )
-                for kode, nama, modal, jual, jumlah in DEFAULT_STOCK
-            ]
-        )
 
     jasa_count = db.scalar(select(func.count()).select_from(HargaJasa)) or 0
     if jasa_count == 0:

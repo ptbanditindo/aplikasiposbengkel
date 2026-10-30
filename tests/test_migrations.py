@@ -200,3 +200,115 @@ def test_backup_pra_migrasi_berisi_skema_lama(tmp_path, monkeypatch):
         )
     finally:
         connection.close()
+
+
+def test_migrasi_s06_menambah_void_retur_dan_ledger(tmp_path, monkeypatch):
+    from datetime import datetime
+    from decimal import Decimal
+
+    from database import migrations
+    from database.models import ServiceRecord, VehicleOrUnit
+
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setattr(
+        backup_service, "settings", replace(settings, backup_dir=backup_dir)
+    )
+    legacy = build_engine(f"sqlite:///{(tmp_path / 'legacy_s06.db').as_posix()}")
+    Base.metadata.create_all(legacy)
+    with Session(legacy) as db:
+        customer = Customer(nama="Pelanggan S06", nomor_hp="081200000099")
+        db.add(customer)
+        db.flush()
+        unit = VehicleOrUnit(
+            customer_id=customer.id, unit_type="MOBIL", nopol="B 6001 OLD"
+        )
+        db.add(unit)
+        db.flush()
+        record = ServiceRecord(
+            unit_id=unit.id,
+            no_nota="INV-20250101-0001",
+            waktu_service=datetime(2025, 1, 1, 9, 0),
+            keluhan_awal="Nota lama",
+            total_servis=Decimal("100000.00"),
+            bayar=Decimal("100000.00"),
+        )
+        db.add(record)
+        db.commit()
+        record_id = record.id
+
+    # Turunkan database ke skema versi 5 (sebelum S-06).
+    with legacy.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX IF EXISTS ix_service_records_status")
+        for column in (
+            "status",
+            "void_reason",
+            "voided_at",
+            "voided_by",
+            "total_retur",
+            "total_retur_jasa",
+            "total_retur_part",
+            "retur_count",
+        ):
+            conn.exec_driver_sql(
+                f"ALTER TABLE service_records DROP COLUMN {column}"
+            )
+        conn.exec_driver_sql(
+            "ALTER TABLE service_parts DROP COLUMN jumlah_retur"
+        )
+        conn.exec_driver_sql("ALTER TABLE service_jobs DROP COLUMN jumlah_retur")
+        conn.exec_driver_sql("DROP TABLE stock_movements")
+        conn.exec_driver_sql("DROP TABLE service_return_items")
+        conn.exec_driver_sql("DROP TABLE service_returns")
+        conn.exec_driver_sql("PRAGMA user_version = 5")
+
+    init_db(legacy)
+
+    with legacy.connect() as conn:
+        assert (
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
+            == 6
+        )
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert {"service_returns", "service_return_items", "stock_movements"} <= tables
+        columns = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(service_records)")
+        }
+        assert {
+            "status",
+            "void_reason",
+            "voided_at",
+            "voided_by",
+            "total_retur",
+            "total_retur_jasa",
+            "total_retur_part",
+            "retur_count",
+        } <= columns
+        row = conn.exec_driver_sql(
+            "SELECT status, total_retur, total_retur_jasa, total_retur_part, "
+            "retur_count FROM service_records WHERE id = ?",
+            (record_id,),
+        ).one()
+        assert tuple(row) == ("NORMAL", 0, 0, 0, 0)
+        assert conn.exec_driver_sql("SELECT nama FROM customers").scalar() == (
+            "Pelanggan S06"
+        )
+        indexes = {
+            row[1] for row in conn.exec_driver_sql(
+                "PRAGMA index_list(service_records)"
+            )
+        }
+        assert "ix_service_records_status" in indexes
+
+    init_db(legacy)
+    with legacy.connect() as conn:
+        assert (
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
+        )

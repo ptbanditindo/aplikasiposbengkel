@@ -1,9 +1,9 @@
 """Endpoint master stok sparepart & tarif jasa."""
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
@@ -14,6 +14,7 @@ from api.schemas import (
     StockItemCreate,
     StockItemOut,
     StockItemUpdate,
+    StockMovementOut,
 )
 from database.session import get_db
 from services import stock_service
@@ -26,6 +27,24 @@ router = APIRouter(
 @router.get("/stock", response_model=List[StockItemOut])
 def list_stock(db: Session = Depends(get_db)):
     return [StockItemOut.model_validate(item) for item in stock_service.list_stock(db)]
+
+
+@router.get("/stock/movements", response_model=List[StockMovementOut])
+def list_stock_movements(
+    stock_item_id: Optional[int] = Query(default=None, gt=0),
+    service_record_id: Optional[int] = Query(default=None, gt=0),
+    limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    return [
+        StockMovementOut.model_validate(row)
+        for row in stock_service.list_movements(
+            db,
+            stock_item_id=stock_item_id,
+            service_record_id=service_record_id,
+            limit=limit,
+        )
+    ]
 
 
 @router.post("/stock", response_model=StockItemOut, status_code=201)

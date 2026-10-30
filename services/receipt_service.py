@@ -9,7 +9,21 @@ from database.models import ServiceRecord
 from services import settings_service, warranty_service
 from services.customer_service import describe_unit
 from services.escpos_service import ReceiptBuilder
-from services.utils import format_rupiah
+from services.utils import format_rupiah, money
+
+
+def _net_qty(item) -> int:
+    return max(int(item.jumlah) - int(getattr(item, "jumlah_retur", 0) or 0), 0)
+
+
+def _is_void(record: ServiceRecord) -> bool:
+    return (getattr(record, "status", "NORMAL") or "NORMAL") == "VOID"
+
+
+def _total_neto(record: ServiceRecord):
+    if _is_void(record):
+        return money(Decimal("0.00"))
+    return money(record.total_servis - (record.total_retur or Decimal("0.00")))
 
 
 def _duration_label(record: ServiceRecord) -> str:
@@ -41,6 +55,15 @@ def _build(
     b.kv("No. Nota", record.no_nota)
     b.kv("Tanggal", record.waktu_service.strftime("%d/%m/%Y %H:%M"))
     b.kv("Kasir", "Kasir")
+    if _is_void(record):
+        b.divider("-")
+        b.center("*** NOTA DIBATALKAN (VOID) ***", bold=True)
+        if record.void_reason:
+            b.field("Alasan", record.void_reason)
+        if record.voided_at:
+            b.field("Waktu void", record.voided_at.strftime("%d/%m/%Y %H:%M"))
+        if record.voided_by:
+            b.field("Oleh", record.voided_by)
     b.divider("-")
 
     b.field("Pelanggan", customer.nama)
@@ -68,6 +91,10 @@ def _build(
     if record.diskon and record.diskon > 0:
         b.kv("Diskon", "-" + format_rupiah(record.diskon))
     b.kv("Grand Total", format_rupiah(record.total_servis), bold=True, double=True)
+    total_retur = record.total_retur or Decimal("0.00")
+    if total_retur > 0 or _is_void(record):
+        b.kv("Retur", "-" + format_rupiah(total_retur))
+        b.kv("Total Neto", format_rupiah(_total_neto(record)), bold=True)
 
     if record.metode_bayar == "TRANSFER":
         b.kv("Metode Bayar", "TRANSFER BANK")
@@ -78,7 +105,9 @@ def _build(
 
     b.divider("-")
     b.add("GARANSI SERVIS:", bold=True)
-    if record.bergaransi and record.garansi_sampai:
+    if _is_void(record):
+        b.kv("Status", "DIBATALKAN")
+    elif record.bergaransi and record.garansi_sampai:
         b.kv("Status", "BERGARANSI")
         b.kv(
             "Sampai",
@@ -119,6 +148,7 @@ def build_receipt_payload(
             "id": job.id,
             "deskripsi": job.deskripsi,
             "jumlah": job.jumlah,
+            "jumlah_retur": int(job.jumlah_retur or 0),
             "harga": job.harga,
             "subtotal": job.subtotal,
         }
@@ -129,6 +159,7 @@ def build_receipt_payload(
             "id": part.id,
             "nama_part": part.nama_part,
             "jumlah": part.jumlah,
+            "jumlah_retur": int(part.jumlah_retur or 0),
             "harga_satuan": part.harga_satuan,
             "subtotal": part.subtotal,
         }
@@ -158,6 +189,13 @@ def build_receipt_payload(
         "tanggal_klaim": record.tanggal_klaim,
         "garansi_aktif": warranty_service.is_active(record),
         "warranty_status": warranty_service.warranty_status(record),
+        "status": record.status or "NORMAL",
+        "void_reason": record.void_reason,
+        "voided_at": record.voided_at,
+        "voided_by": record.voided_by,
+        "total_retur": record.total_retur or Decimal("0.00"),
+        "retur_count": int(record.retur_count or 0),
+        "total_neto": _total_neto(record),
         "jobs": jobs,
         "parts": parts,
         "bengkel_nama": info["nama"],
@@ -180,19 +218,24 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
     """Ringkasan nota untuk tabel riwayat & dasbor."""
     unit = record.unit
     customer = unit.customer
+    status = record.status or "NORMAL"
     laba_kotor = Decimal("0.00")
     modal_tidak_diketahui = False
     modal_estimasi = False
-    for part in record.parts:
-        if part.harga_modal_estimasi:
-            modal_estimasi = True
-        modal = part.harga_modal
-        if modal is None and part.stock_item is not None:
-            modal = part.stock_item.harga_modal
-        if modal is None:
-            modal_tidak_diketahui = True
-            continue
-        laba_kotor += (part.harga_satuan - modal) * part.jumlah
+    if status != "VOID":
+        for part in record.parts:
+            net_qty = _net_qty(part)
+            if net_qty <= 0:
+                continue
+            if part.harga_modal_estimasi:
+                modal_estimasi = True
+            modal = part.harga_modal
+            if modal is None and part.stock_item is not None:
+                modal = part.stock_item.harga_modal
+            if modal is None:
+                modal_tidak_diketahui = True
+                continue
+            laba_kotor += (part.harga_satuan - modal) * net_qty
     return {
         "id": record.id,
         "no_nota": record.no_nota,
@@ -221,6 +264,13 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "laba_kotor": laba_kotor,
         "modal_tidak_diketahui": modal_tidak_diketahui,
         "modal_estimasi": modal_estimasi,
+        "status": status,
+        "void_reason": record.void_reason,
+        "voided_at": record.voided_at,
+        "voided_by": record.voided_by,
+        "total_retur": record.total_retur or Decimal("0.00"),
+        "retur_count": int(record.retur_count or 0),
+        "total_neto": _total_neto(record),
     }
 
 

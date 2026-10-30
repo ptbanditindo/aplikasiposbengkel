@@ -20,6 +20,7 @@ from database.models import (
     ServicePart,
     ServiceRecord,
     StockItem,
+    StockMovement,
     VehicleOrUnit,
 )
 from database.session import begin_immediate
@@ -296,6 +297,24 @@ def _create_transaction_locked(
                     )
             if shortages:
                 raise InsufficientStockError(shortages)
+
+        # S-06: setiap pemakaian stok tercatat di ledger dengan referensi nota.
+        for line in part_lines:
+            stock_id = line["stock_item_id"]
+            if stock_id is None:
+                continue
+            db.add(
+                StockMovement(
+                    stock_item_id=stock_id,
+                    nama_item=line["nama_part"],
+                    jenis="KELUAR",
+                    jumlah=-line["jumlah"],
+                    alasan=f"Penjualan {record.no_nota}",
+                    oleh="Kasir",
+                    service_record_id=record.id,
+                    created_at=now,
+                )
+            )
 
         record_id = record.id
 

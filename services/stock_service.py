@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from database.models import HargaJasa, StockItem
+from database.models import HargaJasa, StockItem, StockMovement
 from repositories import stock_repository as repo
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
@@ -81,6 +81,18 @@ def create_stock(
         jumlah=qty,
     )
     db.add(item)
+    db.flush()
+    if qty > 0:
+        db.add(
+            StockMovement(
+                stock_item_id=item.id,
+                nama_item=item.nama,
+                jenis="MASUK",
+                jumlah=qty,
+                alasan="Stok awal",
+                oleh="Kasir",
+            )
+        )
     db.commit()
     db.refresh(item)
     return item
@@ -90,6 +102,11 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
     item = repo.get_stock(db, stock_id)
     if item is None:
         raise NotFoundError("Sparepart tidak ditemukan.")
+
+    alasan = clean_text(
+        values.pop("alasan", None), max_length=255, allow_newlines=False
+    ) or "Koreksi stok manual"
+    old_qty = item.jumlah
 
     _reject_null_fields(values, _STOCK_UPDATE_LABELS)
 
@@ -112,6 +129,19 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
     item.harga_jual = jual
     item.jumlah = qty
 
+    # S-06: koreksi manual tidak boleh menghapus jejak audit.
+    if qty != old_qty:
+        db.add(
+            StockMovement(
+                stock_item_id=item.id,
+                nama_item=item.nama,
+                jenis="KOREKSI",
+                jumlah=qty - old_qty,
+                alasan=alasan,
+                oleh="Kasir",
+            )
+        )
+
     db.commit()
     db.refresh(item)
     return item
@@ -121,8 +151,36 @@ def delete_stock(db: Session, stock_id: int) -> None:
     item = repo.get_stock(db, stock_id)
     if item is None:
         raise NotFoundError("Sparepart tidak ditemukan.")
+    old_qty = item.jumlah
+    nama = item.nama
     db.delete(item)
+    db.flush()
+    if old_qty:
+        db.add(
+            StockMovement(
+                stock_item_id=None,
+                nama_item=nama,
+                jenis="KOREKSI",
+                jumlah=-old_qty,
+                alasan="Hapus sparepart",
+                oleh="Kasir",
+            )
+        )
     db.commit()
+
+
+def list_movements(
+    db: Session,
+    stock_item_id: Optional[int] = None,
+    service_record_id: Optional[int] = None,
+    limit: int = 200,
+):
+    return repo.list_movements(
+        db,
+        stock_item_id=stock_item_id,
+        service_record_id=service_record_id,
+        limit=limit,
+    )
 
 
 def create_jasa(db: Session, nama: str, harga_standar: Decimal) -> HargaJasa:
