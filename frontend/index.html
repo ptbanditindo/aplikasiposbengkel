@@ -707,6 +707,7 @@
           </p>
           <div class="form-actions">
             <button type="button" class="btn btn-outline" id="settingsBackup">Unduh backup</button>
+            <button type="button" class="btn btn-outline hidden" id="settingsShareBackup">Bagikan backup</button>
             <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan database</button>
             <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
           </div>
@@ -1027,6 +1028,7 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
+  <script src="/static/js/native-bridge.js"></script>
   <script src="/static/js/api-client.js"></script>
   <script src="/static/js/bluetooth-printer.js"></script>
   <script src="/static/js/app.js"></script>

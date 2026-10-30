@@ -125,6 +125,7 @@
     searchTimer: null,
     saving: false,
     pendingRequest: null,
+    lastBackup: null,
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -2900,6 +2901,22 @@
     setBusy(button, true, 'Memulihkan...');
     try {
       await API.restoreDatabase(file);
+      if (window.BengkelBridge && window.BengkelBridge.available()) {
+        toast('Database berhasil dipulihkan. Menyiapkan ulang aplikasi...', 'success', 5000);
+        try {
+          await window.BengkelBridge.call('restartBackend', {}, 180000);
+        } catch (err) {
+          toast(
+            'Data sudah dipulihkan, tetapi server gagal dimuat ulang: ' +
+              err.message +
+              ' Tutup lalu buka aplikasi.',
+            'error',
+            9000
+          );
+          setBusy(button, false);
+        }
+        return;
+      }
       toast('Database berhasil dipulihkan. Memuat ulang aplikasi...', 'success', 4000);
       setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
@@ -2909,11 +2926,45 @@
   }
 
   async function handleBackup() {
+    const button = $('#settingsBackup');
+    setBusy(button, true, 'Membuat backup...');
     try {
-      await API.downloadBackup();
-      toast('File backup database berhasil diunduh.', 'success', 5000);
+      const result = await API.downloadBackup();
+      state.lastBackup = result || null;
+      const shareButton = $('#settingsShareBackup');
+      if (shareButton) {
+        const canShare =
+          state.lastBackup &&
+          window.BengkelBridge &&
+          window.BengkelBridge.available();
+        shareButton.classList.toggle('hidden', !canShare);
+      }
+      const locationText = state.lastBackup.location
+        ? ' ke ' + state.lastBackup.location
+        : '';
+      toast(
+        'File backup database berhasil disimpan' +
+          locationText +
+          ': ' +
+          state.lastBackup.filename,
+        'success',
+        6000
+      );
     } catch (err) {
-      toast(err.message, 'error', 6000);
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleShareBackup() {
+    if (!state.lastBackup || !window.BengkelBridge) return;
+    try {
+      await window.BengkelBridge.call('shareBackup', {
+        filename: state.lastBackup.filename,
+      });
+    } catch (err) {
+      toast('Gagal membagikan backup: ' + err.message, 'error', 7000);
     }
   }
 
@@ -3112,6 +3163,7 @@
     $('#settingsReset').addEventListener('click', fillSettingsForm);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
+    $('#settingsShareBackup').addEventListener('click', handleShareBackup);
     $('#settingsRestore').addEventListener('click', requestRestore);
     $('#settingsRestoreFile').addEventListener('change', handleRestoreFile);
 

@@ -1,12 +1,17 @@
 package com.bengkelpos.radiator
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -14,6 +19,7 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.URLUtil
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -26,12 +32,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.bengkelpos.radiator.backend.BackendManager
+import com.bengkelpos.radiator.nativebridge.NativeBridge
 import com.bengkelpos.radiator.pin.PinActivity
 import com.bengkelpos.radiator.pin.PinSession
 import com.bengkelpos.radiator.pin.PinSettings
 import com.bengkelpos.radiator.pin.PinStore
 import com.bengkelpos.radiator.pin.SystemLockoutClock
 import org.json.JSONObject
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -48,6 +57,17 @@ class MainActivity : AppCompatActivity() {
     private var activePort: Int = BackendManager.DEFAULT_PORT
     private var startingBackend = false
     private var registeredOrigin: String? = null
+    private lateinit var nativeBridge: NativeBridge
+    private val nativeExecutor: ExecutorService = Executors.newFixedThreadPool(2)
+    private var pendingStorageCallback: ((Boolean) -> Unit)? = null
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val callback = pendingStorageCallback
+        pendingStorageCallback = null
+        callback?.invoke(granted)
+    }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -80,6 +100,14 @@ class MainActivity : AppCompatActivity() {
         privacyCover = findViewById(R.id.privacyCover)
         pinSettings = PinSettings(this)
         adminToken = resolveAdminToken()
+        nativeBridge = NativeBridge(
+            activity = this,
+            webView = webView,
+            adminToken = adminToken,
+            ioExecutor = nativeExecutor,
+            requestLegacyStoragePermission = ::requestStoragePermission,
+            onBackendRestarted = ::restartBackendAfterRestore,
+        )
 
         findViewById<Button>(R.id.retryButton).setOnClickListener { startBackend() }
 
@@ -119,6 +147,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
+        pendingStorageCallback = null
+        nativeExecutor.shutdownNow()
         webView.loadUrl("about:blank")
         webView.clearHistory()
         webView.removeAllViews()
@@ -146,6 +176,10 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
         }
         webView.addJavascriptInterface(PinBridge(), "BengkelPin")
+        webView.addJavascriptInterface(nativeBridge, "BengkelNative")
+        webView.setDownloadListener { url, _, contentDisposition, mimeType, _ ->
+            handleDownload(url, contentDisposition, mimeType)
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
                 view: WebView,
@@ -234,6 +268,56 @@ class MainActivity : AppCompatActivity() {
         privacyCover.visibility = View.GONE
         offlineText.setText(R.string.backend_error_hint)
         offlinePanel.visibility = View.VISIBLE
+    }
+
+    private fun restartBackendAfterRestore() {
+        activePort = BackendManager.activePort
+        pageLoaded = false
+        loadApp()
+    }
+
+    private fun requestStoragePermission(callback: (Boolean) -> Unit) {
+        runOnUiThread {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                callback(true)
+                return@runOnUiThread
+            }
+            pendingStorageCallback = callback
+            storagePermissionLauncher.launch(
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
+        }
+    }
+
+    private fun handleDownload(
+        url: String,
+        contentDisposition: String?,
+        mimeType: String?,
+    ) {
+        if (!url.startsWith("http://$APP_HOST:")) {
+            Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_LONG).show()
+            return
+        }
+        val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setNotificationVisibility(
+                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+            )
+            .setDestinationInExternalPublicDir(
+                Environment.DIRECTORY_DOWNLOADS,
+                fileName,
+            )
+            .addRequestHeader("X-Install-Token", adminToken)
+        runCatching {
+            val manager = getSystemService(DownloadManager::class.java)
+                ?: error("DownloadManager tidak tersedia")
+            manager.enqueue(request)
+        }.onFailure {
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun registerAdminTokenScript() {

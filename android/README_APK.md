@@ -113,9 +113,14 @@ saat build, atau ABI perangkat tidak termasuk dalam `abiFilters`.
   menghasilkan teks 58/80 mm dan ESC/POS base64, tetapi jembatan native ke
   printer Bluetooth/USB (raw ESC/POS) belum ada. `window.print()` WebView juga
   bukan jalur cetak yang cocok untuk printer thermal.
-- **Tombol "Unduh backup" (blob URL)** belum ditangani `DownloadListener`,
-  jadi di APK file backup tidak tersimpan dari tombol itu. Backup otomatis ke
-  Telegram tetap berjalan; restore memakai pemilih file (sudah didukung).
+- **Backup di APK ditulis native** (Ref: T-03). Tombol "Unduh backup" memanggil
+  jembatan `BengkelNative.saveBackup`, yang mengambil file dari server lokal
+  dengan `X-Install-Token` lalu menulisnya ke folder **Unduhan** lewat
+  MediaStore (Android 10+) atau penyimpanan publik + izin (Android 8-9).
+  Ukuran file diverifikasi sebelum UI menyatakan sukses; tombol "Bagikan backup"
+  mengirim salinan lewat `ACTION_SEND` + FileProvider (WhatsApp, Drive, email).
+  `DownloadListener` juga terpasang sebagai pengaman untuk unduhan http lokal.
+  Restore tetap memakai pemilih file, lalu server lokal dijalankan ulang otomatis.
 - **Scheduler backup Telegram hanya hidup selama proses aplikasi berjalan.**
   Backup terjadwal jam 21:00 baru terkirim jika aplikasi sedang terbuka;
   backend tidak berjalan sebagai service latar belakang.

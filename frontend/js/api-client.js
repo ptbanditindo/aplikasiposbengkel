@@ -203,6 +203,15 @@
       ),
 
     downloadBackup: async () => {
+      // APK: file ditulis native ke folder Unduhan dan ukurannya diverifikasi.
+      if (window.BengkelBridge && window.BengkelBridge.available()) {
+        const result = await window.BengkelBridge.call('saveBackup', {}, 180000);
+        return {
+          filename: result.filename,
+          location: result.location || 'folder Unduhan',
+        };
+      }
+
       const headers = {};
       const token = installToken();
       if (token) headers['X-Install-Token'] = token;
@@ -253,7 +262,7 @@
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-      return filename;
+      return { filename: filename };
     },
   };
 })();

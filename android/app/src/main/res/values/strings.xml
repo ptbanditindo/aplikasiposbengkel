@@ -38,4 +38,6 @@
     <string name="backend_error_hint">Server lokal gagal dijalankan. Tutup aplikasi lain yang mungkin memakai port 8000-8010, lalu tekan Coba lagi.</string>
     <string name="retry">Coba lagi</string>
     <string name="external_link_blocked">Tautan eksternal diblokir di dalam aplikasi.</string>
+    <string name="download_blocked">Unduhan dari alamat luar diblokir.</string>
+    <string name="download_failed">Unduhan gagal dimulai. Coba lagi.</string>
 </resources>
