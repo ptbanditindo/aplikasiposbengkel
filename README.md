@@ -59,7 +59,11 @@ backup di `backups/`.
 | `DATABASE_URL` | Default `sqlite:///./data/bengkel_radiator.db`. |
 | `BENGKEL_*` | Identitas bengkel & rekening; nilai awal, bisa diubah dari menu Pengaturan. |
 | `BACKUP_DIR` | Folder backup lokal. |
+| `BACKUP_KEEP` | Jumlah file backup terakhir yang disimpan (default 14). |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Nilai awal backup Telegram; bisa diisi dari Pengaturan. |
+
+Backup otomatis hanya dikirim lewat Telegram. Tidak ada penjadwal backup lokal;
+flag `AUTO_BACKUP_ENABLED` dan `SECRET_KEY` sudah dihapus karena tidak dipakai.
 
 `.env` **tidak pernah** ikut di-commit; hanya `.env.example`. Identitas bengkel
 dan konfigurasi Telegram yang disimpan lewat UI berada di database dan

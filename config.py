@@ -43,7 +43,6 @@ class Settings:
     app_env: str
     app_host: str
     app_port: int
-    secret_key: str
     ui_access_token: str
 
     database_url: str
@@ -68,7 +67,6 @@ class Settings:
 
     backup_dir: Path
     backup_keep: int
-    auto_backup_enabled: bool
 
     telegram_bot_token: str
     telegram_chat_id: str
@@ -91,7 +89,6 @@ def load_settings() -> Settings:
         app_env=os.getenv("APP_ENV", "development").strip(),
         app_host=os.getenv("APP_HOST", "0.0.0.0").strip(),
         app_port=_as_int("APP_PORT", 8000),
-        secret_key=os.getenv("SECRET_KEY", "").strip(),
         ui_access_token=os.getenv("UI_ACCESS_TOKEN", "").strip(),
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///./data/bengkel_radiator.db"
@@ -117,7 +114,6 @@ def load_settings() -> Settings:
         ).strip(),
         backup_dir=_as_path("BACKUP_DIR", "./backups"),
         backup_keep=_as_int("BACKUP_KEEP", 14),
-        auto_backup_enabled=_as_bool("AUTO_BACKUP_ENABLED", True),
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", "").strip(),
         telegram_backup_enabled=_as_bool("TELEGRAM_BACKUP_ENABLED", False),
