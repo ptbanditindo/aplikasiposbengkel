@@ -22,6 +22,39 @@ REQUIRED_TABLES = {
     "service_parts",
 }
 
+BACKUP_GLOB = "bengkel_radiator_*.db"
+RESTORE_GLOB = "sebelum_restore_*.db"
+RESTORE_BACKUP_KEEP = 3
+MIN_FREE_MARGIN_BYTES = 20 * 1024 * 1024
+
+
+def _prune(pattern: str, keep: int) -> None:
+    files = sorted(
+        settings.backup_dir.glob(pattern),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for old in files[keep:]:
+        old.unlink(missing_ok=True)
+
+
+def prune_backups() -> None:
+    """Simpan hanya backup terbaru sesuai retensi, termasuk salinan pra-restore."""
+    _prune(BACKUP_GLOB, settings.backup_keep)
+    _prune(RESTORE_GLOB, RESTORE_BACKUP_KEEP)
+
+
+def _ensure_free_space(source: Path) -> None:
+    needed = source.stat().st_size * 2 + MIN_FREE_MARGIN_BYTES
+    free = shutil.disk_usage(str(settings.backup_dir)).free
+    if free < needed:
+        raise BusinessValidationError(
+            "Ruang penyimpanan tidak cukup untuk membuat backup. "
+            f"Butuh sekitar {needed // (1024 * 1024)} MB ruang kosong; "
+            f"tersedia {free // (1024 * 1024)} MB. "
+            "Hapus berkas lain lalu coba lagi."
+        )
+
 
 def database_file_path() -> Path:
     from database.session import engine
@@ -58,6 +91,7 @@ def create_backup() -> Path:
         raise BusinessValidationError("Berkas basis data belum tersedia.")
 
     settings.backup_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_free_space(source_path)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     destination = settings.backup_dir / f"bengkel_radiator_{stamp}.db"
 
@@ -72,6 +106,7 @@ def create_backup() -> Path:
         source.close()
 
     _redact_secrets(destination)
+    prune_backups()
     return destination
 
 
@@ -122,7 +157,9 @@ def restore_backup(file_bytes: bytes) -> None:
     if target.exists():
         settings.backup_dir.mkdir(parents=True, exist_ok=True)
         safety = settings.backup_dir / (
-            "sebelum_restore_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+            "sebelum_restore_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            + ".db"
         )
         shutil.copy2(target, safety)
 
@@ -134,3 +171,5 @@ def restore_backup(file_bytes: bytes) -> None:
 
     with db_session.SessionLocal() as db:
         seed_defaults(db)
+
+    prune_backups()

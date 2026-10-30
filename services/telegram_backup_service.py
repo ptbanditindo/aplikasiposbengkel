@@ -26,6 +26,51 @@ logger = logging.getLogger(__name__)
 
 RETRY_MINUTES = 10
 MAX_DOCUMENT_BYTES = 50 * 1024 * 1024  # batas kirim dokumen Bot API Telegram
+PENDING_BACKUP_KEY = "telegram.pending_backup_path"
+PENDING_BACKUP_DATE_KEY = "telegram.pending_backup_date"
+
+
+def _safe_backup_path(raw: str) -> Optional[Path]:
+    if not raw:
+        return None
+    path = Path(raw)
+    try:
+        path.resolve().relative_to(settings.backup_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def _clear_pending_backup(db: Session) -> None:
+    settings_service.set_setting(db, PENDING_BACKUP_KEY, "")
+    settings_service.set_setting(db, PENDING_BACKUP_DATE_KEY, "")
+
+
+def _pending_backup(db: Session) -> Optional[Path]:
+    """Pakai ulang file backup yang sudah dibuat untuk percobaan ulang hari ini."""
+    raw = settings_service.get_setting(db, PENDING_BACKUP_KEY)
+    if not raw:
+        return None
+
+    path = _safe_backup_path(raw)
+    stored_date = settings_service.get_setting(db, PENDING_BACKUP_DATE_KEY)
+    if (
+        path is None
+        or stored_date != date.today().isoformat()
+        or not path.exists()
+    ):
+        if path is not None:
+            path.unlink(missing_ok=True)
+        _clear_pending_backup(db)
+        db.commit()
+        return None
+    return path
+
+
+def _discard_pending_backup(db: Session, path: Path) -> None:
+    path.unlink(missing_ok=True)
+    _clear_pending_backup(db)
+    db.commit()
 
 
 def data_range(db: Session) -> tuple[date, date]:
@@ -103,8 +148,17 @@ def send_backup(db: Session) -> Dict[str, Any]:
         )
 
     start, end = data_range(db)
-    backup_path = backup_service.create_backup()
+    backup_path = _pending_backup(db)
+    if backup_path is None:
+        backup_path = backup_service.create_backup()
+        settings_service.set_setting(db, PENDING_BACKUP_KEY, str(backup_path))
+        settings_service.set_setting(
+            db, PENDING_BACKUP_DATE_KEY, date.today().isoformat()
+        )
+        db.commit()
+
     if backup_path.stat().st_size > MAX_DOCUMENT_BYTES:
+        _discard_pending_backup(db, backup_path)
         raise BusinessValidationError(
             "Ukuran backup melebihi 50 MB (batas kirim bot Telegram). "
             "Unduh backup manual dari menu Pengaturan."
@@ -131,6 +185,8 @@ def send_backup(db: Session) -> Dict[str, Any]:
         raise BusinessValidationError(message) from exc
 
     sent_at = now.isoformat(timespec="seconds")
+    backup_path.unlink(missing_ok=True)
+    _clear_pending_backup(db)
     settings_service.set_setting(db, "telegram.last_sent_at", sent_at)
     settings_service.set_setting(db, "telegram.last_attempt_at", sent_at)
     settings_service.set_setting(db, "telegram.pending_since", "")
