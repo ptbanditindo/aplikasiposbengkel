@@ -26,6 +26,18 @@ REQUIRED_TABLES = {
     "service_parts",
 }
 
+# Kolom inti yang harus ada sejak versi pertama. Kolom hasil migrasi
+# (mis. service_parts.harga_modal) tidak diwajibkan agar backup lama tetap sah.
+REQUIRED_COLUMNS = {
+    "customers": {"id", "nama", "nomor_hp", "alamat"},
+    "vehicle_or_units": {"id", "customer_id", "unit_type", "label_radiator"},
+    "stock_items": {"id", "kode", "nama", "harga_jual", "jumlah"},
+    "harga_jasa": {"id", "nama", "harga_standar"},
+    "service_records": {"id", "unit_id", "no_nota", "waktu_service"},
+    "service_jobs": {"id", "service_record_id", "deskripsi"},
+    "service_parts": {"id", "service_record_id", "nama_part"},
+}
+
 BACKUP_GLOB = "bengkel_radiator_*.db"
 RESTORE_GLOB = "sebelum_restore_*.db"
 MIGRATION_GLOB = "sebelum_migrasi_*.db"
@@ -145,19 +157,10 @@ def create_backup() -> Path:
     return destination
 
 
-def restore_backup(file_bytes: bytes) -> None:
-    """Pulihkan database dari bytes SQLite yang diunggah (validasi header)."""
-    if not file_bytes:
-        raise BusinessValidationError("Berkas backup kosong.")
-    if not file_bytes.startswith(b"SQLite format 3\x00"):
-        raise BusinessValidationError("Berkas bukan database SQLite yang valid.")
-
-    target = database_file_path()
-    temp_path = target.with_suffix(".restore.tmp")
-    temp_path.write_bytes(file_bytes)
-
+def _validate_backup(path: Path) -> None:
+    """Pastikan berkas adalah SQLite utuh dengan tabel & kolom wajib."""
     try:
-        check = sqlite3.connect(str(temp_path))
+        check = sqlite3.connect(str(path))
         try:
             integrity = check.execute("PRAGMA integrity_check").fetchone()
             tables = {
@@ -166,28 +169,58 @@ def restore_backup(file_bytes: bytes) -> None:
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
             }
+            if not integrity or integrity[0] != "ok":
+                raise BusinessValidationError(
+                    "Database backup rusak (integrity check gagal)."
+                )
+
+            missing = REQUIRED_TABLES - tables
+            if missing:
+                raise BusinessValidationError(
+                    "Berkas bukan backup BengkelPOS Radiator: tabel "
+                    + ", ".join(sorted(missing))
+                    + " tidak ditemukan."
+                )
+
+            missing_columns = []
+            for table, required in sorted(REQUIRED_COLUMNS.items()):
+                columns = {
+                    row[1]
+                    for row in check.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                for column in sorted(required - columns):
+                    missing_columns.append(f"{table}.{column}")
+            if missing_columns:
+                raise BusinessValidationError(
+                    "Berkas backup tidak kompatibel: kolom "
+                    + ", ".join(missing_columns)
+                    + " tidak ditemukan."
+                )
         finally:
             check.close()
-
-        if not integrity or integrity[0] != "ok":
-            raise BusinessValidationError(
-                "Database backup rusak (integrity check gagal)."
-            )
-        missing = REQUIRED_TABLES - tables
-        if missing:
-            raise BusinessValidationError(
-                "Berkas bukan backup BengkelPOS Radiator: tabel "
-                + ", ".join(sorted(missing))
-                + " tidak ditemukan."
-            )
     except BusinessValidationError:
-        temp_path.unlink(missing_ok=True)
         raise
     except sqlite3.DatabaseError as exc:
-        temp_path.unlink(missing_ok=True)
         raise BusinessValidationError(f"Database backup rusak: {exc}") from exc
 
+
+def restore_backup(file_path: Path) -> None:
+    """Pulihkan database dari berkas SQLite yang sudah dialirkan ke disk."""
+    upload = Path(file_path)
+    if not upload.exists():
+        raise BusinessValidationError("Berkas backup tidak ditemukan.")
+    if upload.stat().st_size == 0:
+        raise BusinessValidationError("Berkas backup kosong.")
+    with upload.open("rb") as handle:
+        header = handle.read(16)
+    if not header.startswith(b"SQLite format 3\x00"):
+        raise BusinessValidationError("Berkas bukan database SQLite yang valid.")
+
+    _validate_backup(upload)
+
     from database import session as db_session
+
+    target = database_file_path()
 
     safety = None
     if target.exists():
@@ -203,10 +236,9 @@ def restore_backup(file_bytes: bytes) -> None:
     # Siapkan berkas di folder database yang sama agar penggantian atomik.
     staged = target.with_name(target.name + ".restore.new")
     try:
-        shutil.copy2(temp_path, staged)
+        shutil.copy2(upload, staged)
     except OSError as exc:
         staged.unlink(missing_ok=True)
-        temp_path.unlink(missing_ok=True)
         raise BusinessValidationError(
             "Gagal menyiapkan berkas restore di folder database."
         ) from exc
@@ -217,7 +249,6 @@ def restore_backup(file_bytes: bytes) -> None:
         db_session.init_db()
     except Exception as exc:
         staged.unlink(missing_ok=True)
-        temp_path.unlink(missing_ok=True)
         logger.exception("Restore gagal; mengembalikan database lama")
         if safety is None or not safety.exists():
             raise BusinessValidationError(
@@ -245,8 +276,6 @@ def restore_backup(file_bytes: bytes) -> None:
             "Restore gagal. Database lama sudah dikembalikan; "
             "periksa berkas backup lalu coba lagi."
         ) from exc
-    finally:
-        temp_path.unlink(missing_ok=True)
 
     from database.seed import mark_seed_done
     from services import settings_service

@@ -62,6 +62,7 @@ membuat PIN kasir 4&ndash;12 angka. Data tersimpan di
 | `BENGKEL_*` | Identitas bengkel & rekening; nilai awal, bisa diubah dari menu Pengaturan. |
 | `BACKUP_DIR` | Folder backup lokal. |
 | `BACKUP_KEEP` | Jumlah file backup terakhir yang disimpan (default 14). |
+| `BACKUP_MAX_RESTORE_MB` | Batas ukuran berkas restore yang diunggah (default 64 MB). |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Nilai awal backup Telegram; bisa diisi dari Pengaturan. |
 
 Backup otomatis hanya dikirim lewat Telegram. Tidak ada penjadwal backup lokal;

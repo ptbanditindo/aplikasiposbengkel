@@ -68,6 +68,7 @@ class Settings:
 
     backup_dir: Path
     backup_keep: int
+    backup_max_restore_mb: int
 
     telegram_bot_token: str
     telegram_chat_id: str
@@ -112,6 +113,7 @@ def load_settings() -> Settings:
         ).strip(),
         backup_dir=_as_path("BACKUP_DIR", "./backups"),
         backup_keep=max(1, _as_int("BACKUP_KEEP", 14)),
+        backup_max_restore_mb=max(1, _as_int("BACKUP_MAX_RESTORE_MB", 64)),
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", "").strip(),
         telegram_backup_enabled=_as_bool("TELEGRAM_BACKUP_ENABLED", False),
