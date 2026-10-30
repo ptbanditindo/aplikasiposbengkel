@@ -4,7 +4,6 @@ from __future__ import annotations
 import base64
 import sqlite3
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 
 
 def _transaction_with_long_text(client, create_customer, create_unit, make_transaction):
@@ -164,12 +163,11 @@ def test_tc20_ekspor_backup_database_sqlite(client, anon_client):
 def test_restore_backup_roundtrip(client, create_customer):
     customer = create_customer(nama="Sebelum Backup")
 
-    backup = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    backup = client.post("/api/admin/backup")
     assert backup.status_code == 200
 
     restore = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text
@@ -181,7 +179,6 @@ def test_restore_backup_roundtrip(client, create_customer):
 def test_restore_menolak_berkas_bukan_sqlite(client):
     response = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("palsu.db", b"bukan database", "application/octet-stream")},
     )
     assert response.status_code == 400
@@ -199,7 +196,6 @@ def test_restore_menolak_sqlite_tanpa_skema_aplikasi(client, tmp_path):
 
     response = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("database_lain.db", path.read_bytes(), "application/x-sqlite3")},
     )
     assert response.status_code == 400, response.text

@@ -5,7 +5,6 @@ from sqlalchemy import select
 
 from database.models import AppSetting
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 
 
 def bengkel_payload(**overrides):
@@ -44,7 +43,7 @@ def test_ubah_identitas_wajib_sesi(client, anon_client):
 
 def test_ubah_identitas_tersimpan_dan_tampil_di_config(client, db_session):
     response = client.put(
-        "/api/settings/bengkel", json=bengkel_payload(), headers=ADMIN_HEADERS
+        "/api/settings/bengkel", json=bengkel_payload()
     )
     assert response.status_code == 200, response.text
 
@@ -74,7 +73,7 @@ def test_ubah_identitas_tersimpan_dan_tampil_di_config(client, db_session):
 def test_tagline_kosong_menimpa_default(client):
     payload = bengkel_payload(tagline="")
     response = client.put(
-        "/api/settings/bengkel", json=payload, headers=ADMIN_HEADERS
+        "/api/settings/bengkel", json=payload
     )
     assert response.status_code == 200, response.text
     assert client.get("/api/config").json()["bengkel"]["tagline"] == ""
@@ -84,14 +83,12 @@ def test_nama_bengkel_tidak_boleh_kosong(client):
     too_short = client.put(
         "/api/settings/bengkel",
         json=bengkel_payload(nama="A"),
-        headers=ADMIN_HEADERS,
     )
     assert too_short.status_code == 422
 
     blank = client.put(
         "/api/settings/bengkel",
         json=bengkel_payload(nama="   "),
-        headers=ADMIN_HEADERS,
     )
     assert blank.status_code == 400
     assert client.get("/api/config").json()["bengkel"]["nama"] == "BENGKEL RADIATOR TEST"
@@ -102,7 +99,7 @@ def test_struk_memakai_identitas_terbaru(client, create_customer, create_unit, m
     unit = create_unit(customer["id"])
 
     update = client.put(
-        "/api/settings/bengkel", json=bengkel_payload(), headers=ADMIN_HEADERS
+        "/api/settings/bengkel", json=bengkel_payload()
     )
     assert update.status_code == 200, update.text
 

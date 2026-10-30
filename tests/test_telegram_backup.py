@@ -9,7 +9,6 @@ from sqlalchemy import select
 from database.models import AppSetting, ServiceRecord
 from services import settings_service, telegram_backup_service
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 BOT_TOKEN = "123456789:ABCdefghijklmnopqrstuvwxyz"
 
 
@@ -28,7 +27,6 @@ def configure_telegram(client, **overrides):
     response = client.put(
         "/api/settings/telegram",
         json=telegram_payload(**overrides),
-        headers=ADMIN_HEADERS,
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -86,14 +84,12 @@ def test_jam_token_dan_chat_tidak_valid_ditolak(client):
     invalid_time = client.put(
         "/api/settings/telegram",
         json=telegram_payload(jam="25:00"),
-        headers=ADMIN_HEADERS,
     )
     assert invalid_time.status_code == 422
 
     invalid_token = client.put(
         "/api/settings/telegram",
         json=telegram_payload(bot_token="bukan-token"),
-        headers=ADMIN_HEADERS,
     )
     assert invalid_token.status_code == 400
     assert "token" in invalid_token.json()["detail"].lower()
@@ -101,7 +97,6 @@ def test_jam_token_dan_chat_tidak_valid_ditolak(client):
     invalid_chat = client.put(
         "/api/settings/telegram",
         json=telegram_payload(chat_id="@x"),
-        headers=ADMIN_HEADERS,
     )
     assert invalid_chat.status_code == 400
     assert "chat id" in invalid_chat.json()["detail"].lower()
@@ -110,7 +105,7 @@ def test_jam_token_dan_chat_tidak_valid_ditolak(client):
 def test_kirim_manual_tanpa_konfigurasi_ditolak(client, anon_client):
     assert anon_client.post("/api/admin/telegram-backup").status_code == 401
 
-    response = client.post("/api/admin/telegram-backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/telegram-backup")
     assert response.status_code == 400
     assert "belum diatur" in response.json()["detail"]
 
@@ -149,7 +144,7 @@ def test_kirim_manual_mengirim_database_lengkap(
 
     monkeypatch.setattr(telegram_backup_service, "_send_document", fake_send)
 
-    response = client.post("/api/admin/telegram-backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/telegram-backup")
     assert response.status_code == 200, response.text
     body = response.json()
 
@@ -195,7 +190,7 @@ def test_kegagalan_kirim_dicatat_di_status(client, monkeypatch, db_session):
 
     monkeypatch.setattr(telegram_backup_service, "_send_document", failing_send)
 
-    response = client.post("/api/admin/telegram-backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/telegram-backup")
     assert response.status_code == 400
     assert "Tidak dapat menghubungi Telegram" in response.json()["detail"]
 

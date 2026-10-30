@@ -7,7 +7,6 @@ import pytest
 
 from config import settings
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 BOT_TOKEN = "123456789:ABCdefghijklmnopqrstuvwxyz"
 
 
@@ -20,7 +19,6 @@ def _configure_telegram(client):
             "chat_id": "987654321",
             "bot_token": BOT_TOKEN,
         },
-        headers=ADMIN_HEADERS,
     )
     assert response.status_code == 200, response.text
 
@@ -44,7 +42,7 @@ def clean_backup_dir():
 def test_backup_tidak_memuat_token_telegram(client):
     _configure_telegram(client)
 
-    response = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/backup")
     assert response.status_code == 200, response.text
     assert BOT_TOKEN.encode() not in response.content
 
@@ -62,12 +60,11 @@ def test_backup_tidak_memuat_token_telegram(client):
 def test_salinan_sebelum_restore_tidak_memuat_token(client):
     _configure_telegram(client)
 
-    backup = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    backup = client.post("/api/admin/backup")
     assert backup.status_code == 200, backup.text
 
     restore = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text

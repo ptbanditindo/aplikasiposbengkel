@@ -6,7 +6,6 @@ from sqlalchemy import delete, func, select
 from database.models import AppSetting, HargaJasa, StockItem
 from database.seed import SEED_DONE_KEY, seed_defaults
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 
 
 def _count(db, model):
@@ -53,12 +52,11 @@ def test_restore_backup_katalog_kosong_tetap_kosong(client, db_session):
     _delete_catalog(db_session)
     _remove_seed_marker(db_session)
 
-    backup = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    backup = client.post("/api/admin/backup")
     assert backup.status_code == 200, backup.text
 
     restore = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text

@@ -45,7 +45,6 @@ class Settings:
     app_port: int
     auth_mode: str
     app_install_token: str
-    ui_access_token: str
 
     database_url: str
 
@@ -80,10 +79,6 @@ class Settings:
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
 
-    @property
-    def admin_token_required(self) -> bool:
-        return bool(self.ui_access_token.strip())
-
 
 def load_settings() -> Settings:
     # Ref: PRD FR-PRN-05 / FR-POS-07 - identitas bengkel & rekening transfer
@@ -93,7 +88,6 @@ def load_settings() -> Settings:
         app_port=_as_int("APP_PORT", 8000),
         auth_mode=os.getenv("AUTH_MODE", "session-pin").strip().lower(),
         app_install_token=os.getenv("APP_INSTALL_TOKEN", "").strip(),
-        ui_access_token=os.getenv("UI_ACCESS_TOKEN", "").strip(),
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///./data/bengkel_radiator.db"
         ).strip(),
@@ -132,13 +126,15 @@ settings = load_settings()
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SUPPORTED_AUTH_MODES = frozenset({"session-pin", "install-token"})
+PLACEHOLDER_PREFIX = "ganti-dengan-"
 
 
 def validate_runtime(candidate: Settings | None = None) -> None:
     """Gagal cepat dengan pesan jelas bila konfigurasi membuka akses jaringan.
 
     Web lokal hanya untuk PC kasir itu sendiri; bind ke `0.0.0.0` atau IP LAN
-    ditolak agar data bengkel tidak terbuka untuk perangkat lain.
+    ditolak agar data bengkel tidak terbuka untuk perangkat lain. Token
+    instalasi APK juga tidak boleh kosong atau masih placeholder.
     """
     runtime = candidate or settings
 
@@ -155,3 +151,15 @@ def validate_runtime(candidate: Settings | None = None) -> None:
             f"satu dari: {', '.join(sorted(SUPPORTED_AUTH_MODES))}."
         )
 
+    if runtime.auth_mode == "install-token":
+        token = runtime.app_install_token.strip()
+        if not token:
+            raise RuntimeError(
+                "APP_INSTALL_TOKEN kosong. Mode install-token hanya untuk APK "
+                "dan wajib memakai token instalasi yang dibuat aplikasi."
+            )
+        if token.lower().startswith(PLACEHOLDER_PREFIX):
+            raise RuntimeError(
+                "APP_INSTALL_TOKEN masih placeholder 'ganti-dengan-...'. "
+                "Gunakan token acak per instalasi, bukan nilai contoh."
+            )

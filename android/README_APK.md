@@ -54,7 +54,7 @@ FastAPI 0.115.0. `api/schemas.py` sudah dibuat kompatibel untuk v1 dan v2:
 - `model_validate()` / `model_dump()` tersedia sebagai shim di v1.
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
-Versi desktop di `requirements.txt` tetap memakai pydantic v2; seluruh 115 test
+Versi desktop di `requirements.txt` tetap memakai pydantic v2; seluruh 119 test
 lulus di kedua jalur (v2 dan v1 + FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di

@@ -6,7 +6,6 @@ from dataclasses import replace
 from config import settings
 from services import settings_service
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 BOT_TOKEN = "123456789:ABCdefghijklmnopqrstuvwxyz"
 
 
@@ -19,17 +18,15 @@ def _configure(client):
             "chat_id": "987654321",
             "bot_token": BOT_TOKEN,
         },
-        headers=ADMIN_HEADERS,
     )
     assert response.status_code == 200, response.text
 
 
 def _backup_and_restore(client):
-    backup = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    backup = client.post("/api/admin/backup")
     assert backup.status_code == 200, backup.text
     restore = client.post(
         "/api/admin/restore",
-        headers=ADMIN_HEADERS,
         files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
     )
     assert restore.status_code == 200, restore.text
@@ -78,7 +75,6 @@ def test_simpan_token_kembali_menghapus_penanda(client):
             "chat_id": "987654321",
             "bot_token": BOT_TOKEN,
         },
-        headers=ADMIN_HEADERS,
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["needs_reconfig"] is False

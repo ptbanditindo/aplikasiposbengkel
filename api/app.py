@@ -193,7 +193,6 @@ def create_app() -> FastAPI:
             garansi_syarat=settings.garansi_syarat,
             metode_bayar=["CASH", "TRANSFER"],
             keluhan_presets=KELUHAN_PRESETS,
-            admin_token_required=settings.admin_token_required,
         )
 
     if FRONTEND_DIR.exists():

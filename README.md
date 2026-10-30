@@ -109,9 +109,10 @@ alur reset ada di [`android/README_PIN.md`](android/README_PIN.md).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
-terenkripsi. Shell WebView hanya mengizinkan navigasi ke `http://127.0.0.1`
-pada port backend aplikasi; layar PIN web tidak dipakai karena PIN sudah
-native.
+terenkripsi. Server menolak startup bila token itu kosong atau masih
+placeholder `ganti-dengan-...`. Shell WebView hanya mengizinkan navigasi ke
+`http://127.0.0.1` pada port backend aplikasi; layar PIN web tidak dipakai
+karena PIN sudah native.
 
 Batasan APK saat ini: cetak ke printer thermal dari WebView dan tombol unduh
 backup berbasis blob belum diimplementasikan; backup terjadwal Telegram hanya
@@ -136,7 +137,7 @@ run.py          runner lokal
 pytest -q
 ```
 
-115 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
+119 test mencakup transaksi, stok, garansi, laporan, pengaturan, backup/restore,
 Telegram, serta pemeriksaan keamanan akses (PIN, sesi, token instalasi,
 loopback, host/origin). Suite yang sama lulus di dua jalur
 dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 + FastAPI 0.115

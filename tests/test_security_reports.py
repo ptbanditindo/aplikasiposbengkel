@@ -65,7 +65,7 @@ def test_config_tidak_membocorkan_rahasia(client):
     raw = response.text
     assert "test-admin-token" not in raw
     assert "SECRET_KEY" not in raw
-    assert response.json()["admin_token_required"] is True
+    assert "admin_token_required" not in response.json()
     assert response.json()["bengkel"]["bank_nama"] == "BCA TEST"
 
 

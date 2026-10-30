@@ -59,6 +59,53 @@ def test_auth_mode_tidak_dikenal_ditolak():
         validate_runtime(replace(settings, auth_mode="buka-saja"))
 
 
+def test_startup_menolak_token_instalasi_kosong():
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime(
+            replace(settings, auth_mode="install-token", app_install_token="")
+        )
+    assert "APP_INSTALL_TOKEN" in str(exc.value)
+
+
+def test_startup_menolak_token_instalasi_placeholder():
+    with pytest.raises(RuntimeError) as exc:
+        validate_runtime(
+            replace(
+                settings,
+                auth_mode="install-token",
+                app_install_token="ganti-dengan-token-rahasia",
+            )
+        )
+    assert "placeholder" in str(exc.value)
+
+
+def test_startup_menerima_token_instalasi_acak():
+    validate_runtime(
+        replace(
+            settings,
+            auth_mode="install-token",
+            app_install_token="a" * 64,
+        )
+    )
+
+
+def test_create_app_menolak_kredensial_placeholder(monkeypatch):
+    import config as config_module
+    from api.app import create_app
+
+    monkeypatch.setattr(
+        config_module,
+        "settings",
+        replace(
+            settings,
+            auth_mode="install-token",
+            app_install_token="ganti-dengan-abc",
+        ),
+    )
+    with pytest.raises(RuntimeError):
+        create_app()
+
+
 def test_dokumentasi_dan_openapi_dimatikan(client):
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404, path

@@ -403,7 +403,6 @@ class ConfigOut(CompatBase):
     garansi_syarat: str
     metode_bayar: List[str]
     keluhan_presets: List[str]
-    admin_token_required: bool
 
 
 class PinRequest(CompatBase):

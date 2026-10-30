@@ -5,7 +5,6 @@ from datetime import date
 
 import pytest
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 
 
 def _receipt_text(body) -> str:
@@ -287,7 +286,7 @@ def test_laba_kotor_historis_memakai_snapshot_modal(
 
     # Master dihapus pun laba historis tetap terbaca dari snapshot nota.
     deleted = client.delete(
-        f"/api/stock/{item['id']}", headers=ADMIN_HEADERS
+        f"/api/stock/{item['id']}"
     )
     assert deleted.status_code == 204, deleted.text
     detail_after_delete = client.get(f"/api/service-records/{record_id}").json()

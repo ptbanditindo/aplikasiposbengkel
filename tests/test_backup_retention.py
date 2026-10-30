@@ -9,7 +9,6 @@ from config import settings
 from services import backup_service, telegram_backup_service
 from services.errors import BusinessValidationError
 
-ADMIN_HEADERS = {"X-Admin-Token": "test-admin-token"}
 BOT_TOKEN = "123456789:ABCdefghijklmnopqrstuvwxyz"
 
 
@@ -43,13 +42,12 @@ def test_create_backup_memangkas_sampai_batas_retensi(client):
 
 
 def test_restore_memangkas_salinan_sebelum_restore(client):
-    backup = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    backup = client.post("/api/admin/backup")
     assert backup.status_code == 200, backup.text
 
     for _ in range(5):
         restore = client.post(
             "/api/admin/restore",
-            headers=ADMIN_HEADERS,
             files={"file": ("backup.db", backup.content, "application/x-sqlite3")},
         )
         assert restore.status_code == 200, restore.text
@@ -67,7 +65,6 @@ def test_retry_telegram_memakai_ulang_satu_file(client, db_session, monkeypatch)
             "chat_id": "987654321",
             "bot_token": BOT_TOKEN,
         },
-        headers=ADMIN_HEADERS,
     )
     assert response.status_code == 200, response.text
 
@@ -103,7 +100,7 @@ def test_backup_dibatalkan_saat_ruang_disk_kurang(client, monkeypatch):
         lambda _path: SimpleNamespace(total=10**12, used=10**12, free=1024),
     )
 
-    response = client.post("/api/admin/backup", headers=ADMIN_HEADERS)
+    response = client.post("/api/admin/backup")
     assert response.status_code == 400
     assert "ruang" in response.json()["detail"].lower()
     assert _backup_files() == []

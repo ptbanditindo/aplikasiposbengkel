@@ -48,9 +48,6 @@ from database.session import SessionLocal, engine  # noqa: E402
 BASE_URL = "http://127.0.0.1:8000"
 TEST_PIN = "2468"
 
-# Endpoint sensitif kini memakai sesi PIN; header lama tidak lagi dipakai.
-ADMIN_HEADERS = {}
-
 
 @pytest.fixture(scope="session")
 def client():
