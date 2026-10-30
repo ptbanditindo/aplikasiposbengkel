@@ -66,9 +66,14 @@ def database_file_path() -> Path:
 
 
 def _redact_secrets(path: Path) -> None:
-    """Token bot tidak boleh ikut tersimpan di file backup yang dibagikan."""
+    """Token bot tidak boleh ikut tersimpan di file backup yang dibagikan.
+
+    `secure_delete` menimpa isi halaman yang dihapus, lalu `VACUUM` menulis ulang
+    file sehingga sisa token tidak tertinggal di free page.
+    """
     connection = sqlite3.connect(str(path))
     try:
+        connection.execute("PRAGMA secure_delete = ON")
         tables = {
             row[0]
             for row in connection.execute(
@@ -80,6 +85,7 @@ def _redact_secrets(path: Path) -> None:
                 "UPDATE app_settings SET value = '' WHERE key = 'telegram.bot_token'"
             )
             connection.commit()
+            connection.execute("VACUUM")
     finally:
         connection.close()
 
@@ -162,6 +168,7 @@ def restore_backup(file_bytes: bytes) -> None:
             + ".db"
         )
         shutil.copy2(target, safety)
+        _redact_secrets(safety)
 
     db_session.engine.dispose()
     shutil.move(str(temp_path), str(target))
