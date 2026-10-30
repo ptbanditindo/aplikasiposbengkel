@@ -11,9 +11,10 @@ PinActivity (gerbang PIN)
        ├─ BackendManager.start()
        │    ├─ BackendInstaller: ekstrak assets/bengkel_backend.zip
        │    │    ke codeCacheDir/backend (sekali per versi aplikasi)
-       │    └─ bootstrap.py: uvicorn di 127.0.0.1:8000 (thread Python)
-       ├─ BackendHealth: polling GET /api/health sampai siap
-       ├─ WebView.loadUrl("http://127.0.0.1:8000/")
+       │    ├─ pilih port bebas 8000-8010
+       │    └─ bootstrap.py: uvicorn di 127.0.0.1:<port> (thread Python)
+       ├─ BackendHealth: polling GET /api/health pada port itu sampai siap
+       ├─ WebView.loadUrl("http://127.0.0.1:<port>/")
        └─ Injeksi window.__BENGKEL_ADMIN_TOKEN__ (per-instalasi)
 ```
 
@@ -27,7 +28,10 @@ PinActivity (gerbang PIN)
   berubah agar ZIP diekstrak ulang.
 - **Data pengguna** disimpan di `filesDir/`: database SQLite di
   `files/data/bengkel_radiator.db` dan backup di `files/backups/`.
-- **Server** hanya mendengarkan `127.0.0.1:8000` dan berhenti otomatis saat
+- **Server** hanya mendengarkan `127.0.0.1` pada port bebas pertama di
+  8000-8010 (Ref: T-07). `BackendManager` baru menandai server siap setelah
+  `/api/health` menjawab, sehingga tombol "Coba lagi" benar-benar memulai ulang
+  bila port bentrok atau thread uvicorn mati. Server berhenti otomatis saat
   proses aplikasi dimatikan. Setelah reset data, `LocalDataResetter` memanggil
   `BackendManager.stop()` (menutup koneksi SQLite, dispose engine) sebelum
   menghapus file, lalu `MainActivity` menjalankan server baru dengan database

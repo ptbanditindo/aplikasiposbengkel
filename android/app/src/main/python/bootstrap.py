@@ -65,6 +65,11 @@ def start(backend_dir: str, files_dir: str, port: int, admin_token: str) -> None
     thread.start()
 
 
+def is_alive() -> bool:
+    """True bila thread uvicorn masih hidup (dipakai BackendManager)."""
+    return _thread is not None and _thread.is_alive()
+
+
 def stop() -> None:
     global _server, _thread
     server, thread = _server, _thread

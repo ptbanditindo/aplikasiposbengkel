@@ -6,10 +6,13 @@ import java.net.URL
 /** Menunggu server lokal siap menerima permintaan HTTP. */
 object BackendHealth {
 
-    fun awaitReady(timeoutMs: Long = 90_000L): Boolean {
+    fun awaitReady(
+        port: Int = BackendManager.activePort,
+        timeoutMs: Long = 90_000L,
+    ): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            if (ping()) return true
+            if (ping(port)) return true
             try {
                 Thread.sleep(250L)
             } catch (interrupted: InterruptedException) {
@@ -20,8 +23,8 @@ object BackendHealth {
         return false
     }
 
-    private fun ping(): Boolean = runCatching {
-        val connection = URL("${BackendManager.BASE_URL}/api/health")
+    private fun ping(port: Int): Boolean = runCatching {
+        val connection = URL("http://127.0.0.1:$port/api/health")
             .openConnection() as HttpURLConnection
         connection.connectTimeout = 1_500
         connection.readTimeout = 1_500

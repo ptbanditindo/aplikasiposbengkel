@@ -25,7 +25,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import com.bengkelpos.radiator.backend.BackendHealth
 import com.bengkelpos.radiator.backend.BackendManager
 import com.bengkelpos.radiator.pin.PinActivity
 import com.bengkelpos.radiator.pin.PinSession
@@ -46,6 +45,9 @@ class MainActivity : AppCompatActivity() {
     private var cachedStore: PinStore? = null
     private var pageLoaded = false
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var activePort: Int = BackendManager.DEFAULT_PORT
+    private var startingBackend = false
+    private var registeredOrigin: String? = null
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -144,7 +146,6 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
         }
         webView.addJavascriptInterface(PinBridge(), "BengkelPin")
-        registerAdminTokenScript()
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
                 view: WebView,
@@ -204,6 +205,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBackend() {
+        if (startingBackend) return
+        startingBackend = true
         pageLoaded = false
         privacyCover.visibility = View.GONE
         offlineText.setText(R.string.preparing_hint)
@@ -212,11 +215,16 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val ready = runCatching {
                 BackendManager.start(applicationContext, token)
-                BackendHealth.awaitReady()
             }.getOrDefault(false)
             runOnUiThread {
+                startingBackend = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                if (ready) loadApp() else showBackendError()
+                if (ready) {
+                    activePort = BackendManager.activePort
+                    loadApp()
+                } else {
+                    showBackendError()
+                }
             }
         }.start()
     }
@@ -230,12 +238,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun registerAdminTokenScript() {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        val origin = appOrigin()
+        if (origin == registeredOrigin) return
         runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
                 adminTokenScript(),
-                setOf(APP_ORIGIN),
+                setOf(origin),
             )
+            registeredOrigin = origin
         }
     }
 
@@ -259,8 +270,13 @@ class MainActivity : AppCompatActivity() {
         pageLoaded = false
         privacyCover.visibility = View.GONE
         offlinePanel.visibility = View.GONE
-        webView.loadUrl(APP_URL)
+        registerAdminTokenScript()
+        webView.loadUrl(appUrl())
     }
+
+    private fun appOrigin(): String = "http://$APP_HOST:$activePort"
+
+    private fun appUrl(): String = "${appOrigin()}/"
 
     private fun isLocalUrl(url: Uri?): Boolean {
         if (url == null) return false
@@ -268,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         if (url.scheme != "http") return false
         if (url.host != APP_HOST) return false
         // Hanya port backend aplikasi ini; port localhost lain tetap ditolak.
-        return url.port == APP_PORT
+        return url.port == activePort
     }
 
     private fun storeHasPin(): Boolean =
@@ -303,9 +319,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val APP_HOST = "127.0.0.1"
-        private const val APP_PORT = BackendManager.PORT
-        private val APP_ORIGIN = "http://$APP_HOST:$APP_PORT"
-        private val APP_URL = "$APP_ORIGIN/"
+        const val APP_HOST = "127.0.0.1"
     }
 }

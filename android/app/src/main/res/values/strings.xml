@@ -35,7 +35,7 @@
     <string name="restore_hint">Unduh file backup dari chat Telegram, lalu impor lewat Pengaturan → Pulihkan database.</string>
     <string name="offline_hint">Server lokal belum merespons.\nCoba lagi.</string>
     <string name="preparing_hint">Menyiapkan server lokal.\nMohon tunggu…</string>
-    <string name="backend_error_hint">Server lokal gagal dijalankan. Tekan Coba lagi. Bila tetap gagal, instal ulang aplikasi.</string>
+    <string name="backend_error_hint">Server lokal gagal dijalankan. Tutup aplikasi lain yang mungkin memakai port 8000-8010, lalu tekan Coba lagi.</string>
     <string name="retry">Coba lagi</string>
     <string name="external_link_blocked">Tautan eksternal diblokir di dalam aplikasi.</string>
 </resources>
