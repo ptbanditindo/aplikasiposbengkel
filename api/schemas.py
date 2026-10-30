@@ -382,6 +382,7 @@ class TelegramInfoOut(CompatBase):
     jam: str
     chat_id: str
     configured: bool
+    needs_reconfig: bool = False
     last_sent_at: Optional[str] = None
     last_error: Optional[str] = None
 

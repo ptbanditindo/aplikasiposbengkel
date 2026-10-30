@@ -175,8 +175,20 @@ def restore_backup(file_bytes: bytes) -> None:
     db_session.init_db()
 
     from database.seed import seed_defaults
+    from services import settings_service
 
     with db_session.SessionLocal() as db:
         seed_defaults(db)
+
+    # Backup sengaja tidak menyimpan token; tandai agar UI meminta token ulang
+    # bila konfigurasi aktif tidak lagi lengkap setelah restore.
+    with db_session.SessionLocal() as db:
+        config = settings_service.get_telegram_config(db)
+        settings_service.set_setting(
+            db,
+            "telegram.needs_reconfig",
+            "" if config["bot_token"] and config["chat_id"] else "1",
+        )
+        db.commit()
 
     prune_backups()

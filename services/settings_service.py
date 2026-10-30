@@ -115,10 +115,11 @@ def get_telegram_config(db: Session) -> Dict[str, Any]:
     enabled_default = settings.telegram_backup_enabled
     jam = stored.get("jam") or settings.telegram_backup_time or "21:00"
     return {
-        "bot_token": stored.get("bot_token", settings.telegram_bot_token),
-        "chat_id": stored.get("chat_id", settings.telegram_chat_id),
+        "bot_token": stored.get("bot_token") or settings.telegram_bot_token,
+        "chat_id": stored.get("chat_id") or settings.telegram_chat_id,
         "enabled": _stored_bool(stored.get("enabled"), enabled_default),
         "jam": jam,
+        "needs_reconfig": _stored_bool(stored.get("needs_reconfig")),
         "last_sent_at": stored.get("last_sent_at", ""),
         "last_attempt_at": stored.get("last_attempt_at", ""),
         "pending_since": stored.get("pending_since", ""),
@@ -133,6 +134,7 @@ def telegram_public_info(config: Dict[str, Any]) -> Dict[str, Any]:
         "jam": config.get("jam") or "21:00",
         "chat_id": config.get("chat_id") or "",
         "configured": bool(config.get("bot_token") and config.get("chat_id")),
+        "needs_reconfig": bool(config.get("needs_reconfig")),
         "last_sent_at": config.get("last_sent_at") or None,
         "last_error": config.get("last_error") or None,
     }
@@ -163,6 +165,11 @@ def update_telegram_config(db: Session, payload: Dict[str, Any]) -> Dict[str, An
     set_setting(db, f"{TELEGRAM_PREFIX}enabled", "1" if enabled else "0")
     set_setting(db, f"{TELEGRAM_PREFIX}jam", jam)
     set_setting(db, f"{TELEGRAM_PREFIX}last_error", "")
-
     db.commit()
-    return get_telegram_config(db)
+
+    config = get_telegram_config(db)
+    if config["bot_token"] and config["chat_id"]:
+        set_setting(db, f"{TELEGRAM_PREFIX}needs_reconfig", "")
+        db.commit()
+        config = get_telegram_config(db)
+    return config

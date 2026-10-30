@@ -95,6 +95,16 @@ button { color: inherit; touch-action: manipulation; }
 .text-right { text-align: right; }
 .text-center { text-align: center; }
 
+.telegram-banner {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #e6c98f;
+  border-radius: var(--radius-control);
+  background: #fbf3e2;
+  color: var(--warning);
+  font-size: 12.5px;
+}
+
 /* ------------------------------- Shell ---------------------------------- */
 .app-shell {
   display: grid;

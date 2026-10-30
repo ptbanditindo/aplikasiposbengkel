@@ -2664,6 +2664,11 @@
     const status = $('#telegramStatus');
     if (!status) return;
 
+    const banner = $('#telegramReconfigBanner');
+    if (banner) {
+      banner.classList.toggle('hidden', !telegram.needs_reconfig);
+    }
+
     const parts = [];
     if (!telegram.configured) {
       parts.push('Bot token dan chat ID belum lengkap.');

@@ -41,6 +41,7 @@ def test_config_telegram_default_nonaktif(client):
         "jam": "21:00",
         "chat_id": "",
         "configured": False,
+        "needs_reconfig": False,
         "last_sent_at": None,
         "last_error": None,
     }
