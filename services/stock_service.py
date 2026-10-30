@@ -13,6 +13,23 @@ from services.utils import clean_text, money
 
 LOW_STOCK_THRESHOLD = 3
 
+_STOCK_UPDATE_LABELS = {
+    "nama": "Nama",
+    "harga_modal": "Harga modal",
+    "harga_jual": "Harga jual",
+    "jumlah": "Jumlah",
+}
+_JASA_UPDATE_LABELS = {
+    "nama": "Nama",
+    "harga_standar": "Harga standar",
+}
+
+
+def _reject_null_fields(values: dict, labels: dict[str, str]) -> None:
+    for field, label in labels.items():
+        if field in values and values[field] is None:
+            raise BusinessValidationError(f"{label} tidak boleh kosong (null).")
+
 
 def list_stock(db: Session) -> List[StockItem]:
     return repo.list_stock(db)
@@ -74,6 +91,8 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
     if item is None:
         raise NotFoundError("Sparepart tidak ditemukan.")
 
+    _reject_null_fields(values, _STOCK_UPDATE_LABELS)
+
     if "kode" in values:
         new_kode = clean_text(values["kode"], max_length=64, allow_newlines=False) or None
         if new_kode:
@@ -125,6 +144,8 @@ def update_jasa(db: Session, jasa_id: int, **values) -> HargaJasa:
     jasa = repo.get_jasa(db, jasa_id)
     if jasa is None:
         raise NotFoundError("Tarif jasa tidak ditemukan.")
+
+    _reject_null_fields(values, _JASA_UPDATE_LABELS)
 
     clean_nama = clean_text(
         values.get("nama", jasa.nama), max_length=255, allow_newlines=False
