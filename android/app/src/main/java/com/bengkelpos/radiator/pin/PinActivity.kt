@@ -103,7 +103,7 @@ class PinActivity : AppCompatActivity() {
         startGate()
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         refreshLockedState()
@@ -260,10 +260,10 @@ class PinActivity : AppCompatActivity() {
 
     private fun handleConfirm(current: PinStore, pin: CharArray) {
         val reference = firstPin
-        val matches = reference != null && reference.contentEquals(pin)
-        pin.fill('\u0000')
-        if (!matches) {
+        val confirmedPin = PinEnrollment.confirmedPin(reference, pin)
+        if (confirmedPin == null) {
             reference?.fill('\u0000')
+            pin.fill('\u0000')
             firstPin = null
             mode = Mode.CREATE
             pinTitle.setText(R.string.pin_create_title)
@@ -278,8 +278,9 @@ class PinActivity : AppCompatActivity() {
         reference?.fill('\u0000')
         firstPin = null
         runOnWorker {
-            val saved = runCatching { current.savePin(pin) }.isSuccess
-            pin.fill('\u0000')
+            // PIN baru boleh dibersihkan hanya setelah hash-nya tersimpan.
+            val saved = runCatching { current.savePin(confirmedPin) }.isSuccess
+            confirmedPin.fill('\u0000')
             runOnUi {
                 busy = false
                 if (!saved) {
@@ -448,7 +449,7 @@ class PinActivity : AppCompatActivity() {
             .setView(container)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.reset_action) { _, _ ->
-                if (input.text.toString() == RESET_KEYWORD) {
+                if (PinResetKeyword.matches(input.text)) {
                     performReset()
                 } else {
                     Toast.makeText(this, R.string.reset_type_hint, Toast.LENGTH_LONG).show()
@@ -465,21 +466,22 @@ class PinActivity : AppCompatActivity() {
         pinCountdown.visibility = View.GONE
         hideMessage()
         runOnWorker {
-            LocalDataResetter.reset(this)
-            val reopened = runCatching { PinStore.open(this) }
+            // Reset hanya menghapus hash PIN; database, transaksi, stok, backup,
+            // dan token instalasi tetap utuh.
+            val current = store ?: runCatching { PinStore.open(this) }.getOrNull()
+            val cleared = current != null && runCatching { current.clearPin() }.isSuccess
             runOnUi {
                 busy = false
-                resetInProgress = true
-                entered.setLength(0)
-                firstPin?.fill('\u0000')
-                firstPin = null
-                val reopenedStore = reopened.getOrNull()
-                if (reopenedStore == null) {
+                if (!cleared) {
                     store = null
                     showStorageError()
                     return@runOnUi
                 }
-                store = reopenedStore
+                resetInProgress = true
+                entered.setLength(0)
+                firstPin?.fill('\u0000')
+                firstPin = null
+                store = current
                 beginCreate()
             }
         }
@@ -488,7 +490,7 @@ class PinActivity : AppCompatActivity() {
     private fun showResetDoneDialog() {
         AlertDialog.Builder(this)
             .setTitle(R.string.reset_done_title)
-            .setMessage(getString(R.string.reset_done) + "\n\n" + getString(R.string.restore_hint))
+            .setMessage(R.string.reset_done)
             .setCancelable(false)
             .setPositiveButton(R.string.ok) { _, _ -> proceedAfterUnlock(clearStack = true) }
             .show()
@@ -503,7 +505,6 @@ class PinActivity : AppCompatActivity() {
             .setMessage(R.string.pin_storage_message)
             .setCancelable(false)
             .setNegativeButton(R.string.cancel) { _, _ -> finishAffinity() }
-            .setPositiveButton(R.string.reset_action) { _, _ -> performReset() }
             .show()
     }
 
@@ -534,6 +535,5 @@ class PinActivity : AppCompatActivity() {
 
     companion object {
         const val PIN_LENGTH = 6
-        private const val RESET_KEYWORD = "RESET"
     }
 }

@@ -44,7 +44,7 @@
     const raw = input ? input.value : '';
     if (!moneyInputValid(raw)) {
       toast(
-        label + ' harus rupiah bulat tanpa desimal, mis. 150000.',
+        label + ' harus berupa rupiah bulat tanpa desimal. Contoh: 150000.',
         'warning'
       );
       if (input) input.focus();
@@ -130,7 +130,7 @@
       if (unit.jenis_mobil) text += ' (' + unit.jenis_mobil + ')';
       return text;
     }
-    let text = '[BAWA RADIATOR SAJA] ' + (unit.label_radiator || '-');
+    let text = 'Radiator saja · ' + (unit.label_radiator || '-');
     if (unit.tipe_radiator) text += ' (' + unit.tipe_radiator + ')';
     return text;
   }
@@ -172,6 +172,15 @@
     previewSeq: 0,
     previewTimer: null,
     previewError: null,
+    printerSettingsBound: false,
+    printerActionId: null,
+    printerDiscovery: [],
+    printerDiscoveryType: null,
+    printing: false,
+    printPrinterId: null,
+    printFailure: null,
+    printJobTimer: null,
+    printJobSeen: new Set(),
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -191,17 +200,26 @@
   }
 
   let modalLayer = 100;
+  const modalHistory = [];
 
   function openModal(selector) {
     const modal = $(selector);
     if (!modal) return;
+    const wasOpen = !modal.classList.contains('hidden');
     modalLayer += 1;
     modal.style.zIndex = String(modalLayer);
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    if (wasOpen) return;
+    modalHistory.push(selector);
+    try {
+      window.history.pushState({ bengkelModal: selector }, '');
+    } catch (err) {
+      /* Riwayat tidak tersedia; modal tetap bisa ditutup lewat tombol. */
+    }
   }
 
-  function closeModal(selector) {
+  function hideModal(selector) {
     const modal = $(selector);
     if (!modal) return;
     modal.classList.add('hidden');
@@ -211,11 +229,47 @@
     }
   }
 
+  function closeModal(selector) {
+    hideModal(selector);
+    const index = modalHistory.lastIndexOf(selector);
+    if (index >= 0) modalHistory.splice(index, 1);
+    if (
+      window.history.state &&
+      window.history.state.bengkelModal === selector
+    ) {
+      try {
+        window.history.back();
+      } catch (err) {
+        /* noop */
+      }
+    }
+  }
+
   function closeAllModals() {
     $$('.modal-backdrop').forEach((modal) => modal.classList.add('hidden'));
     document.body.style.overflow = '';
     modalLayer = 100;
+    const steps = modalHistory.length;
+    modalHistory.length = 0;
+    if (steps > 0 && window.history.state && window.history.state.bengkelModal) {
+      try {
+        window.history.go(-steps);
+      } catch (err) {
+        /* noop */
+      }
+    }
   }
+
+  window.addEventListener('popstate', () => {
+    const active =
+      window.history.state && window.history.state.bengkelModal;
+    while (modalHistory.length) {
+      const top = modalHistory[modalHistory.length - 1];
+      if (top === active) break;
+      modalHistory.pop();
+      hideModal(top);
+    }
+  });
 
   function setBusy(button, busy, label) {
     if (!button) return;
@@ -252,7 +306,7 @@
       return '<span class="badge gray">Tanpa garansi</span>';
     }
     if (record.status_klaim === 'Sudah claim') {
-      return '<span class="badge blue">Sudah claim</span>';
+      return '<span class="badge blue">Sudah diklaim</span>';
     }
     if (record.garansi_aktif) {
       return (
@@ -266,7 +320,7 @@
 
   function statusBadge(record) {
     if (record.status === 'VOID') {
-      return '<span class="badge red">VOID</span>';
+      return '<span class="badge red">Dibatalkan</span>';
     }
     return '';
   }
@@ -323,6 +377,7 @@
     if (view === 'settings') {
       fillSettingsForm();
       fillTelegramForm();
+      initPrinterSettings();
     }
     if (view === 'pos' && !state.selectedCustomer) {
       const search = $('#customerSearch');
@@ -346,7 +401,7 @@
     state.receiptWidth = preferredReceiptWidth();
     syncReceiptWidthUI();
     renderComplaintChips();
-    updateReceiptNotice();
+    refreshReceiptPrinterUI();
     fillSettingsForm();
     fillTelegramForm();
   }
@@ -450,7 +505,7 @@
       state.customerResults = results;
       renderCustomerResults(results);
     } catch (err) {
-      toast('Pencarian pelanggan gagal: ' + err.message, 'error');
+      toast('Pencarian pelanggan gagal. Coba lagi.', 'error');
     }
   }
 
@@ -470,7 +525,7 @@
     list.classList.remove('hidden');
     if (!results.length) {
       list.innerHTML =
-        '<div class="autocomplete-empty">Pelanggan tidak ditemukan. Gunakan tombol Pelanggan Baru.</div>';
+        '<div class="autocomplete-empty">Pelanggan tidak ditemukan. Tambahkan lewat tombol Pelanggan baru.</div>';
       return;
     }
     list.innerHTML = results
@@ -521,7 +576,7 @@
       state.units = await API.customerUnits(customerId);
       renderUnits();
     } catch (err) {
-      toast('Gagal memuat unit pelanggan: ' + err.message, 'error');
+      toast('Gagal memuat unit pelanggan. Coba pilih pelanggan lagi.', 'error');
     }
   }
 
@@ -542,12 +597,12 @@
         const isCar = unit.unit_type === 'MOBIL';
         const title = isCar ? unit.nopol || '-' : unit.label_radiator || '-';
         const subtitle = isCar
-          ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' - ') ||
+          ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
             'Mobil lengkap'
           : unit.tipe_radiator || 'Radiator copotan';
         const tag = isCar
           ? ''
-          : '<span class="unit-label">TANPA NOPOL</span>';
+          : '<span class="unit-label">Tanpa nopol</span>';
         return (
           '<button type="button" class="unit-card' +
           (selected ? ' selected' : '') +
@@ -690,7 +745,7 @@
   function openCustomerModal(fromPos) {
     state.customerReturnToPos = !!fromPos;
     $('#customerForm').reset();
-    $('#customerModalTitle').textContent = 'Tambah Pelanggan';
+    $('#customerModalTitle').textContent = 'Tambah pelanggan';
     openModal('#customerModal');
     setTimeout(() => $('#custNama').focus(), 60);
   }
@@ -730,7 +785,7 @@
       '<span class="unit-tag' +
       (isCar ? '' : ' radiator') +
       '">' +
-      (isCar ? 'MOBIL' : 'RADIATOR') +
+      (isCar ? 'Mobil' : 'Radiator') +
       '</span>' +
       '</div>'
     );
@@ -789,7 +844,7 @@
       '</span>' +
       '<button type="button" class="btn btn-outline btn-xs" data-action="service-customer" data-id="' +
       customer.id +
-      '">Buat Servis</button>' +
+      '">Buat servis</button>' +
       '</div>' +
       '</article>'
     );
@@ -800,7 +855,7 @@
       state.customerDirectory = await API.customerOverview(query || '');
       renderCustomerDirectory();
     } catch (err) {
-      toast('Gagal memuat database pelanggan: ' + err.message, 'error', 6000);
+      toast('Gagal memuat data pelanggan. Coba muat ulang.', 'error', 6000);
     }
   }
 
@@ -830,7 +885,7 @@
       const query = $('#customerDirectorySearch').value.trim();
       $('#customerDirectoryEmpty').textContent = query
         ? 'Tidak ada pelanggan yang cocok dengan pencarian "' + query + '".'
-        : 'Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat kepemilikan unit.';
+        : 'Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat unit servis.';
       $('#customerDirectoryEmpty').classList.remove('hidden');
       return;
     }
@@ -844,7 +899,7 @@
     const jasaPicker = $('#jasaPicker');
     if (jasaPicker) {
       jasaPicker.innerHTML =
-        '<option value="">- Pilih tarif jasa (opsional) -</option>' +
+        '<option value="">Pilih tarif jasa (opsional)</option>' +
         state.jasa
           .map(
             (jasa) =>
@@ -852,7 +907,7 @@
               jasa.id +
               '">' +
               esc(jasa.nama) +
-              ' - ' +
+              ' · ' +
               fmtRp(jasa.harga_standar) +
               '</option>'
           )
@@ -862,7 +917,7 @@
     const partPicker = $('#partPicker');
     if (partPicker) {
       partPicker.innerHTML =
-        '<option value="">- Pilih sparepart (opsional) -</option>' +
+        '<option value="">Pilih sparepart (opsional)</option>' +
         state.stock
           .map(
             (item) =>
@@ -872,7 +927,7 @@
               esc(item.nama) +
               ' (stok ' +
               item.jumlah +
-              ') - ' +
+              ') · ' +
               fmtRp(item.harga_jual) +
               '</option>'
           )
@@ -902,9 +957,9 @@
     $('#partQty').value = '1';
     if (hint) {
       hint.textContent =
-        'Stok tersedia: ' +
+        'Stok tersedia ' +
         stock.jumlah +
-        ' - harga patokan ' +
+        '. Harga patokan ' +
         fmtRp(stock.harga_jual);
     }
   }
@@ -1160,7 +1215,7 @@
       }
       setLineSubtotals('job', null);
       setLineSubtotals('part', null);
-      setSummaryNote('Perkiraan dari server; nilai final dicatat saat nota disimpan.');
+      setSummaryNote('Perkiraan sementara. Nilai final dicatat saat nota disimpan.');
       return;
     }
 
@@ -1179,7 +1234,7 @@
       : fmtRp(preview.kembalian);
     const changeRow = changeEl.parentElement;
     if (changeRow) changeRow.classList.toggle('short', kurang);
-    setSummaryNote('Perkiraan dari server; nilai final dicatat saat nota disimpan.');
+    setSummaryNote('Perkiraan sementara. Nilai final dicatat saat nota disimpan.');
   }
 
   async function refreshPreview() {
@@ -1209,7 +1264,7 @@
     ) {
       renderPreview(
         null,
-        'Format angka tidak valid. Gunakan rupiah bulat, mis. 150000.'
+        'Format angka tidak valid. Gunakan rupiah bulat. Contoh: 150000.'
       );
       return;
     }
@@ -1431,12 +1486,10 @@
         toast(warning, 'warning', 8000)
       );
 
-      showReceipt(result.receipt);
+      if (printAfter) showReceipt(result.receipt);
       resetPosState();
 
       await Promise.all([loadDashboard(), loadStock()]);
-
-      if (printAfter) await printReceipt(result.receipt, true);
     } catch (err) {
       toast(err.message, 'error', 7000);
     } finally {
@@ -1456,6 +1509,8 @@
   function preferredReceiptWidth() {
     const stored = window.localStorage.getItem(RECEIPT_WIDTH_KEY);
     if (stored) return normalizeReceiptWidth(stored);
+    const primary = activePrimaryPrinter();
+    if (primary) return normalizeReceiptWidth(primary.paper_width);
     return normalizeReceiptWidth(
       state.config && state.config.printer.paper_width
     );
@@ -1463,13 +1518,23 @@
 
   function showReceipt(receipt) {
     state.receipt = receipt;
-    state.receiptWidth = preferredReceiptWidth();
+    state.printPrinterId = null;
+    state.printFailure = null;
+    clearPrintJobTimer();
+    const primary = activePrimaryPrinter();
+    state.receiptWidth = primary
+      ? normalizeReceiptWidth(primary.paper_width)
+      : preferredReceiptWidth();
+    if (hasNativeBridge() && state.receiptWidth === 'A4') {
+      state.receiptWidth = 58;
+    }
     syncReceiptWidthUI();
     $('#receiptTitle').textContent = 'Struk ' + receipt.no_nota;
     $('#receiptSubtitle').textContent =
       receipt.customer_nama + ' - ' + receipt.unit_deskripsi;
     renderReceiptPreview();
-    updateReceiptNotice();
+    refreshReceiptPrinterUI();
+    setReceiptPrintStatus('', '');
     openModal('#receiptModal');
   }
 
@@ -1509,21 +1574,184 @@
     renderReceiptPreview();
   }
 
-  function updateReceiptNotice() {
+  function hasNativeBridge() {
+    return Boolean(
+      window.BengkelBridge && window.BengkelBridge.available()
+    );
+  }
+
+  function activePrimaryPrinter() {
+    const manager = window.printerManager;
+    return manager ? manager.primaryPrinter() : null;
+  }
+
+  function selectedPrintPrinter() {
+    const manager = window.printerManager;
+    if (!manager) return null;
+    if (state.printPrinterId) {
+      return manager.printerSnapshot(state.printPrinterId);
+    }
+    return manager.primaryPrinter();
+  }
+
+  function printerStatusLabel(printer) {
+    if (!printer) return { label: 'Belum diatur', tone: 'gray' };
+    if (printer.supported === false) {
+      return { label: 'Tidak didukung', tone: 'red' };
+    }
+    if (printer.status === 'CONNECTED') {
+      return { label: 'Terhubung', tone: 'green' };
+    }
+    if (printer.status === 'CONNECTING') {
+      return { label: 'Menghubungkan...', tone: 'amber' };
+    }
+    if (printer.status === 'UNAVAILABLE') {
+      return { label: 'Tidak tersedia', tone: 'red' };
+    }
+    if (printer.status === 'ERROR') {
+      return { label: 'Gagal', tone: 'red' };
+    }
+    const manager = window.printerManager;
+    const adapter = manager && manager.adapterFor(printer.connection_type);
+    if (adapter && adapter.connectionless) {
+      return { label: 'Siap dipakai', tone: 'gray' };
+    }
+    return { label: 'Tersimpan', tone: 'gray' };
+  }
+
+  function refreshReceiptPrinterUI() {
     const note = $('#receiptNotice');
-    if (!note) return;
-    if (!window.BluetoothPrinter.isSupported()) {
-      note.textContent =
-        'Cetak printer sistem bisa dipakai untuk printer thermal maupun printer biasa (A4).';
+    const target = selectedPrintPrinter();
+    if (note) {
+      if (!window.printerManager) {
+        note.textContent = 'Fitur printer tidak tersedia di perangkat ini.';
+      } else if (!target) {
+        note.textContent =
+          'Belum ada printer utama. Tambahkan printer di Pengaturan > Printer.';
+      } else {
+        note.textContent =
+          'Printer: ' +
+          target.name +
+          ' (' +
+          target.paper_width +
+          ' mm, ' +
+          printerTypeLabel(target.connection_type).toLowerCase() +
+          ')';
+      }
+    }
+
+    const nameEl = $('#receiptPrinterName');
+    const statusEl = $('#receiptPrinterStatus');
+    if (nameEl) {
+      nameEl.textContent = target ? target.name : 'Belum ada printer utama';
+    }
+    if (statusEl) {
+      const badge = printerStatusLabel(target);
+      statusEl.textContent = badge.label;
+      statusEl.className = 'badge ' + badge.tone;
+    }
+
+    const native = hasNativeBridge();
+    const browserButton = $('#btnBrowserPrint');
+    if (browserButton) browserButton.classList.toggle('hidden', native);
+    const a4Button = $('#receiptWidthA4');
+    if (a4Button) a4Button.classList.toggle('hidden', native);
+    const printButton = $('#btnReceiptPrint');
+    if (printButton) printButton.disabled = state.printing;
+  }
+
+  function setReceiptPrintStatus(kind, message, options) {
+    const box = $('#receiptPrintStatus');
+    const text = $('#receiptPrintMessage');
+    if (!box || !text) return;
+    if (!message) {
+      box.classList.add('hidden');
+      box.classList.remove('info', 'success', 'error');
+      text.textContent = '';
       return;
     }
-    if (window.BluetoothPrinter.connected) {
-      note.textContent =
-        'Printer siap: ' + (window.BluetoothPrinter.name || 'Printer Thermal');
-      return;
+    box.classList.remove('hidden', 'info', 'success', 'error');
+    box.classList.add(kind || 'info');
+    text.textContent = message;
+
+    const opts = options || {};
+    const retry = $('#btnReceiptRetry');
+    const choose = $('#btnReceiptChooseOther');
+    const settings = $('#btnReceiptOpenSettings');
+    if (retry) retry.classList.toggle('hidden', !opts.retry);
+    if (choose) choose.classList.toggle('hidden', !opts.chooseOther);
+    if (settings) settings.classList.toggle('hidden', !opts.settings);
+  }
+
+  function clearPrintJobTimer() {
+    if (state.printJobTimer) {
+      clearTimeout(state.printJobTimer);
+      state.printJobTimer = null;
     }
-    note.textContent =
-      'Klik Cetak Bluetooth untuk pairing thermal, atau Cetak printer sistem untuk printer lain.';
+  }
+
+  function describeJobState(status) {
+    const stateName = String(status && status.state ? status.state : 'UNKNOWN');
+    if (stateName === 'COMPLETED') return 'Selesai dilaporkan layanan cetak';
+    if (stateName === 'PRINTING') return 'Sedang dikirim ke layanan cetak';
+    if (stateName === 'QUEUED') return 'Menunggu antrean layanan cetak';
+    if (stateName === 'BLOCKED') return 'Tertahan, periksa dialog Android';
+    if (stateName === 'CANCELLED') return 'Dibatalkan dari dialog Android';
+    if (stateName === 'FAILED') return 'Gagal menurut layanan cetak';
+    if (stateName === 'IDLE') return 'Belum ada pekerjaan';
+    if (stateName === 'UNAVAILABLE') return 'Layanan cetak tidak tersedia';
+    return 'Status belum tersedia';
+  }
+
+  function monitorSystemPrintJob(printer, jobId) {
+    const manager = window.printerManager;
+    const adapter = manager && manager.adapterFor('SYSTEM');
+    if (!adapter || typeof adapter.jobStatus !== 'function') return;
+    const key = String(printer.id) + ':' + String(jobId);
+    if (state.printJobSeen.has(key)) return;
+    state.printJobSeen.add(key);
+    clearPrintJobTimer();
+
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      let status = null;
+      try {
+        status = await adapter.jobStatus(jobId);
+      } catch (err) {
+        status = { state: 'UNKNOWN', message: err.message };
+      }
+      const stateName = String((status && status.state) || 'UNKNOWN');
+      const message =
+        'Status pekerjaan Android: ' + describeJobState(status) + '.';
+      if (!$('#receiptModal').classList.contains('hidden')) {
+        const final = ['COMPLETED', 'CANCELLED', 'FAILED', 'UNAVAILABLE'];
+        setReceiptPrintStatus(
+          stateName === 'COMPLETED'
+            ? 'success'
+            : stateName === 'FAILED' || stateName === 'UNAVAILABLE'
+              ? 'error'
+              : 'info',
+          message,
+          {}
+        );
+      }
+      if (stateName === 'COMPLETED') {
+        toast('Layanan cetak melaporkan pekerjaan selesai.', 'success');
+        return;
+      }
+      if (stateName === 'FAILED' || stateName === 'UNAVAILABLE') {
+        toast('Pekerjaan cetak Android gagal. Periksa printer.', 'error', 7000);
+        return;
+      }
+      if (stateName === 'CANCELLED') {
+        toast('Pekerjaan cetak dibatalkan dari dialog Android.', 'info');
+        return;
+      }
+      if (attempts >= 80) return;
+      state.printJobTimer = setTimeout(poll, 1500);
+    };
+    state.printJobTimer = setTimeout(poll, 1200);
   }
 
   async function printReceipt(receipt, silent) {
@@ -1531,55 +1759,146 @@
       toast('Tidak ada struk untuk dicetak.', 'warning');
       return false;
     }
+    if (state.printing) return false;
 
     const width = state.receiptWidth;
-    const lines = width === 58 ? receipt.struk_58 : receipt.struk_80;
-    const printer = window.BluetoothPrinter;
-
     if (width === 'A4') {
-      browserPrint(lines, 'A4');
+      if (hasNativeBridge()) {
+        setReceiptPrintStatus(
+          'error',
+          'Pilih lebar 58 mm atau 80 mm untuk printer utama. Cetak A4 hanya bisa lewat browser di komputer.',
+          {}
+        );
+        toast('Struk memakai lebar kertas printer utama, 58 atau 80 mm.', 'warning');
+        return false;
+      }
+      browserPrint(currentReceiptLines(), 'A4');
+      setReceiptPrintStatus(
+        'info',
+        'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
+        {}
+      );
+      return true;
+    }
+
+    const manager = window.printerManager;
+    if (!manager) {
+      setReceiptPrintStatus(
+        'error',
+        'Fitur printer tidak tersedia. Muat ulang aplikasi.',
+        {}
+      );
       return false;
     }
 
-    const base64 =
-      width === 80 ? receipt.escpos_80_base64 : receipt.escpos_58_base64;
-
-    if (printer.isSupported() && printer.connected) {
-      try {
-        await printer.printBase64(base64);
-        toast('Struk dikirim ke printer Bluetooth.', 'success');
-        return true;
-      } catch (err) {
-        toast('Print Bluetooth gagal: ' + err.message, 'error', 6000);
-      }
-    }
-
-    if (!silent && printer.isSupported()) {
-      const ask = window.confirm(
-        'Printer Bluetooth belum terhubung. Hubungkan sekarang?'
+    const target = selectedPrintPrinter();
+    if (!target) {
+      setReceiptPrintStatus(
+        'error',
+        'Belum ada printer utama. Transaksi tetap tersimpan; pilih printer untuk mencetak struk ini.',
+        { chooseOther: true, settings: authState.role === 'owner' }
       );
-      if (ask) {
-        try {
-          await printer.connect();
-          await printer.printBase64(base64);
-          toast('Struk dicetak.', 'success');
-          return true;
-        } catch (err) {
-          if (err && err.name === 'NotFoundError') {
-            toast('Pemilihan printer dibatalkan.', 'info');
-          } else {
-            toast(
-              'Gagal menghubungkan printer: ' + err.message,
-              'error',
-              6000
-            );
-          }
-        }
-      }
+      toast('Belum ada printer utama. Pilih printer di Pengaturan.', 'warning');
+      return false;
+    }
+    if (target.supported === false) {
+      setReceiptPrintStatus(
+        'error',
+        'Printer ' +
+          printerTypeLabel(target.connection_type) +
+          ' tidak didukung di perangkat ini. Pilih printer lain.',
+        { chooseOther: true, settings: authState.role === 'owner' }
+      );
+      return false;
+    }
+    // Pratinjau harus sama dengan lebar kertas printer tujuan; pengelola
+    // printer memilih payload berdasarkan paper_width perangkat.
+    const targetWidth = normalizeReceiptWidth(target.paper_width);
+    if (state.receiptWidth !== targetWidth) {
+      state.receiptWidth = targetWidth;
+      window.localStorage.setItem(RECEIPT_WIDTH_KEY, String(targetWidth));
+      syncReceiptWidthUI();
+      renderReceiptPreview();
     }
 
-    browserPrint(lines, width);
-    return false;
+    state.printing = true;
+    state.printFailure = null;
+    refreshReceiptPrinterUI();
+    const button = $('#btnReceiptPrint');
+    setBusy(button, true, 'Mengirim...');
+    setReceiptPrintStatus(
+      'info',
+      'Mengirim struk ke ' + target.name + '...',
+      {}
+    );
+
+    try {
+      const result = await manager.printReceipt(receipt, {
+        printerId: target.id,
+      });
+      const adapterResult = result && result.adapter_result;
+      if (
+        target.connection_type === 'SYSTEM' &&
+        adapterResult &&
+        adapterResult.job_id != null
+      ) {
+        setReceiptPrintStatus(
+          'info',
+          'Dialog Android dibuka. ' +
+            'Pekerjaan #' +
+            adapterResult.job_id +
+            ': ' +
+            describeJobState(adapterResult) +
+            '.',
+          {}
+        );
+        monitorSystemPrintJob(target, adapterResult.job_id);
+      } else if (target.connection_type === 'WEB') {
+        setReceiptPrintStatus(
+          'info',
+          'Dialog browser dibuka. Pilih printer lalu konfirmasi.',
+          {}
+        );
+      } else {
+        setReceiptPrintStatus(
+          'success',
+          'Struk ' +
+            (receipt.no_nota || '') +
+            ' dikirim ke ' +
+            target.name +
+            '. Status printer: ' +
+            printerStatusLabel(manager.printerSnapshot(target.id)).label +
+            '.',
+          {}
+        );
+      }
+      toast('Perintah cetak dikirim ke ' + target.name + '.', 'success');
+      return true;
+    } catch (err) {
+      const message = err && err.message ? err.message : String(err);
+      state.printFailure = {
+        receipt: receipt,
+        printerId: target.id,
+        message: message,
+      };
+      setReceiptPrintStatus(
+        'error',
+        message +
+          ' Transaksi sudah tersimpan; mencetak ulang tidak membuat transaksi baru. ' +
+          'Periksa kertas sebelum mencoba lagi karena sebagian struk mungkin sudah terkirim.',
+        {
+          retry: true,
+          chooseOther: true,
+          settings: authState.role === 'owner',
+        }
+      );
+      toast('Cetak gagal: ' + message, 'error', 8000);
+      return false;
+    } finally {
+      state.printing = false;
+      setBusy(button, false);
+      refreshReceiptPrinterUI();
+    }
   }
 
   function browserPrint(lines, width) {
@@ -1641,51 +1960,992 @@
     }, 350);
   }
 
+  // Adapter WEB desktop memakai jalur cetak browser yang sama dengan tombol lama.
+  window.BengkelWebPrint = { print: browserPrint };
+
   /* ------------------------------- Printer -------------------------------- */
-  function initPrinter() {
-    const printer = window.BluetoothPrinter;
+  const PRINTER_TYPE_LABELS = Object.freeze({
+    BLUETOOTH: 'Bluetooth',
+    NETWORK: 'Wi-Fi / LAN',
+    USB: 'USB OTG',
+    SYSTEM: 'Cetak Android',
+    WEB: 'Cetak browser',
+  });
+
+  const PRINTER_MODES = Object.freeze({
+    BLUETOOTH: ['ESCPOS', 'TEXT'],
+    NETWORK: ['ESCPOS', 'TEXT'],
+    USB: ['ESCPOS', 'TEXT'],
+    SYSTEM: ['SYSTEM', 'TEXT'],
+    WEB: ['BROWSER', 'SYSTEM', 'TEXT'],
+  });
+
+  const PRINTER_DEFAULT_MODES = Object.freeze({
+    BLUETOOTH: 'ESCPOS',
+    NETWORK: 'ESCPOS',
+    USB: 'ESCPOS',
+    SYSTEM: 'SYSTEM',
+    WEB: 'BROWSER',
+  });
+
+  function printerTypeLabel(type) {
+    return PRINTER_TYPE_LABELS[String(type || '').toUpperCase()] || type || '-';
+  }
+
+  function printerModeLabel(mode) {
+    const value = String(mode || '').toUpperCase();
+    if (value === 'ESCPOS') return 'Printer thermal';
+    if (value === 'TEXT') return 'Teks';
+    if (value === 'SYSTEM') return 'Cetak Android';
+    if (value === 'BROWSER') return 'Cetak browser';
+    return value || '-';
+  }
+
+  function printerTargetLabel(printer) {
+    if (!printer) return '-';
+    if (printer.connection_type === 'BLUETOOTH') {
+      return printer.address || 'Bluetooth';
+    }
+    if (printer.connection_type === 'NETWORK') {
+      return (printer.ip || '-') + ':' + (printer.port || '-');
+    }
+    if (printer.connection_type === 'USB') {
+      return 'USB';
+    }
+    if (printer.connection_type === 'SYSTEM') {
+      return 'Dialog cetak Android';
+    }
+    if (printer.connection_type === 'WEB') {
+      return 'Dialog cetak browser';
+    }
+    return '-';
+  }
+
+  function renderPrinterToolbar(snapshot) {
     const button = $('#printerBtn');
+    const label = $('#printerLabel');
+    if (!button || !label) return;
+    const data = snapshot || (window.printerManager && window.printerManager.snapshot());
+    const printers = (data && data.printers) || [];
+    const primary = printers.find((item) => item.is_primary) || null;
 
-    printer.onChange((status) => {
-      if (!button) return;
-      button.classList.toggle('connected', status.connected);
-      button.classList.toggle('connecting', status.connecting);
-      let label = 'Printer: Belum Terhubung';
-      if (status.connecting) label = 'Printer: Menghubungkan...';
-      else if (status.connected) {
-        label = 'Printer: ' + (status.name || 'Terhubung');
-      }
-      $('#printerLabel').textContent = label;
-      updateReceiptNotice();
-    });
+    button.classList.toggle(
+      'connected',
+      Boolean(primary && primary.status === 'CONNECTED')
+    );
+    button.classList.toggle(
+      'connecting',
+      Boolean(primary && primary.status === 'CONNECTING')
+    );
 
-    button.addEventListener('click', async () => {
-      if (!printer.isSupported()) {
-        toast(
-          'Web Bluetooth tidak didukung browser ini. Gunakan tombol "Cetak printer sistem" pada struk untuk printer thermal maupun printer biasa.',
-          'warning',
-          7000
-        );
-        return;
-      }
-      if (printer.connected) {
-        if (window.confirm('Putuskan koneksi printer Bluetooth?')) {
-          printer.disconnect();
-          toast('Printer diputuskan.', 'info');
-        }
-        return;
-      }
+    if (!window.printerManager) {
+      label.textContent = 'Printer tidak tersedia';
+    } else if (!printers.length) {
+      label.textContent = 'Printer belum diatur';
+    } else if (!primary) {
+      label.textContent = 'Printer: pilih printer utama';
+    } else {
+      label.textContent = 'Printer: ' + primary.name;
+    }
+
+    button.title = primary
+      ? 'Printer utama: ' +
+        primary.name +
+        ' (' +
+        printerTargetLabel(primary) +
+        ', ' +
+        primary.paper_width +
+        ' mm). Buka pengaturan printer.'
+      : 'Atur printer di pengaturan.';
+  }
+
+  async function loadPrinterSettings(force) {
+    const manager = window.printerManager;
+    if (!manager) return null;
+    try {
+      const snapshot = await manager.load(force === true);
+      renderPrinterSettings(snapshot);
+      renderPrinterToolbar(snapshot);
+      return snapshot;
+    } catch (err) {
+      if (err && err.status === 401) return null;
+      showPrinterWarning('Pengaturan printer gagal dimuat. Coba muat ulang.');
+      return null;
+    }
+  }
+
+  function showPrinterWarning(message) {
+    const box = $('#printerWarning');
+    if (!box) return;
+    box.textContent = message || '';
+    box.classList.toggle('hidden', !message);
+  }
+
+  async function refreshPrinterStatuses() {
+    const manager = window.printerManager;
+    if (!manager) return;
+    const snapshot = manager.snapshot();
+    for (const printer of snapshot.printers) {
+      if (printer.supported === false) continue;
       try {
-        await printer.connect();
-        toast('Printer berhasil terhubung.', 'success');
+        await manager.refreshStatus(printer.id);
       } catch (err) {
-        if (err && err.name === 'NotFoundError') {
-          toast('Pemilihan printer dibatalkan.', 'info');
-        } else {
-          toast('Gagal menghubungkan printer: ' + err.message, 'error', 6000);
-        }
+        /* Status satu printer tidak boleh menghentikan printer lain. */
       }
+    }
+  }
+
+  function initPrinterSettings() {
+    bindPrinterSettingsEvents();
+    return loadPrinterSettings(true).then((snapshot) => {
+      if (snapshot) return refreshPrinterStatuses();
+      return null;
     });
+  }
+
+  function bindPrinterSettingsEvents() {
+    if (state.printerSettingsBound) return;
+    state.printerSettingsBound = true;
+
+    const addButton = $('#btnAddPrinter');
+    if (addButton) {
+      addButton.addEventListener('click', () => openPrinterModal(null));
+    }
+    const list = $('#printerList');
+    if (list) list.addEventListener('click', handlePrinterListClick);
+    const form = $('#printerForm');
+    if (form) form.addEventListener('submit', handlePrinterSubmit);
+    const cancel = $('#printerCancel');
+    if (cancel) cancel.addEventListener('click', () => closeModal('#printerModal'));
+    const modalClose = $('#printerModalClose');
+    if (modalClose) {
+      modalClose.addEventListener('click', () => closeModal('#printerModal'));
+    }
+    const typeSelect = $('#printerConnectionType');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => syncPrinterFormType());
+    }
+    const discover = $('#btnPrinterDiscover');
+    if (discover) discover.addEventListener('click', handlePrinterDiscover);
+    const results = $('#printerDiscoveryResults');
+    if (results) results.addEventListener('click', handlePrinterDiscoveryPick);
+
+    const pickerClose = $('#printerPickerClose');
+    if (pickerClose) {
+      pickerClose.addEventListener('click', () => closeModal('#printerPickerModal'));
+    }
+    const pickerDismiss = $('#printerPickerDismiss');
+    if (pickerDismiss) {
+      pickerDismiss.addEventListener('click', () => closeModal('#printerPickerModal'));
+    }
+    const pickerList = $('#printerPickerList');
+    if (pickerList) pickerList.addEventListener('click', handlePrinterPickerClick);
+
+    const choose = $('#btnReceiptChoosePrinter');
+    if (choose) choose.addEventListener('click', openPrinterPicker);
+    const chooseOther = $('#btnReceiptChooseOther');
+    if (chooseOther) chooseOther.addEventListener('click', openPrinterPicker);
+    const printButton = $('#btnReceiptPrint');
+    if (printButton) {
+      printButton.addEventListener('click', () => {
+        if (state.receipt) printReceipt(state.receipt, false);
+      });
+    }
+    const retry = $('#btnReceiptRetry');
+    if (retry) retry.addEventListener('click', retryFailedPrint);
+    const settings = $('#btnReceiptOpenSettings');
+    if (settings) settings.addEventListener('click', openPrinterSettingsFromReceipt);
+
+    const toolbar = $('#printerBtn');
+    if (toolbar) toolbar.addEventListener('click', handlePrinterToolbarClick);
+
+    const manager = window.printerManager;
+    if (manager) {
+      manager.onChange((snapshot) => {
+        renderPrinterToolbar(snapshot);
+        renderPrinterSettings(snapshot);
+        if (state.receipt) refreshReceiptPrinterUI();
+      });
+    }
+    renderPrinterToolbar();
+  }
+
+  function handlePrinterToolbarClick() {
+    if (authState.role === 'owner') {
+      closeAllModals();
+      navigate('settings');
+      const card = $('#printerSettingsCard');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const primary = activePrimaryPrinter();
+    if (!primary) {
+      toast('Belum ada printer utama. Minta pemilik mengatur printer.', 'warning');
+      return;
+    }
+    const badge = printerStatusLabel(primary);
+    toast(
+      'Printer utama: ' + primary.name + '. Status: ' + badge.label + '.',
+      'info'
+    );
+  }
+
+  function renderPrinterSettings(snapshot) {
+    const list = $('#printerList');
+    if (!list) return;
+    const manager = window.printerManager;
+    const data =
+      snapshot || (manager ? manager.snapshot() : { printers: [] });
+    const printers = data.printers || [];
+    const summary = $('#printerSummary');
+    const empty = $('#printerEmpty');
+    const warning = data.warning || data.storage_warning || '';
+
+    showPrinterWarning(warning);
+
+    if (summary) {
+      if (!printers.length) {
+        summary.textContent = 'Belum ada printer tersimpan.';
+      } else {
+        const primary = printers.find((item) => item.is_primary);
+        summary.textContent =
+          printers.length +
+          ' printer tersimpan' +
+          (primary ? ' · Utama: ' + primary.name : ' · Belum ada printer utama');
+      }
+    }
+
+    if (!printers.length) {
+      list.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    const busy = state.printerActionId;
+    list.innerHTML = printers
+      .map((printer) => {
+        const badge = printerStatusLabel(printer);
+        const disabled =
+          printer.supported === false ||
+          printer.status === 'CONNECTING' ||
+          Boolean(busy);
+        const connectionless = Boolean(
+          manager &&
+            manager.adapterFor(printer.connection_type) &&
+            manager.adapterFor(printer.connection_type).connectionless
+        );
+        const actions = [];
+
+        if (!connectionless) {
+          if (printer.status === 'CONNECTED') {
+            actions.push(
+              '<button type="button" class="btn btn-outline btn-sm" ' +
+                'data-printer-action="disconnect" data-printer-id="' +
+                esc(printer.id) +
+                '"' +
+                (disabled ? ' disabled' : '') +
+                '>Putuskan</button>'
+            );
+          } else {
+            actions.push(
+              '<button type="button" class="btn btn-outline btn-sm" ' +
+                'data-printer-action="connect" data-printer-id="' +
+                esc(printer.id) +
+                '"' +
+                (disabled ? ' disabled' : '') +
+                '>Hubungkan</button>'
+            );
+          }
+          actions.push(
+            '<button type="button" class="btn btn-outline btn-sm" ' +
+              'data-printer-action="reconnect" data-printer-id="' +
+              esc(printer.id) +
+              '"' +
+              (disabled ? ' disabled' : '') +
+              '>Hubungkan ulang</button>'
+          );
+        }
+
+        actions.push(
+          '<button type="button" class="btn btn-outline btn-sm" ' +
+            'data-printer-action="primary" data-printer-id="' +
+            esc(printer.id) +
+            '"' +
+            (printer.is_primary || disabled ? ' disabled' : '') +
+            '>' +
+            (printer.is_primary ? 'Printer utama' : 'Jadikan utama') +
+            '</button>'
+        );
+        actions.push(
+          '<button type="button" class="btn btn-outline btn-sm" ' +
+            'data-printer-action="test" data-printer-id="' +
+            esc(printer.id) +
+            '"' +
+            (disabled ? ' disabled' : '') +
+            '>Tes cetak</button>'
+        );
+        actions.push(
+          '<button type="button" class="btn btn-ghost btn-sm" ' +
+            'data-printer-action="edit" data-printer-id="' +
+            esc(printer.id) +
+            '">Ubah</button>'
+        );
+        actions.push(
+          '<button type="button" class="btn btn-danger btn-sm" ' +
+            'data-printer-action="delete" data-printer-id="' +
+            esc(printer.id) +
+            '"' +
+            (busy ? ' disabled' : '') +
+            '>Hapus</button>'
+        );
+
+        const lastUsed = printer.connected_at
+          ? (connectionless ? 'Terakhir dipakai: ' : 'Terakhir terhubung: ') +
+            fmtDateTime(printer.connected_at)
+          : 'Belum pernah ' +
+            (connectionless ? 'dipakai' : 'terhubung');
+        const metaParts = [
+          printerTargetLabel(printer),
+          printer.paper_width + ' mm',
+          printerModeLabel(printer.print_mode),
+          lastUsed,
+        ];
+        const errorText =
+          printer.error || (printer.supported === false
+            ? 'Jenis printer ini belum didukung di perangkat ini.'
+            : '');
+
+        return (
+          '<div class="printer-row' +
+          (printer.is_primary ? ' is-primary' : '') +
+          (busy === printer.id ? ' is-busy' : '') +
+          '">' +
+          '<div class="printer-row-head">' +
+          '<div class="printer-identity">' +
+          '<strong>' +
+          esc(printer.name) +
+          '</strong>' +
+          '<span class="printer-meta">' +
+          esc(metaParts.join(' · ')) +
+          '</span>' +
+          (errorText
+            ? '<span class="printer-error">' + esc(errorText) + '</span>'
+            : '') +
+          '</div>' +
+          '<div class="printer-badges">' +
+          (printer.is_primary ? '<span class="badge blue">Utama</span>' : '') +
+          '<span class="badge gray">' +
+          esc(printerTypeLabel(printer.connection_type)) +
+          '</span>' +
+          '<span class="badge ' +
+          badge.tone +
+          '">' +
+          esc(badge.label) +
+          '</span>' +
+          '</div>' +
+          '</div>' +
+          '<div class="printer-actions">' +
+          actions.join('') +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
+  async function handlePrinterListClick(event) {
+    const button = event.target.closest('[data-printer-action]');
+    if (!button) return;
+    const id = button.dataset.printerId;
+    const action = button.dataset.printerAction;
+    const manager = window.printerManager;
+    if (!manager || !id) return;
+
+    if (action === 'edit') {
+      openPrinterModal(id);
+      return;
+    }
+    if (action === 'delete') {
+      const printer = manager.printerSnapshot(id);
+      if (!printer) return;
+      const ok = window.confirm(
+        'Hapus printer "' +
+          printer.name +
+          '" dari daftar? Data transaksi, pelanggan, dan stok tidak dihapus.'
+      );
+      if (!ok) return;
+    }
+    if (action === 'primary') {
+      const printer = manager.printerSnapshot(id);
+      if (!printer || printer.is_primary) return;
+      if (state.printerActionId) return;
+      state.printerActionId = id;
+      renderPrinterSettings();
+      try {
+        await manager.selectPrimary(id, { allowDisconnected: true });
+        toast(
+          'Printer utama diganti ke ' +
+            printer.name +
+            '. Printer sebelumnya tetap tersimpan.',
+          'success'
+        );
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      } finally {
+        state.printerActionId = null;
+        renderPrinterSettings();
+      }
+      return;
+    }
+
+    if (state.printerActionId) return;
+    state.printerActionId = id;
+    renderPrinterSettings();
+
+    try {
+      if (action === 'connect') {
+        await manager.connect(id);
+        toast('Printer berhasil terhubung.', 'success');
+      } else if (action === 'disconnect') {
+        const result = await manager.disconnect(id);
+        if (result && result.warning) {
+          toast(
+            'Koneksi printer diputus. Printer tetap tersimpan. ' +
+              result.warning,
+            'warning',
+            7000
+          );
+        } else {
+          toast(
+            'Koneksi printer diputus. Printer tetap tersimpan.',
+            'info'
+          );
+        }
+      } else if (action === 'reconnect') {
+        await manager.reconnect(id);
+        toast('Printer berhasil dihubungkan ulang.', 'success');
+      } else if (action === 'test') {
+        const printer = manager.printerSnapshot(id);
+        const result = await manager.testPrint(id);
+        const adapterResult = result && result.adapter_result;
+        if (
+          printer &&
+          printer.connection_type === 'SYSTEM' &&
+          adapterResult &&
+          adapterResult.job_id != null
+        ) {
+          toast(
+            'Dialog Android dibuka untuk tes cetak. Status: ' +
+              describeJobState({ state: 'QUEUED' }) +
+              '.',
+            'info',
+            7000
+          );
+          pollPrinterJobStatus(
+            manager.adapterFor('SYSTEM'),
+            adapterResult.job_id,
+            printer.name
+          );
+        } else if (printer && printer.connection_type === 'WEB') {
+          toast('Dialog cetak browser dibuka.', 'info', 6000);
+        } else {
+          toast('Tes cetak dikirim ke ' + (printer ? printer.name : 'printer') + '.', 'success');
+        }
+      } else if (action === 'delete') {
+        const printer = manager.printerSnapshot(id);
+        await manager.removePrinter(id);
+        toast(
+          'Printer ' +
+            (printer ? printer.name : '') +
+            ' dihapus. Data transaksi tidak berubah.',
+          'success'
+        );
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.printerActionId = null;
+      renderPrinterSettings();
+    }
+  }
+
+  function pollPrinterJobStatus(adapter, jobId, printerName) {
+    if (!adapter || typeof adapter.jobStatus !== 'function') return;
+    let attempts = 0;
+    const tick = async () => {
+      attempts += 1;
+      let status;
+      try {
+        status = await adapter.jobStatus(jobId);
+      } catch (err) {
+        return;
+      }
+      const stateName = String((status && status.state) || 'UNKNOWN');
+      if (stateName === 'COMPLETED') {
+        toast('Cetak untuk ' + printerName + ' selesai.', 'success');
+        return;
+      }
+      if (stateName === 'FAILED' || stateName === 'UNAVAILABLE') {
+        toast('Pekerjaan cetak Android gagal. Periksa printer.', 'error', 7000);
+        return;
+      }
+      if (stateName === 'CANCELLED') {
+        toast('Pekerjaan cetak dibatalkan dari dialog Android.', 'info');
+        return;
+      }
+      if (attempts < 80) setTimeout(tick, 1500);
+    };
+    setTimeout(tick, 1200);
+  }
+
+  function openPrinterModal(id) {
+    const manager = window.printerManager;
+    if (!manager) {
+      toast('Fitur printer tidak tersedia di perangkat ini.', 'error');
+      return;
+    }
+    const printer = id ? manager.printerSnapshot(id) : null;
+    const isEdit = Boolean(printer);
+    state.printerDiscovery = [];
+    state.printerDiscoveryType = null;
+    const results = $('#printerDiscoveryResults');
+    if (results) {
+      results.innerHTML = '';
+      results.classList.add('hidden');
+    }
+
+    const typeSelect = $('#printerConnectionType');
+    if (!typeSelect) return;
+    syncPrinterTypeOptions(isEdit ? printer.connection_type : null);
+
+    $('#printerId').value = isEdit ? printer.id : '';
+    $('#printerName').value = isEdit ? printer.name : '';
+    typeSelect.value = isEdit
+      ? printer.connection_type
+      : firstSupportedPrinterType();
+    const width = isEdit ? printer.paper_width : preferredReceiptWidth();
+    $('#printerPaperWidth').value = String(width === 80 ? 80 : 58);
+    $('#printerEncoding').value = isEdit ? printer.encoding : 'CP437';
+    $('#printerAddress').value =
+      isEdit && printer.connection_type === 'BLUETOOTH' ? printer.address : '';
+    $('#printerIp').value =
+      isEdit && printer.connection_type === 'NETWORK' ? printer.ip : '';
+    $('#printerPort').value = String(
+      isEdit && printer.connection_type === 'NETWORK' ? printer.port : 9100
+    );
+    $('#printerUsbIdentity').value =
+      isEdit && printer.connection_type === 'USB' ? printer.address : '';
+
+    const makePrimary = $('#printerMakePrimary');
+    makePrimary.checked = isEdit
+      ? printer.is_primary
+      : manager.snapshot().printers.length === 0;
+
+    $('#printerModalTitle').textContent = isEdit
+      ? 'Ubah printer'
+      : 'Tambah printer';
+    $('#printerModalSubtitle').textContent = isEdit
+      ? 'Perubahan alamat atau jenis koneksi akan memutus sesi printer ini.'
+      : 'Simpan perangkat sekali, lalu sambungkan saat dibutuhkan.';
+    const submit = $('#printerSubmit');
+    if (submit) submit.textContent = isEdit ? 'Simpan perubahan' : 'Simpan printer';
+
+    syncPrinterFormType(isEdit ? printer.print_mode : null);
+    openModal('#printerModal');
+  }
+
+  function firstSupportedPrinterType() {
+    const manager = window.printerManager;
+    const order = ['BLUETOOTH', 'NETWORK', 'USB', 'SYSTEM', 'WEB'];
+    if (!manager) return 'WEB';
+    const found = order.find((type) => manager.adapterFor(type));
+    return found || 'WEB';
+  }
+
+  function syncPrinterTypeOptions(preferredType) {
+    const select = $('#printerConnectionType');
+    if (!select) return;
+    const manager = window.printerManager;
+    const selected = preferredType || select.value;
+    Array.from(select.options).forEach((option) => {
+      const type = option.value;
+      const supported = Boolean(manager && manager.adapterFor(type));
+      option.disabled = !supported && type !== selected;
+      option.textContent =
+        PRINTER_TYPE_LABELS[type] + (supported ? '' : ' (tidak tersedia)');
+    });
+    if (selected) select.value = selected;
+  }
+
+  function syncPrinterFormType(preferredMode) {
+    const typeSelect = $('#printerConnectionType');
+    if (!typeSelect) return;
+    const type = typeSelect.value;
+    const manager = window.printerManager;
+    const supported = Boolean(manager && manager.adapterFor(type));
+
+    const toggle = (selector, visible) => {
+      const element = $(selector);
+      if (element) element.classList.toggle('hidden', !visible);
+    };
+    toggle('#printerBluetoothFields', type === 'BLUETOOTH');
+    toggle('#printerNetworkFields', type === 'NETWORK');
+    toggle('#printerUsbFields', type === 'USB');
+    toggle('#printerSystemInfo', type === 'SYSTEM');
+    toggle('#printerWebInfo', type === 'WEB');
+    toggle(
+      '#printerDiscoveryRow',
+      type === 'BLUETOOTH' || type === 'NETWORK' || type === 'USB'
+    );
+
+    const supportedText = $('#printerSupportedText');
+    if (supportedText) {
+      supportedText.textContent = supported
+        ? 'Tersedia di perangkat ini.'
+        : 'Belum didukung di perangkat ini; konfigurasi tetap dapat disimpan.';
+    }
+
+    const modes = PRINTER_MODES[type] || [];
+    const modeSelect = $('#printerPrintMode');
+    if (modeSelect) {
+      const current = preferredMode || modeSelect.value;
+      modeSelect.innerHTML = modes
+        .map(
+          (mode) =>
+            '<option value="' +
+            esc(mode) +
+            '">' +
+            esc(printerModeLabel(mode)) +
+            '</option>'
+        )
+        .join('');
+      modeSelect.value = modes.includes(current)
+        ? current
+        : PRINTER_DEFAULT_MODES[type] || modes[0] || '';
+    }
+
+    const discover = $('#btnPrinterDiscover');
+    const hint = $('#printerDiscoveryHint');
+    if (discover) {
+      discover.textContent =
+        type === 'BLUETOOTH'
+          ? 'Cari printer Bluetooth'
+          : type === 'NETWORK'
+            ? 'Cari printer jaringan'
+            : 'Cari printer USB';
+      discover.disabled = !supported;
+    }
+    if (hint) {
+      hint.textContent =
+        type === 'BLUETOOTH'
+          ? 'Pastikan Bluetooth aktif dan printer siap dipasangkan.'
+          : type === 'NETWORK'
+            ? 'Pastikan printer dan perangkat berada di jaringan yang sama.'
+            : 'Hubungkan kabel OTG lalu izinkan akses USB saat diminta.';
+    }
+  }
+
+  async function handlePrinterDiscover() {
+    const manager = window.printerManager;
+    const type = $('#printerConnectionType').value;
+    const button = $('#btnPrinterDiscover');
+    const results = $('#printerDiscoveryResults');
+    if (!manager || !results) return;
+    if (!manager.adapterFor(type)) {
+      toast('Pencarian printer ini tidak tersedia di perangkat.', 'warning');
+      return;
+    }
+    setBusy(button, true, 'Mencari...');
+    results.innerHTML = '';
+    results.classList.remove('hidden');
+    results.textContent = 'Mencari printer...';
+    try {
+      const devices = await manager.discover(type);
+      state.printerDiscovery = devices;
+      state.printerDiscoveryType = type;
+      renderPrinterDiscovery(devices, type);
+    } catch (err) {
+      results.innerHTML =
+        '<p class="tiny muted">' + esc(err.message) + '</p>';
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function renderPrinterDiscovery(devices, type) {
+    const results = $('#printerDiscoveryResults');
+    if (!results) return;
+    if (!devices.length) {
+      results.innerHTML =
+        '<p class="tiny muted">Tidak ada printer ditemukan. Masukkan data printer secara manual.</p>';
+      return;
+    }
+    results.innerHTML = devices
+      .map((device, index) => {
+        let detail = '';
+        if (type === 'BLUETOOTH') {
+          detail =
+            (device.address || '-') +
+            (device.paired ? ' · sudah dipasangkan' : ' · belum dipasangkan');
+        } else if (type === 'NETWORK') {
+          detail = (device.ip || '-') + ':' + (device.port || '-');
+        } else if (type === 'USB') {
+          detail =
+            (device.identity || device.address || '-') +
+            (device.supported === false ? ' · tidak didukung' : '');
+        }
+        return (
+          '<div class="printer-discovery-item">' +
+          '<div><strong>' +
+          esc(device.name || 'Printer') +
+          '</strong><span class="tiny muted">' +
+          esc(detail) +
+          '</span></div>' +
+          '<button type="button" class="btn btn-outline btn-sm" ' +
+          'data-printer-discovery-index="' +
+          index +
+          '"' +
+          (device.supported === false ? ' disabled' : '') +
+          '>Gunakan</button>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
+  function handlePrinterDiscoveryPick(event) {
+    const button = event.target.closest('[data-printer-discovery-index]');
+    if (!button) return;
+    const index = intValue(button.dataset.printerDiscoveryIndex, -1);
+    const device = state.printerDiscovery[index];
+    if (!device) return;
+    const type = state.printerDiscoveryType;
+    const nameInput = $('#printerName');
+    if (nameInput && !nameInput.value.trim() && device.name) {
+      nameInput.value = device.name;
+    }
+    if (type === 'BLUETOOTH') {
+      $('#printerAddress').value = device.address || '';
+    } else if (type === 'NETWORK') {
+      $('#printerIp').value = device.ip || '';
+      if (device.port) $('#printerPort').value = String(device.port);
+    } else if (type === 'USB') {
+      $('#printerUsbIdentity').value = device.identity || device.address || '';
+    }
+    const results = $('#printerDiscoveryResults');
+    if (results) results.classList.add('hidden');
+    toast('Data printer dimasukkan. Periksa lalu simpan.', 'info');
+  }
+
+  async function handlePrinterSubmit(event) {
+    event.preventDefault();
+    const manager = window.printerManager;
+    if (!manager) return;
+    const id = $('#printerId').value.trim();
+    const isEdit = Boolean(id);
+    const type = $('#printerConnectionType').value;
+    const name = $('#printerName').value.trim();
+    const paperWidth = intValue($('#printerPaperWidth').value, 58) === 80 ? 80 : 58;
+    const printMode = $('#printerPrintMode').value;
+    const encoding = $('#printerEncoding').value.trim() || 'CP437';
+    const makePrimary = $('#printerMakePrimary').checked;
+
+    if (!name) {
+      toast('Nama printer wajib diisi.', 'warning');
+      $('#printerName').focus();
+      return;
+    }
+
+    const draft = {
+      name: name,
+      connection_type: type,
+      paper_width: paperWidth,
+      print_mode: printMode,
+      encoding: encoding,
+      address: '',
+      ip: '',
+      port: null,
+    };
+
+    if (type === 'BLUETOOTH') {
+      const address = $('#printerAddress').value.trim().toUpperCase();
+      if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(address)) {
+        toast('Alamat Bluetooth harus berbentuk AA:BB:CC:DD:EE:FF.', 'warning');
+        $('#printerAddress').focus();
+        return;
+      }
+      draft.address = address;
+    } else if (type === 'NETWORK') {
+      const ip = $('#printerIp').value.trim();
+      const port = intValue($('#printerPort').value, 0);
+      if (!ip) {
+        toast('Alamat IP printer wajib diisi.', 'warning');
+        $('#printerIp').focus();
+        return;
+      }
+      if (port < 1 || port > 65535) {
+        toast('Port harus antara 1 dan 65535.', 'warning');
+        $('#printerPort').focus();
+        return;
+      }
+      draft.ip = ip;
+      draft.port = port;
+    } else if (type === 'USB') {
+      const identity = $('#printerUsbIdentity').value.trim();
+      if (!identity) {
+        toast('Identitas perangkat USB wajib diisi.', 'warning');
+        $('#printerUsbIdentity').focus();
+        return;
+      }
+      draft.address = identity;
+    }
+
+    const submit = $('#printerSubmit');
+    setBusy(submit, true, 'Menyimpan...');
+    try {
+      if (isEdit) {
+        const updated = await manager.updatePrinter(id, draft);
+        if (makePrimary && !updated.is_primary) {
+          await manager.selectPrimary(id, { allowDisconnected: true });
+        }
+        toast('Perubahan printer disimpan.', 'success');
+      } else {
+        const created = await manager.addPrinter(draft, {
+          makePrimary: makePrimary,
+          allowDisconnected: true,
+        });
+        if (makePrimary && !created.is_primary) {
+          await manager.selectPrimary(created.id, { allowDisconnected: true });
+        }
+        toast('Printer ' + created.name + ' disimpan.', 'success');
+      }
+      closeModal('#printerModal');
+    } catch (err) {
+      toast(err.message, 'error', 8000);
+    } finally {
+      setBusy(submit, false);
+    }
+  }
+
+  async function openPrinterPicker() {
+    const manager = window.printerManager;
+    if (!manager) return;
+    try {
+      await manager.load();
+    } catch (err) {
+      toast('Gagal memuat daftar printer. Coba lagi.', 'error', 7000);
+      return;
+    }
+    const snapshot = manager.snapshot();
+    const list = $('#printerPickerList');
+    if (!list) return;
+    if (!snapshot.printers.length) {
+      list.innerHTML =
+        '<div class="empty-state sm">Belum ada printer tersimpan. ' +
+        (authState.role === 'owner'
+          ? 'Tambahkan printer di pengaturan.'
+          : 'Minta pemilik menambahkan printer.') +
+        '</div>';
+    } else {
+      list.innerHTML = snapshot.printers
+        .map((printer) => {
+          const badge = printerStatusLabel(printer);
+          const selected = printer.id === state.printPrinterId;
+          return (
+            '<div class="printer-picker-item' +
+            (selected ? ' is-selected' : '') +
+            '">' +
+            '<div><strong>' +
+            esc(printer.name) +
+            '</strong><span class="tiny muted">' +
+            esc(
+              printerTypeLabel(printer.connection_type) +
+                ' · ' +
+                printerTargetLabel(printer) +
+                ' · ' +
+                printer.paper_width +
+                ' mm'
+            ) +
+            '</span></div>' +
+            '<div class="printer-badges">' +
+            (printer.is_primary ? '<span class="badge blue">Utama</span>' : '') +
+            '<span class="badge ' +
+            badge.tone +
+            '">' +
+            esc(badge.label) +
+            '</span>' +
+            '<button type="button" class="btn btn-outline btn-sm" ' +
+            'data-printer-picker-id="' +
+            esc(printer.id) +
+            '"' +
+            (printer.supported === false ? ' disabled' : '') +
+            '>Pilih</button>' +
+            '</div></div>'
+          );
+        })
+        .join('');
+    }
+    openModal('#printerPickerModal');
+  }
+
+  function handlePrinterPickerClick(event) {
+    const button = event.target.closest('[data-printer-picker-id]');
+    if (!button) return;
+    const manager = window.printerManager;
+    const printer = manager
+      ? manager.printerSnapshot(button.dataset.printerPickerId)
+      : null;
+    if (!printer) return;
+    state.printPrinterId = printer.id;
+    state.receiptWidth = normalizeReceiptWidth(printer.paper_width);
+    window.localStorage.setItem(
+      RECEIPT_WIDTH_KEY,
+      String(state.receiptWidth)
+    );
+    syncReceiptWidthUI();
+    renderReceiptPreview();
+    refreshReceiptPrinterUI();
+    state.printFailure = null;
+    setReceiptPrintStatus(
+      'info',
+      'Printer tujuan: ' + printer.name + '. Tekan Cetak untuk mengirim struk.',
+      {}
+    );
+    closeModal('#printerPickerModal');
+  }
+
+  function retryFailedPrint() {
+    if (!state.printFailure || state.printing) return;
+    const ok = window.confirm(
+      'Cetak sebelumnya gagal dan sebagian struk mungkin sudah tercetak. ' +
+        'Cetak ulang struk yang sama? Tidak ada transaksi baru yang dibuat.'
+    );
+    if (!ok) return;
+    const failure = state.printFailure;
+    if (failure.printerId) state.printPrinterId = failure.printerId;
+    printReceipt(state.receipt || failure.receipt, false);
+  }
+
+  function openPrinterSettingsFromReceipt() {
+    if (authState.role !== 'owner') {
+      toast('Pengaturan printer hanya untuk pemilik.', 'warning');
+      return;
+    }
+    if (!$('#printerPickerModal').classList.contains('hidden')) {
+      closeModal('#printerPickerModal');
+    }
+    if (!$('#receiptModal').classList.contains('hidden')) {
+      closeModal('#receiptModal');
+    }
+    navigate('settings');
+    const card = $('#printerSettingsCard');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function initPrinter() {
+    bindPrinterSettingsEvents();
+    renderPrinterToolbar();
   }
 
   /* ------------------------------ Dashboard ------------------------------- */
@@ -1708,7 +2968,7 @@
 
       renderRecent(records.slice(0, 6));
     } catch (err) {
-      toast('Gagal memuat dasbor: ' + err.message, 'error', 6000);
+      toast('Ringkasan hari ini gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
   }
 
@@ -1757,7 +3017,7 @@
           '</td>' +
           '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
           record.id +
-          '">Cetak Ulang</button></td>' +
+          '">Cetak ulang</button></td>' +
           '</tr>'
       )
       .join('');
@@ -1769,7 +3029,7 @@
       state.history = await API.records(query || '');
       renderHistory();
     } catch (err) {
-      toast('Gagal memuat riwayat: ' + err.message, 'error', 6000);
+      toast('Riwayat servis gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
   }
 
@@ -1835,7 +3095,7 @@
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
           record.id +
-          '">Cetak Ulang</button>' +
+          '">Cetak ulang</button>' +
           (claimable
             ? '<button type="button" class="btn btn-ghost btn-xs" data-action="claim" data-id="' +
               record.id +
@@ -2127,7 +3387,7 @@
       : '<tr><td colspan="4" class="muted">Tidak ada sparepart.</td></tr>';
 
     const voidBanner = isVoid
-      ? '<div class="void-banner"><strong>Nota DIBATALKAN (VOID)</strong>' +
+      ? '<div class="void-banner"><strong>Nota dibatalkan</strong>' +
         '<span>' +
         esc(receipt.void_reason || '-') +
         '</span><span class="cell-sub">' +
@@ -2259,7 +3519,7 @@
       renderRecordDetail(receipt);
       openModal('#recordModal');
     } catch (err) {
-      toast('Gagal memuat detail nota: ' + err.message, 'error', 6000);
+      toast('Detail nota gagal dimuat. Coba lagi.', 'error', 6000);
     }
   }
 
@@ -2322,7 +3582,7 @@
         );
         customer = list.find((item) => item.id === id) || null;
       } catch (err) {
-        toast('Gagal memuat detail pelanggan: ' + err.message, 'error', 6000);
+        toast('Detail pelanggan gagal dimuat. Coba lagi.', 'error', 6000);
         return;
       }
     }
@@ -2373,7 +3633,7 @@
       list = rows.filter((record) => record.metode_bayar === 'TRANSFER');
       title = 'Nota transfer · ' + period;
     } else if (filter === 'profit') {
-      title = 'Laba kotor part · ' + period;
+      title = 'Laba kotor sparepart · ' + period;
     }
 
     openNotaList(title, list, { showProfit: true });
@@ -2583,7 +3843,7 @@
       renderStock();
       renderJasa();
     } catch (err) {
-      toast('Gagal memuat stok: ' + err.message, 'error', 6000);
+      toast('Data stok gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
   }
 
@@ -2594,9 +3854,9 @@
     const lowStock = state.stock.filter((item) => item.jumlah <= 3).length;
     $('#stockSummary').textContent =
       state.stock.length +
-      ' item - ' +
+      ' item · ' +
       lowStock +
-      ' stok kritis (<= 3)';
+      ' stok menipis (3 atau kurang)';
 
     stockBody.innerHTML = state.stock
       .map((item) => {
@@ -2670,7 +3930,7 @@
 
   function openStockModal(item) {
     state.editingStock = item || null;
-    $('#stockModalTitle').textContent = item ? 'Edit Sparepart' : 'Tambah Sparepart';
+    $('#stockModalTitle').textContent = item ? 'Edit sparepart' : 'Tambah sparepart';
     $('#stockId').value = item ? item.id : '';
     $('#stockKode').value = item ? item.kode || '' : '';
     $('#stockNama').value = item ? item.nama : '';
@@ -2723,7 +3983,7 @@
 
   function openJasaModal(jasa) {
     state.editingJasa = jasa || null;
-    $('#jasaModalTitle').textContent = jasa ? 'Edit Tarif Jasa' : 'Tambah Tarif Jasa';
+    $('#jasaModalTitle').textContent = jasa ? 'Edit tarif jasa' : 'Tambah tarif jasa';
     $('#jasaId').value = jasa ? jasa.id : '';
     $('#jasaNamaInput').value = jasa ? jasa.nama : '';
     $('#jasaHargaInput').value = jasa
@@ -2830,7 +4090,7 @@
       items.length +
       ' penjualan · ' +
       intValue(sold.total_qty, 0) +
-      ' unit terjual · harga akhir (deal), barang sama urut sesuai waktu.';
+      ' unit terjual · harga mengikuti harga deal, diurutkan menurut waktu.';
     $('#soldPartsBody').innerHTML = items
       .map(
         (item) =>
@@ -2907,7 +4167,7 @@
         ' · ' +
         (startISO === endISO
           ? fmtDate(startISO)
-          : fmtDate(startISO) + ' – ' + fmtDate(endISO));
+          : fmtDate(startISO) + ' sampai ' + fmtDate(endISO));
 
       $('#reportMeta').innerHTML =
         '<span class="meta-chip"><strong>' +
@@ -2930,7 +4190,7 @@
             ' nota</span>'
           : '') +
         (intValue(data.jumlah_void, 0) > 0
-          ? '<span class="meta-chip">Void <strong>' +
+          ? '<span class="meta-chip">Dibatalkan <strong>' +
             fmtRp(data.total_void) +
             '</strong> · ' +
             data.jumlah_void +
@@ -2983,7 +4243,7 @@
                 ? ' · retur -' + fmtRp(record.total_retur)
                 : '') +
               (record.modal_tidak_diketahui
-                ? ' · modal part belum diisi'
+                ? ' · modal sparepart belum diisi'
                 : '') +
               (record.modal_estimasi ? ' · modal estimasi' : '') +
               '</span></td>' +
@@ -2999,7 +4259,7 @@
       renderSoldParts(soldData, periodLabel);
     } catch (err) {
       if (requestId === reportRequestId) {
-        toast('Gagal memuat laporan: ' + err.message, 'error', 6000);
+        toast('Laporan gagal dimuat. Coba lagi.', 'error', 6000);
       }
     }
   }
@@ -3079,7 +4339,7 @@
     } catch (err) {
       const message =
         err.status === 503
-          ? 'Server lokal belum siap. Tutup lalu buka lagi aplikasi.'
+          ? 'Aplikasi belum siap. Tutup lalu buka lagi.'
           : err.message;
       showAuthGate('login', message);
       return false;
@@ -3118,7 +4378,7 @@
       return;
     }
     if (pin !== confirmPin) {
-      setAuthError($('#authSetupError'), 'Ulangi PIN belum sama.');
+      setAuthError($('#authSetupError'), 'PIN yang diulang tidak sama.');
       return;
     }
 
@@ -3181,7 +4441,7 @@
       applyOperator(await API.authStatus());
       toast('PIN kasir tersimpan.', 'success');
     } catch (err) {
-      toast('Gagal menyimpan PIN kasir: ' + err.message, 'error', 7000);
+      toast('PIN kasir gagal disimpan. Coba lagi.', 'error', 7000);
     } finally {
       setBusy(button, false);
     }
@@ -3203,7 +4463,7 @@
       applyOperator(await API.authStatus());
       toast('PIN kasir dihapus.', 'success');
     } catch (err) {
-      toast('Gagal menghapus PIN kasir: ' + err.message, 'error', 7000);
+      toast('PIN kasir gagal dihapus. Coba lagi.', 'error', 7000);
     } finally {
       setBusy(button, false);
     }
@@ -3232,7 +4492,7 @@
     const note = $('#settingsAdminNote');
     if (note) {
       note.textContent =
-        'Perubahan disimpan di database lokal pada PC kasir ini.';
+        'Perubahan langsung tampil di aplikasi dan struk.';
     }
   }
 
@@ -3262,7 +4522,7 @@
       applyConfig();
       toast('Pengaturan bengkel tersimpan.', 'success');
     } catch (err) {
-      toast('Gagal menyimpan pengaturan: ' + err.message, 'error', 6000);
+      toast('Pengaturan gagal disimpan. Coba lagi.', 'error', 6000);
     } finally {
       setBusy(button, false);
     }
@@ -3300,7 +4560,7 @@
         : 'Belum pernah dikirim.'
     );
     if (telegram.last_error) {
-      parts.push('Kesalahan terakhir: ' + telegram.last_error);
+      parts.push('Pengiriman terakhir gagal. Periksa token, Chat ID, dan koneksi internet.');
     }
     status.textContent = parts.join(' ');
   }
@@ -3328,7 +4588,7 @@
         : 'Belum ada backup otomatis tersimpan.'
     );
     if (backup.last_status === 'failed' && backup.last_error) {
-      parts.push('Kegagalan terakhir: ' + backup.last_error);
+      parts.push('Backup otomatis terakhir gagal. Periksa ruang penyimpanan dan izin aplikasi.');
     }
     status.textContent = parts.join(' ');
     appendNativeBackupStatus(status, parts);
@@ -3396,7 +4656,7 @@
       fillTelegramForm();
       toast('Pengaturan Telegram tersimpan.', 'success');
     } catch (err) {
-      toast('Gagal menyimpan Telegram: ' + err.message, 'error', 6000);
+      toast('Pengaturan Telegram gagal disimpan. Coba lagi.', 'error', 6000);
     } finally {
       setBusy(button, false);
     }
@@ -3420,7 +4680,7 @@
       state.config = await API.getConfig();
       applyConfig();
     } catch (err) {
-      toast('Gagal mengirim backup: ' + err.message, 'error', 7000);
+      toast('Backup gagal dikirim. Periksa token, Chat ID, dan koneksi internet.', 'error', 7000);
     } finally {
       setBusy(button, false);
     }
@@ -3439,9 +4699,9 @@
     if (!file) return;
 
     const confirmed = window.confirm(
-      'Pulihkan database dari "' +
+      'Pulihkan data dari "' +
         file.name +
-        '"? Seluruh data saat ini akan diganti. Backup keamanan tetap dibuat otomatis.'
+        '"? Seluruh data saat ini akan diganti. Salinan pengaman tetap dibuat otomatis.'
     );
     if (!confirmed) return;
 
@@ -3450,14 +4710,12 @@
     try {
       await API.restoreDatabase(file);
       if (window.BengkelBridge && window.BengkelBridge.available()) {
-        toast('Database berhasil dipulihkan. Menyiapkan ulang aplikasi...', 'success', 5000);
+        toast('Data berhasil dipulihkan. Menyiapkan ulang aplikasi...', 'success', 5000);
         try {
           await window.BengkelBridge.call('restartBackend', {}, 180000);
         } catch (err) {
           toast(
-            'Data sudah dipulihkan, tetapi server gagal dimuat ulang: ' +
-              err.message +
-              ' Tutup lalu buka aplikasi.',
+            'Data sudah dipulihkan, tetapi aplikasi gagal dimuat ulang. Tutup lalu buka aplikasi.',
             'error',
             9000
           );
@@ -3465,10 +4723,10 @@
         }
         return;
       }
-      toast('Database berhasil dipulihkan. Memuat ulang aplikasi...', 'success', 4000);
+      toast('Data berhasil dipulihkan. Memuat ulang aplikasi...', 'success', 4000);
       setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
-      toast('Gagal memulihkan database: ' + err.message, 'error', 7000);
+      toast('Data gagal dipulihkan. Periksa file backup lalu coba lagi.', 'error', 7000);
       setBusy(button, false);
     }
   }
@@ -3491,15 +4749,12 @@
         ? ' ke ' + state.lastBackup.location
         : '';
       toast(
-        'File backup database berhasil disimpan' +
-          locationText +
-          ': ' +
-          state.lastBackup.filename,
+        'Backup tersimpan' + locationText + ': ' + state.lastBackup.filename,
         'success',
         6000
       );
     } catch (err) {
-      toast(err.message, 'error', 7000);
+      toast('Backup gagal dibuat. Periksa ruang penyimpanan lalu coba lagi.', 'error', 7000);
     } finally {
       setBusy(button, false);
     }
@@ -3512,7 +4767,7 @@
         filename: state.lastBackup.filename,
       });
     } catch (err) {
-      toast('Gagal membagikan backup: ' + err.message, 'error', 7000);
+      toast('Backup gagal dibagikan. Coba lagi.', 'error', 7000);
     }
   }
 
@@ -3649,14 +4904,16 @@
 
     $('#btnLoadReport').addEventListener('click', loadReport);
     $('#reportPeriod').addEventListener('change', loadReport);
-    $('#btnBackup').addEventListener('click', handleBackup);
 
     $('#receiptWidthSwitch').addEventListener('click', onReceiptWidthClick);
-    $('#btnBluetoothPrint').addEventListener('click', () =>
-      printReceipt(state.receipt, false)
-    );
     $('#btnBrowserPrint').addEventListener('click', () => {
-      if (state.receipt) browserPrint(currentReceiptLines(), state.receiptWidth);
+      if (!state.receipt) return;
+      browserPrint(currentReceiptLines(), state.receiptWidth);
+      setReceiptPrintStatus(
+        'info',
+        'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
+        {}
+      );
     });
 
     $('#receiptClose').addEventListener('click', () => closeModal('#receiptModal'));
@@ -3796,16 +5053,17 @@
       populatePickers();
       renderStock();
       renderJasa();
+      await loadPrinterSettings(false);
     } catch (err) {
       if (err.status !== 401) {
-        toast('Gagal memuat konfigurasi awal: ' + err.message, 'error', 8000);
+        toast('Aplikasi gagal memuat data awal. Tutup lalu buka lagi.', 'error', 8000);
       }
       return;
     }
 
     authState.started = true;
     resetPosState();
-    updateReceiptNotice();
+    refreshReceiptPrinterUI();
     await loadDashboard();
   }
 

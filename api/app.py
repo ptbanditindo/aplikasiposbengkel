@@ -15,6 +15,7 @@ from api import (
     auth_routes,
     customer_routes,
     pos_routes,
+    printer_routes,
     report_routes,
     settings_routes,
     stock_routes,
@@ -195,6 +196,7 @@ def create_app() -> FastAPI:
     app.include_router(stock_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
+    app.include_router(printer_routes.router, prefix=api_prefix)
     app.include_router(audit_routes.router, prefix=api_prefix)
 
     @app.get("/api/health", tags=["Sistem"])

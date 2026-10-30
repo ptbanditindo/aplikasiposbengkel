@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.view.View
-import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -38,6 +37,13 @@ import com.bengkelpos.radiator.pin.PinSession
 import com.bengkelpos.radiator.pin.PinSettings
 import com.bengkelpos.radiator.pin.PinStore
 import com.bengkelpos.radiator.pin.SystemLockoutClock
+import com.bengkelpos.radiator.printer.AndroidBluetoothGateway
+import com.bengkelpos.radiator.printer.AndroidUsbPrinterGateway
+import com.bengkelpos.radiator.printer.BluetoothPrinterController
+import com.bengkelpos.radiator.printer.NetworkPrinterController
+import com.bengkelpos.radiator.printer.NsdNetworkPrinterDiscovery
+import com.bengkelpos.radiator.printer.SystemPrintController
+import com.bengkelpos.radiator.printer.UsbPrinterController
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -58,8 +64,13 @@ class MainActivity : AppCompatActivity() {
     private var startingBackend = false
     private var registeredOrigin: String? = null
     private lateinit var nativeBridge: NativeBridge
+    private lateinit var bluetoothPrinter: BluetoothPrinterController
+    private lateinit var networkPrinter: NetworkPrinterController
+    private lateinit var usbPrinter: UsbPrinterController
+    private lateinit var systemPrinter: SystemPrintController
     private val nativeExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private var pendingStorageCallback: ((Boolean) -> Unit)? = null
+    private var pendingBluetoothCallback: ((Boolean) -> Unit)? = null
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -67,6 +78,14 @@ class MainActivity : AppCompatActivity() {
         val callback = pendingStorageCallback
         pendingStorageCallback = null
         callback?.invoke(granted)
+    }
+
+    private val bluetoothPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val callback = pendingBluetoothCallback
+        pendingBluetoothCallback = null
+        callback?.invoke(result.values.all { it })
     }
 
     private val fileChooserLauncher = registerForActivityResult(
@@ -91,7 +110,6 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
@@ -100,6 +118,12 @@ class MainActivity : AppCompatActivity() {
         privacyCover = findViewById(R.id.privacyCover)
         pinSettings = PinSettings(this)
         adminToken = resolveAdminToken()
+        bluetoothPrinter = BluetoothPrinterController(AndroidBluetoothGateway(this))
+        networkPrinter = NetworkPrinterController(
+            NsdNetworkPrinterDiscovery(applicationContext),
+        )
+        usbPrinter = UsbPrinterController(AndroidUsbPrinterGateway(this))
+        systemPrinter = SystemPrintController(this)
         nativeBridge = NativeBridge(
             activity = this,
             webView = webView,
@@ -107,6 +131,11 @@ class MainActivity : AppCompatActivity() {
             ioExecutor = nativeExecutor,
             requestLegacyStoragePermission = ::requestStoragePermission,
             onBackendRestarted = ::restartBackendAfterRestore,
+            printerController = bluetoothPrinter,
+            networkPrinterController = networkPrinter,
+            usbPrinterController = usbPrinter,
+            systemPrintController = systemPrinter,
+            requestBluetoothPermissions = ::requestBluetoothPermissions,
         )
 
         findViewById<Button>(R.id.retryButton).setOnClickListener { startBackend() }
@@ -148,6 +177,10 @@ class MainActivity : AppCompatActivity() {
         fileChooserCallback?.onReceiveValue(null)
         fileChooserCallback = null
         pendingStorageCallback = null
+        pendingBluetoothCallback = null
+        runCatching { bluetoothPrinter.close() }
+        runCatching { networkPrinter.close() }
+        runCatching { usbPrinter.close() }
         nativeExecutor.shutdownNow()
         webView.loadUrl("about:blank")
         webView.clearHistory()
@@ -289,6 +322,31 @@ class MainActivity : AppCompatActivity() {
             storagePermissionLauncher.launch(
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
+        }
+    }
+
+    private fun requestBluetoothPermissions(
+        permissions: List<String>,
+        callback: (Boolean) -> Unit,
+    ) {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) {
+                callback(false)
+                return@runOnUiThread
+            }
+            val missing = permissions.filter {
+                checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (missing.isEmpty()) {
+                callback(true)
+                return@runOnUiThread
+            }
+            if (pendingBluetoothCallback != null) {
+                callback(false)
+                return@runOnUiThread
+            }
+            pendingBluetoothCallback = callback
+            bluetoothPermissionLauncher.launch(missing.toTypedArray())
         }
     }
 

@@ -38,6 +38,11 @@ def start(backend_dir: str, files_dir: str, port: int, admin_token: str) -> None
         "sqlite:///" + os.path.join(files_dir, "data", "bengkel_radiator.db")
     )
     os.environ["BACKUP_DIR"] = os.path.join(files_dir, "backups")
+    # Konfigurasi printer harus berada di direktori tulis milik aplikasi,
+    # bukan direktori aset backend yang bersifat sementara.
+    os.environ["PRINTER_CONFIG_PATH"] = os.path.join(
+        files_dir, "data", "printer_config.json"
+    )
     # Penjadwalan dipegang WorkManager Android, bukan thread Python yang ikut
     # mati saat proses aplikasi dibunuh sistem.
     os.environ["BACKUP_SCHEDULER"] = "workmanager"

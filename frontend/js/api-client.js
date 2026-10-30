@@ -11,26 +11,43 @@
     }
   }
 
+  const GENERIC_VALIDATION =
+    'Isian belum sesuai. Periksa kembali data yang dimasukkan.';
+  const GENERIC_FAILURE = 'Permintaan gagal. Coba lagi.';
+  const INTERNAL_MARKERS =
+    /traceback|sqlite|basis data|database|\.py\b|\/api\/|localhost|127\.0\.0\.1|port\s*\d|http\s*\d{3}|stack/i;
+
+  function safeDetail(detail) {
+    if (!detail) return null;
+    const text =
+      typeof detail === 'string'
+        ? detail
+        : typeof detail.message === 'string'
+          ? detail.message
+          : '';
+    const trimmed = text.trim();
+    if (!trimmed || INTERNAL_MARKERS.test(trimmed)) return null;
+    return trimmed;
+  }
+
   function extractMessage(detail, fallback) {
-    if (!detail) return fallback;
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail)) {
-      const first = detail[0];
-      if (first && first.msg) return first.msg;
-      return fallback;
-    }
-    if (typeof detail.message === 'string') return detail.message;
-    return fallback;
+    if (Array.isArray(detail)) return GENERIC_VALIDATION;
+    return safeDetail(detail) || fallback;
   }
 
   function friendlyStatusMessage(status) {
-    if (status === 401) return 'Sesi berakhir. Silakan masukkan PIN lagi.';
-    if (status === 403) return 'Permintaan dari alamat lain ditolak.';
+    if (status === 401) return 'Sesi berakhir. Masukkan PIN lagi.';
+    if (status === 403) return 'Akses ditolak.';
     if (status === 429) return 'Terlalu banyak percobaan. Tunggu sebentar.';
-    if (status === 503) {
-      return 'Server belum siap. Tutup lalu buka lagi aplikasi.';
-    }
+    if (status === 503) return 'Aplikasi belum siap. Tutup lalu buka lagi.';
+    if (status >= 500) return 'Aplikasi sedang bermasalah. Coba lagi.';
     return null;
+  }
+
+  function messageFor(status, detail) {
+    const friendly = friendlyStatusMessage(status);
+    if (status >= 500) return friendly;
+    return extractMessage(detail, friendly || GENERIC_FAILURE);
   }
 
   function installToken() {
@@ -61,7 +78,7 @@
       response = await fetch(path, init);
     } catch (err) {
       throw new ApiError(
-        'Tidak dapat menghubungi server lokal. Pastikan aplikasi masih berjalan.',
+        'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
         0,
         null
       );
@@ -81,10 +98,7 @@
       } catch (err) {
         detail = null;
       }
-      const fallback =
-        friendlyStatusMessage(response.status) ||
-        'Permintaan gagal (HTTP ' + response.status + ').';
-      const message = extractMessage(detail, fallback);
+      const message = messageFor(response.status, detail);
       throw new ApiError(message, response.status, detail);
     }
 
@@ -161,6 +175,10 @@
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),
 
+    printerConfig: () => request('/api/printer/config'),
+    updatePrinterConfig: (data) =>
+      request('/api/printer/config', { method: 'PUT', body: data }),
+
     updateTelegram: (data) =>
       request('/api/settings/telegram', { method: 'PUT', body: data }),
 
@@ -184,7 +202,11 @@
           cache: 'no-store',
         });
       } catch (err) {
-        throw new ApiError('Tidak dapat menghubungi server lokal.', 0, null);
+        throw new ApiError(
+          'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
+          0,
+          null
+        );
       }
 
       if (response.status === 401) {
@@ -200,7 +222,7 @@
           detail = null;
         }
         throw new ApiError(
-          extractMessage(detail, 'Restore gagal (HTTP ' + response.status + ').'),
+          messageFor(response.status, detail),
           response.status,
           detail
         );
@@ -244,7 +266,11 @@
           cache: 'no-store',
         });
       } catch (err) {
-        throw new ApiError('Tidak dapat menghubungi server lokal.', 0, null);
+        throw new ApiError(
+          'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
+          0,
+          null
+        );
       }
 
       if (response.status === 401) {
@@ -260,7 +286,7 @@
           detail = null;
         }
         throw new ApiError(
-          extractMessage(detail, 'Backup gagal (HTTP ' + response.status + ').'),
+          messageFor(response.status, detail),
           response.status,
           detail
         );

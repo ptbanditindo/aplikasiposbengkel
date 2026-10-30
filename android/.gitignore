@@ -6,3 +6,6 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Toolchain portabel lokal (JDK/Gradle/Android SDK) — tidak di-commit.
+.toolchain/

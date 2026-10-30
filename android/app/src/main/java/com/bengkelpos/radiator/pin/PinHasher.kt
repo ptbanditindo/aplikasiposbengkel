@@ -1,8 +1,8 @@
 package com.bengkelpos.radiator.pin
 
-import android.util.Base64
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
@@ -19,8 +19,8 @@ object PinHasher {
         return listOf(
             SCHEME,
             iterations.toString(),
-            Base64.encodeToString(salt, Base64.NO_WRAP),
-            Base64.encodeToString(hash, Base64.NO_WRAP),
+            Base64.getEncoder().encodeToString(salt),
+            Base64.getEncoder().encodeToString(hash),
         ).joinToString("$")
     }
 
@@ -29,8 +29,8 @@ object PinHasher {
         if (parts.size != 4 || parts[0] != SCHEME) return false
         val iterations = parts[1].toIntOrNull() ?: return false
         if (iterations <= 0) return false
-        val salt = runCatching { Base64.decode(parts[2], Base64.NO_WRAP) }.getOrNull() ?: return false
-        val expected = runCatching { Base64.decode(parts[3], Base64.NO_WRAP) }.getOrNull() ?: return false
+        val salt = runCatching { Base64.getDecoder().decode(parts[2]) }.getOrNull() ?: return false
+        val expected = runCatching { Base64.getDecoder().decode(parts[3]) }.getOrNull() ?: return false
         val actual = hash(pin, salt, iterations)
         return MessageDigest.isEqual(expected, actual)
     }

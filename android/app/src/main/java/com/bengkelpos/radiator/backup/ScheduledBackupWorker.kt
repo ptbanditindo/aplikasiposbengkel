@@ -36,7 +36,7 @@ class ScheduledBackupWorker(
         val startedHere = !BackendManager.isRunning()
         if (startedHere && !BackendManager.start(applicationContext, token)) {
             return@withContext recordFailure(
-                "Server lokal gagal dijalankan. Backup akan dicoba lagi.",
+                "Aplikasi gagal dijalankan. Backup akan dicoba lagi.",
                 BackupPolicy.backendFailureDecision(runAttemptCount),
             )
         }
@@ -115,7 +115,7 @@ class ScheduledBackupWorker(
             val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
                 throw IllegalStateException(
-                    "Server backup lokal menolak permintaan (HTTP $code).",
+                    "Backup otomatis gagal dijalankan.",
                 )
             }
             return JSONObject(text)

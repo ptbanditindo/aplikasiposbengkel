@@ -79,6 +79,13 @@ android {
 chaquopy {
     defaultConfig {
         version = "3.10"
+        // Chaquopy di Windows mencari `py -3.13`, `py -3`, lalu `python` di PATH.
+        // Keduanya tidak tersedia di mesin build ini, jadi interpreter host
+        // ditunjuk eksplisit. Nilai dapat ditimpa lewat -Pchaquopy.buildPython=...
+        buildPython(
+            (findProperty("chaquopy.buildPython") as String?)
+                ?: "C:/Users/sukron/AppData/Local/Programs/Python/Python312/python.exe"
+        )
         // Semua dependensi didaftarkan eksplisit tanpa resolusi transitif,
         // supaya hanya wheel murni Python yang diunduh (tidak ada greenlet/Rust).
         pip {

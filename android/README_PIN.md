@@ -1,18 +1,19 @@
 # PIN Aplikasi Android (BengkelPOS Radiator)
 
-Modul PIN untuk rencana APK. Kode ada di `android/` dan belum pernah dikompilasi
-di mesin ini (tidak ada JDK, Gradle, Kotlin, maupun Android SDK terpasang).
+Modul PIN untuk APK. Kode ada di `android/` dan sudah dikompilasi dengan
+toolchain portabel di `android/.toolchain` (JDK 17, Gradle 8.7, Android SDK 35,
+Python 3.12.10 sebagai build Python).
 
 ## Status penting
 
 - Gerbang PIN, reset, dan shell WebView sudah ditulis lengkap.
 - Backend Python **sudah dikemas** ke dalam APK memakai Chaquopy 16 (Python
   3.10). Lihat `README_APK.md` untuk arsitektur, build, dan batasannya.
-- Reset data menghentikan server lokal lebih dulu (menutup SQLite) sebelum
-  menghapus file, lalu server dinyalakan ulang dengan database dan token
-  instalasi baru.
-- APK belum bisa diuji di perangkat. Unit test sudah ditulis tetapi belum
-  dijalankan di mesin ini (tidak ada JDK/Android SDK).
+- Reset PIN **hanya menghapus hash PIN**; database, transaksi, stok, backup,
+  dan token instalasi tetap utuh. Server lokal tidak perlu dihentikan.
+- Unit test JVM sudah dijalankan (143 test lulus, termasuk PIN, backup, dan
+  printer). APK Debug sudah di-build, tetapi alur PIN belum diuji di perangkat
+  fisik.
 
 ## Alur yang diimplementasikan
 
@@ -45,10 +46,10 @@ dinding); sisa waktu diambil yang **terbesar**. Elapsed yang kembali ke nol
 (reboot) atau jam dinding yang dimundurkan tidak memperpendek kunci.
 
 5. **Lupa PIN** — dialog peringatan, lalu konfirmasi kedua dengan mengetik
-   `RESET`. Setelah itu data lokal dihapus (database, pengaturan, hash PIN,
-   data WebView) dan kunci Keystore dihapus, sehingga hash PIN lama tidak bisa
-   dipakai lagi. Pengguna membuat PIN baru, lalu memulihkan data dari backup
-   Telegram secara manual.
+   `RESET` (tidak peka huruf besar/kecil). Hanya hash PIN yang dihapus; data
+   pelanggan, transaksi, stok, backup, dan token instalasi tidak disentuh.
+   Pengguna langsung membuat PIN baru di layar yang sama, dan PIN baru langsung
+   berlaku setelah aplikasi ditutup dan dibuka lagi.
 
 ## Penyimpanan dan keamanan
 
@@ -56,23 +57,33 @@ dinding); sisa waktu diambil yang **terbesar**. Elapsed yang kembali ke nol
   Format tersimpan menyertakan jumlah iterasi agar bisa dinaikkan nanti.
 - Hash dan status kunci disimpan di `EncryptedSharedPreferences` (AES256-GCM,
   kunci di Android Keystore). PIN mentah tidak pernah disimpan atau dicatat.
-- Layar PIN dan WebView memakai `FLAG_SECURE` (tidak muncul di recents/screenshot).
+- Layar PIN memakai `FLAG_SECURE` agar PIN tidak muncul di recents atau screenshot.
+  Layar utama (WebView) tidak memakai `FLAG_SECURE`, sehingga nota, laporan, dan
+  tampilan operasional lain dapat di-screenshot; `privacyCover` tetap menutup
+  pratinjau recents saat aplikasi masuk latar belakang.
 - `allowBackup="false"` plus `data_extraction_rules.xml` agar hash tidak ikut
   Android Auto Backup / transfer perangkat.
 - WebView hanya mengizinkan navigasi ke `127.0.0.1` / `localhost`; tautan
   eksternal diblokir. File dan content access dimatikan, mixed content ditolak.
 - `BengkelApp` mencatat waktu aplikasi masuk latar belakang; status sesi hanya
   di memori proses, sehingga proses yang mati selalu meminta PIN lagi.
+- Reset PIN adalah jalur darurat bagi pemilik perangkat, **bukan** pengaman
+  terhadap orang yang memegang perangkat. Siapa pun yang bisa mengetik `RESET`
+  dapat membuat PIN baru dan membuka data yang sudah ada di perangkat itu.
+  Karena itu database APK tetap terlindungi hanya oleh kunci perangkat dan
+  akses fisik, bukan oleh PIN.
 
-## Restore setelah reset
+## Restore database dari backup
+
+Reset PIN tidak menghapus data, jadi pemulihan tidak diperlukan setelah reset.
+Restore hanya dipakai bila database memang rusak atau perangkat diganti.
 
 Bot Telegram **tidak dapat mengunduh file yang dikirim oleh bot itu sendiri**,
-jadi pemulihan otomatis dari chat tidak bisa dilakukan lewat Bot API. Setelah
-reset, pengguna harus:
+jadi pemulihan otomatis dari chat tidak bisa dilakukan lewat Bot API. Pengguna
+harus:
 
 1. Membuka chat Telegram dan mengunduh file `.db` backup terakhir.
-2. Membuat PIN baru saat diminta.
-3. Membuka Pengaturan → "Pulihkan database" dan memilih file tersebut.
+2. Membuka Pengaturan → "Pulihkan database" dan memilih file tersebut.
 
 Pemilih file untuk `<input type="file">` sudah ditangani `WebChromeClient` di
 `MainActivity`, dengan tipe `*/*` agar file `.db` tetap bisa dipilih.
@@ -92,24 +103,27 @@ android/app/src/main/java/com/bengkelpos/radiator/
   backend/BackendInstaller.kt ekstrak bengkel_backend.zip ke codeCacheDir
   backend/BackendHealth.kt   polling /api/health sebelum loadUrl()
   pin/PinActivity.kt         layar buat/konfirmasi/buka PIN + reset
-  pin/PinStore.kt            hash, hitungan gagal, status kunci, token instalasi
+  pin/PinStore.kt            hash, hitungan gagal, status kunci, clearPin()
   pin/PinHasher.kt           PBKDF2 + salt
+  pin/PinEnrollment.kt       pencocokan PIN + konfirmasi sebelum disimpan
+  pin/PinResetKeyword.kt     konfirmasi kata kunci RESET
   pin/LockoutPolicy.kt       tabel durasi kunci
   pin/LockoutState.kt        perhitungan sisa kunci dua jam
   pin/PinSession.kt          status sesi di memori
   pin/PinSettings.kt         batas kunci otomatis (menit)
-  pin/LocalDataResetter.kt   hentikan server + hapus data lokal + kunci Keystore
+  pin/LocalDataResetter.kt   pembersih data total (tidak dipakai alur reset PIN)
 android/app/src/main/python/bootstrap.py   uvicorn di dalam proses APK
 android/app/src/test/java/com/bengkelpos/radiator/pin/
-  LockoutPolicyTest.kt, LockoutStateTest.kt, PinSessionTest.kt
+  LockoutPolicyTest.kt, LockoutStateTest.kt, PinSessionTest.kt,
+  PinHasherTest.kt, PinEnrollmentTest.kt, PinResetKeywordTest.kt
 ```
 
 ## Build
 
-Prasyarat: JDK 17, Android SDK 35, dan Python 3.10+ di mesin build (dipakai
-Chaquopy untuk pip). Berkas `gradle/wrapper/gradle-wrapper.jar` belum ada;
-buat sekali dengan Gradle yang terpasang (`gradle wrapper`) atau buka folder
-`android/` di Android Studio. Detail lengkap ada di `README_APK.md`.
+Prasyarat: JDK 17, Android SDK 35, dan Python 3.12.10 di mesin build (dipakai
+Chaquopy untuk pip; runtime APK tetap Python 3.10). Toolchain portabel proyek
+ada di `android/.toolchain` dan `android/local.properties` menunjuk ke SDK itu.
+Detail lengkap ada di `README_APK.md`.
 
 ```bash
 cd android
@@ -119,11 +133,9 @@ cd android
 
 ## Belum dikerjakan
 
-- Cetak struk ke printer thermal dari dalam WebView (butuh jembatan native
-  ESC/POS; backend sudah menyiapkan teks & base64).
-- Tombol "Unduh backup" memakai blob URL di WebView; unduhan blob belum
-  ditangani `DownloadListener`, jadi di APK tombol itu belum menyimpan file.
-- Ganti PIN dari dalam aplikasi.
+- Ganti PIN dari dalam aplikasi (saat ini reset lewat kata kunci `RESET`).
 - Enkripsi file backup Telegram.
-- Verifikasi di perangkat: pembukaan ulang, latar belakang, reboot, ubah jam,
-  dan alur reset → restore.
+- Verifikasi di perangkat fisik: pembukaan ulang, latar belakang, reboot, ubah
+  jam, screenshot layar utama vs layar PIN, serta alur reset → restore.
+- Verifikasi cetak pada model printer thermal nyata (jalur Bluetooth, Wi-Fi/LAN,
+  USB OTG, dan cetak Android sudah tersedia).

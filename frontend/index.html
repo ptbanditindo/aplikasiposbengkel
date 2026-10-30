@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f2f4f7">
+  <meta name="theme-color" content="#f4f1ea">
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/css/style.css">
@@ -20,13 +20,15 @@
             <circle cx="16" cy="27" r="2.2"></circle>
           </svg>
         </div>
-        <p class="auth-brand-name">BengkelPOS Radiator</p>
-        <p class="auth-brand-sub">Data bengkel hanya untuk PC kasir ini</p>
+        <div class="auth-brand-copy">
+          <p class="auth-brand-name">BengkelPOS Radiator</p>
+          <p class="auth-brand-sub">Data bengkel tersimpan di perangkat ini</p>
+        </div>
       </div>
 
       <section id="authSetup" class="hidden">
-        <h1 class="auth-title" id="authTitle">Buat PIN Kasir</h1>
-        <p class="muted auth-lead">PIN 4&ndash;12 angka ini menjaga data bengkel. Hanya pemilik yang perlu tahu.</p>
+        <h1 class="auth-title" id="authTitle">Buat PIN kasir</h1>
+        <p class="muted auth-lead">PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu.</p>
         <form id="authSetupForm" autocomplete="off">
           <label class="field">
             <span>PIN baru</span>
@@ -50,9 +52,9 @@
             <input class="input" type="password" id="authLoginPin" inputmode="numeric" autocomplete="current-password" maxlength="12" required>
           </label>
           <p class="auth-error hidden" id="authLoginError" role="alert"></p>
-          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka Kasir</button>
+          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka kasir</button>
         </form>
-        <p class="auth-help">Lupa PIN? Jalankan <code>python reset_pin.py</code> di PC kasir. Data transaksi tidak hilang.</p>
+        <p class="auth-help">Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.</p>
       </section>
     </div>
   </div>
@@ -69,7 +71,7 @@
         </div>
         <div class="brand-copy">
           <p class="brand-name" id="bengkelNama">BengkelPOS Radiator</p>
-          <p class="brand-tagline" id="bengkelTagline">Sistem kasir &amp; servis radiator</p>
+          <p class="brand-tagline" id="bengkelTagline">Kasir dan servis radiator</p>
         </div>
       </div>
 
@@ -110,15 +112,15 @@
       </nav>
 
       <div class="sidebar-foot">
-        <button type="button" class="printer-pill offline" id="printerBtn" title="Hubungkan printer thermal Bluetooth">
+        <button type="button" class="printer-pill offline" id="printerBtn" title="Buka pengaturan printer">
           <span class="status-dot" id="printerDot"></span>
-          <span id="printerLabel">Printer belum terhubung</span>
+          <span id="printerLabel">Printer belum siap</span>
         </button>
         <div class="clock" id="clock">
           <span class="clock-date" id="clockDate">-</span>
           <span class="clock-time" id="clockTime">--:--</span>
         </div>
-        <p class="sidebar-note">Data lokal &middot; SQLite</p>
+        <p class="sidebar-note">Data tersimpan di perangkat ini</p>
       </div>
     </aside>
 
@@ -129,35 +131,35 @@
         <div class="page-head">
           <div>
             <h1>Ringkasan hari ini</h1>
-            <p class="muted">Servis dan kas yang tercatat hari ini.</p>
+            <p class="muted">Servis dan pembayaran yang tercatat hari ini.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-outline" id="heroNewCustomer">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-8 0v1"></path><circle cx="12" cy="9" r="3"></circle><path d="M19 8h3M20.5 6.5v3"></path></svg>
-              Pelanggan Baru
+              Pelanggan baru
             </button>
             <button type="button" class="btn btn-primary" id="heroNewService">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-              Service Baru
+              Servis baru
             </button>
           </div>
         </div>
 
         <div class="stats-grid">
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota hari ini" data-action="dashboard-notas" data-filter="unit">
-            <span class="stat-label">Unit diservis hari ini</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
+            <span class="stat-label">Unit diservis</span>
             <strong id="statUnit">0</strong>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai hari ini" data-action="dashboard-notas" data-filter="cash">
-            <span class="stat-label">Kas tunai masuk</span>
+            <span class="stat-label">Tunai masuk</span>
             <strong id="statCash">Rp 0</strong>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota transfer hari ini" data-action="dashboard-notas" data-filter="transfer">
-            <span class="stat-label">Transfer bank masuk</span>
+            <span class="stat-label">Transfer masuk</span>
             <strong id="statTransfer">Rp 0</strong>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="dashboard-notas" data-filter="warranty">
-            <span class="stat-label">Garansi servis aktif</span>
+            <span class="stat-label">Garansi aktif</span>
             <strong id="statWarranty">0</strong>
           </article>
         </div>
@@ -185,7 +187,7 @@
               </thead>
               <tbody id="recentBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="recentEmpty">Belum ada transaksi. Mulai dengan tombol Service Baru.</div>
+            <div class="empty-state hidden" id="recentEmpty">Belum ada transaksi hari ini. Mulai dari tombol Servis baru.</div>
           </div>
         </section>
       </section>
@@ -195,15 +197,16 @@
         <div class="page-head">
           <div>
             <h1>Transaksi kasir</h1>
-            <p class="muted">Harga jasa &amp; sparepart dapat dinegosiasikan di kolom harga deal.</p>
+            <p class="muted">Harga jasa dan sparepart bisa disesuaikan di kolom harga deal.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="posReset">Reset form</button>
+          <button type="button" class="btn btn-ghost" id="posReset">Kosongkan form</button>
         </div>
 
         <div class="pos-layout">
           <div class="pos-main">
             <section class="card step-card">
               <div class="step-head">
+                <span class="step-num" aria-hidden="true">1</span>
                 <div>
                   <h2>Pilih pelanggan</h2>
                   <p class="muted">Cari berdasarkan nama atau nomor HP.</p>
@@ -211,7 +214,7 @@
               </div>
               <div class="search-row">
                 <div class="autocomplete">
-                  <input type="text" class="input" id="customerSearch" placeholder="Ketik nama / nomor HP pelanggan..." autocomplete="off">
+                  <input type="text" class="input" id="customerSearch" placeholder="Nama atau nomor HP pelanggan" autocomplete="off">
                   <div class="autocomplete-list hidden" id="customerResults"></div>
                 </div>
                 <button type="button" class="btn btn-outline" id="btnNewCustomerPos">+ Pelanggan baru</button>
@@ -221,6 +224,7 @@
 
             <section class="card step-card hidden" id="unitCard">
               <div class="step-head">
+                <span class="step-num" aria-hidden="true">2</span>
                 <div>
                   <h2>Pilih unit servis</h2>
                   <p class="muted">Mobil lengkap atau radiator copotan tanpa nopol.</p>
@@ -229,17 +233,17 @@
               <div class="unit-grid" id="unitList"></div>
               <div class="divider-row"><span>atau daftarkan unit baru</span></div>
               <div class="segmented" id="unitTypeSwitch">
-                <button type="button" data-type="MOBIL" class="active">Mobil Lengkap</button>
-                <button type="button" data-type="RADIATOR_ONLY">Bawa Radiator Saja</button>
+                <button type="button" data-type="MOBIL" class="active">Mobil lengkap</button>
+                <button type="button" data-type="RADIATOR_ONLY">Bawa radiator saja</button>
               </div>
               <div class="form-grid" id="mobilFields">
                 <label class="field">
                   <span>Nomor polisi <em>*</em></span>
-                  <input type="text" class="input" id="unitNopol" placeholder="contoh: b 1234 abc" maxlength="32">
+                  <input type="text" class="input" id="unitNopol" placeholder="Contoh: B 1234 ABC" maxlength="32">
                 </label>
                 <label class="field">
-                  <span>Jenis / tipe mobil</span>
-                  <input type="text" class="input" id="unitJenis" placeholder="contoh: Avanza 2018" maxlength="255">
+                  <span>Jenis atau tipe mobil</span>
+                  <input type="text" class="input" id="unitJenis" placeholder="Contoh: Avanza 2018" maxlength="255">
                 </label>
                 <label class="field">
                   <span>Tahun</span>
@@ -249,14 +253,14 @@
               <div class="form-grid hidden" id="radiatorFields">
                 <label class="field">
                   <span>Tipe radiator</span>
-                  <input type="text" class="input" id="unitTipe" placeholder="contoh: Radiator Canter 2-Ply" maxlength="255">
+                  <input type="text" class="input" id="unitTipe" placeholder="Contoh: Radiator Canter 2-ply" maxlength="255">
                 </label>
                 <label class="field">
                   <span>Kondisi awal</span>
-                  <input type="text" class="input" id="unitKondisi" placeholder="contoh: upper tank retak" maxlength="1000">
+                  <input type="text" class="input" id="unitKondisi" placeholder="Contoh: upper tank retak" maxlength="1000">
                 </label>
                 <div class="field hint-box">
-                  <span>Label fisik otomatis</span>
+                  <span>Label radiator otomatis</span>
                   <strong>RAD-YYYYMMDD-XXX</strong>
                   <small>Dibuat otomatis saat unit disimpan.</small>
                 </div>
@@ -274,27 +278,29 @@
 
             <section class="card step-card hidden" id="complaintCard">
               <div class="step-head">
+                <span class="step-num" aria-hidden="true">3</span>
                 <div>
                   <h2>Keluhan awal</h2>
-                  <p class="muted">Pilih keluhan populer atau tulis manual.</p>
+                  <p class="muted">Pilih keluhan yang sering muncul atau tulis sendiri.</p>
                 </div>
               </div>
               <div class="chips" id="complaintChips"></div>
               <label class="field">
                 <span>Keluhan pelanggan <em>*</em></span>
-                <textarea class="input textarea" id="keluhanInput" rows="3" placeholder="contoh: air tekor, panas naik saat macet" maxlength="2000"></textarea>
+                <textarea class="input textarea" id="keluhanInput" rows="3" placeholder="Contoh: air tekor, panas naik saat macet" maxlength="2000"></textarea>
               </label>
               <label class="field">
                 <span>Catatan pengerjaan (opsional)</span>
-                <input type="text" class="input" id="catatanPengerjaan" placeholder="contoh: ganti upper tank, tes tekanan" maxlength="2000">
+                <input type="text" class="input" id="catatanPengerjaan" placeholder="Contoh: ganti upper tank, tes tekanan" maxlength="2000">
               </label>
             </section>
 
             <section class="card step-card hidden" id="itemsCard">
               <div class="step-head">
+                <span class="step-num" aria-hidden="true">4</span>
                 <div>
                   <h2>Rincian pengerjaan</h2>
-                  <p class="muted">Harga master hanya patokan. Ubah harga deal bebas naik/turun.</p>
+                  <p class="muted">Harga master hanya patokan. Harga deal boleh naik atau turun.</p>
                 </div>
               </div>
 
@@ -305,7 +311,7 @@
                 </div>
                 <div class="line-grid">
                   <select class="input" id="jasaPicker"></select>
-                  <input type="text" class="input" id="jasaNama" placeholder="Nama jasa / kustom" maxlength="255">
+                  <input type="text" class="input" id="jasaNama" placeholder="Nama jasa atau jasa lain" maxlength="255">
                   <input type="number" class="input qty-input" id="jasaQty" value="1" min="1" placeholder="Qty">
                   <input type="text" class="input money-input" id="jasaHarga" inputmode="numeric" placeholder="Harga deal">
                   <button type="button" class="btn btn-outline" id="btnAddJob">+ Tambah jasa</button>
@@ -328,11 +334,11 @@
                 </div>
                 <div class="line-grid">
                   <select class="input" id="partPicker"></select>
-                  <input type="text" class="input" id="partNama" placeholder="Nama sparepart / kustom" maxlength="255">
+                  <input type="text" class="input" id="partNama" placeholder="Nama sparepart atau sparepart lain" maxlength="255">
                   <input type="number" class="input qty-input" id="partQty" value="1" min="1" placeholder="Qty">
                   <input type="text" class="input money-input" id="partHarga" inputmode="numeric" placeholder="Harga deal">
-                  <input type="text" class="input money-input" id="partModal" inputmode="numeric" placeholder="Modal (khusus part manual)">
-                  <button type="button" class="btn btn-outline" id="btnAddPart">+ Tambah part</button>
+                  <input type="text" class="input money-input" id="partModal" inputmode="numeric" placeholder="Modal (sparepart manual)">
+                  <button type="button" class="btn btn-outline" id="btnAddPart">+ Tambah sparepart</button>
                 </div>
               </div>
               <div class="table-wrap">
@@ -358,8 +364,8 @@
 
               <div class="summary-rows">
                 <div class="summary-row"><span>Subtotal jasa</span><strong id="jobSubtotal">Rp 0</strong></div>
-                <div class="summary-row"><span>Subtotal part</span><strong id="partSubtotal">Rp 0</strong></div>
-                <div class="summary-row total"><span>Grand total</span><strong id="grandTotalValue">Rp 0</strong></div>
+                <div class="summary-row"><span>Subtotal sparepart</span><strong id="partSubtotal">Rp 0</strong></div>
+                <div class="summary-row total"><span>Total nota</span><strong id="grandTotalValue">Rp 0</strong></div>
               </div>
               <p class="tiny muted hidden" id="summaryPreviewNote"></p>
 
@@ -373,11 +379,11 @@
                 <div class="pay-options">
                   <label class="pay-option">
                     <input type="radio" name="metode" value="CASH" id="metodeCash" checked>
-                    <span class="pay-box"><strong>CASH</strong><small>Hitung kembalian</small></span>
+                    <span class="pay-box"><strong>Tunai</strong><small>Hitung kembalian</small></span>
                   </label>
                   <label class="pay-option">
                     <input type="radio" name="metode" value="TRANSFER" id="metodeTransfer">
-                    <span class="pay-box"><strong>TRANSFER</strong><small>Uang pas</small></span>
+                    <span class="pay-box"><strong>Transfer</strong><small>Uang pas</small></span>
                   </label>
                 </div>
               </div>
@@ -407,17 +413,17 @@
                   <label class="field">
                     <span>Durasi garansi</span>
                     <select class="input" id="garansiBulan">
-                      <option value="1">1 Bulan (30 hari)</option>
-                      <option value="2">2 Bulan (60 hari)</option>
-                      <option value="3">3 Bulan (90 hari)</option>
-                      <option value="6">6 Bulan (180 hari)</option>
-                      <option value="12">12 Bulan (360 hari)</option>
-                      <option value="custom">Custom…</option>
+                      <option value="1">1 bulan (30 hari)</option>
+                      <option value="2">2 bulan (60 hari)</option>
+                      <option value="3">3 bulan (90 hari)</option>
+                      <option value="6">6 bulan (180 hari)</option>
+                      <option value="12">12 bulan (360 hari)</option>
+                      <option value="custom">Atur sendiri</option>
                     </select>
                   </label>
                   <label class="field hidden" id="garansiBulanCustomField">
-                    <span>Jumlah bulan (1–120)</span>
-                    <input type="number" class="input" id="garansiBulanCustom" min="1" max="120" step="1" inputmode="numeric" placeholder="mis. 18">
+                    <span>Jumlah bulan (1 sampai 120)</span>
+                    <input type="number" class="input" id="garansiBulanCustom" min="1" max="120" step="1" inputmode="numeric" placeholder="Contoh: 18">
                   </label>
                   <label class="field">
                     <span>Catatan garansi</span>
@@ -446,7 +452,7 @@
         </div>
         <div class="card">
           <div class="search-row">
-            <input type="text" class="input" id="historySearch" placeholder="Cari no. nota / nopol / RAD-xxxx / nama / HP...">
+            <input type="text" class="input" id="historySearch" placeholder="Cari nomor nota, nopol, label radiator, nama, atau HP">
             <span class="pill-count" id="historyCount">0 nota</span>
           </div>
           <div class="table-wrap">
@@ -523,7 +529,7 @@
           <div class="table-wrap">
             <table class="table table-jasa">
               <thead>
-                <tr><th>Nama Jasa</th><th class="text-right">Tarif</th><th></th></tr>
+                <tr><th>Nama jasa</th><th class="text-right">Tarif</th><th></th></tr>
               </thead>
               <tbody id="jasaBody"></tbody>
             </table>
@@ -539,7 +545,6 @@
             <h1>Laporan kas</h1>
             <p class="muted">Pemasukan tunai, transfer, dan estimasi laba kotor sparepart.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="btnBackup">Backup database</button>
         </div>
 
         <div class="card report-controls">
@@ -569,8 +574,8 @@
             <span class="stat-label">Transfer</span>
             <strong id="reportTransfer">Rp 0</strong>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba kotor part" data-action="report-notas" data-filter="profit">
-            <span class="stat-label">Estimasi laba kotor part</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba kotor sparepart" data-action="report-notas" data-filter="profit">
+            <span class="stat-label">Estimasi laba kotor sparepart</span>
             <strong id="reportProfit">Rp 0</strong>
           </article>
         </div>
@@ -605,7 +610,7 @@
           <div class="table-wrap">
             <table class="table table-period">
               <thead>
-                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba kotor part</th></tr>
+                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba kotor sparepart</th></tr>
               </thead>
               <tbody id="periodBody"></tbody>
             </table>
@@ -616,7 +621,7 @@
           <div class="card-head">
             <div>
               <h2>Stok pernah terjual</h2>
-              <p class="muted" id="soldPartsNote">Harga mengikuti harga akhir (deal); barang sama diurutkan sesuai waktu.</p>
+              <p class="muted" id="soldPartsNote">Harga mengikuti harga deal. Barang yang sama diurutkan menurut waktu.</p>
             </div>
           </div>
           <div class="table-wrap">
@@ -642,19 +647,19 @@
         <form class="card" id="settingsForm">
           <div class="card-head">
             <div>
-              <h2>Identitas &amp; rekening</h2>
-              <p class="muted" id="settingsAdminNote">Perubahan disimpan di database lokal.</p>
+              <h2>Identitas dan rekening</h2>
+              <p class="muted" id="settingsAdminNote">Perubahan langsung tampil di aplikasi dan struk.</p>
             </div>
           </div>
 
           <div class="form-grid">
             <label class="field">
               <span>Nama bengkel <em>*</em></span>
-              <input type="text" class="input" id="settingsNama" required minlength="2" maxlength="255" placeholder="contoh: Bengkel Radiator Berkah">
+              <input type="text" class="input" id="settingsNama" required minlength="2" maxlength="255" placeholder="Contoh: Bengkel Radiator Berkah">
             </label>
             <label class="field">
               <span>Tagline</span>
-              <input type="text" class="input" id="settingsTagline" maxlength="255" placeholder="contoh: Spesialis Servis &amp; Las Radiator">
+              <input type="text" class="input" id="settingsTagline" maxlength="255" placeholder="Contoh: Spesialis servis dan las radiator">
             </label>
           </div>
 
@@ -677,11 +682,11 @@
           <div class="form-grid">
             <label class="field">
               <span>Bank</span>
-              <input type="text" class="input" id="settingsBankNama" maxlength="255" placeholder="contoh: BCA">
+              <input type="text" class="input" id="settingsBankNama" maxlength="255" placeholder="Contoh: BCA">
             </label>
             <label class="field">
               <span>Nomor rekening</span>
-              <input type="text" class="input" id="settingsNoRekening" maxlength="64" placeholder="contoh: 123-456-7890">
+              <input type="text" class="input" id="settingsNoRekening" maxlength="64" placeholder="Contoh: 123-456-7890">
             </label>
           </div>
 
@@ -696,21 +701,44 @@
           </div>
         </form>
 
+        <section class="card" id="printerSettingsCard">
+          <div class="card-head">
+            <div>
+              <h2>Printer</h2>
+              <p class="muted" id="printerSummary">Belum ada printer tersimpan.</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btnAddPrinter">+ Tambah printer</button>
+          </div>
+
+          <p class="printer-banner hidden" id="printerWarning" role="alert"></p>
+
+          <div class="printer-list" id="printerList"></div>
+          <div class="empty-state hidden" id="printerEmpty">
+            Belum ada printer. Tambahkan printer Bluetooth, Wi-Fi atau LAN, USB OTG,
+            cetak Android, atau cetak browser.
+          </div>
+
+          <p class="tiny muted printer-footnote">
+            Menghapus printer hanya menghapus konfigurasinya. Data transaksi, pelanggan,
+            dan stok tidak ikut terhapus.
+          </p>
+        </section>
+
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Backup &amp; pemulihan database</h2>
-              <p class="muted">Seluruh data lokal (pelanggan, unit, nota, stok, pengaturan) ada dalam satu file database.</p>
+              <h2>Backup dan pemulihan</h2>
+              <p class="muted">Satu file berisi data pelanggan, unit, riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel.</p>
             </div>
           </div>
           <p class="tiny muted">
-            Pulihkan file database dari perangkat lain saat instalasi baru. Data saat ini akan
-            diganti, tetapi backup keamanan dibuat otomatis sebelum pemulihan.
+            Gunakan file backup dari perangkat lain saat memasang aplikasi baru. Data saat ini
+            akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan.
           </p>
           <div class="form-actions">
             <button type="button" class="btn btn-outline" id="settingsBackup">Unduh backup</button>
             <button type="button" class="btn btn-outline hidden" id="settingsShareBackup">Bagikan backup</button>
-            <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan database</button>
+            <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan data</button>
             <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
           </div>
         </section>
@@ -744,8 +772,8 @@
               <input type="time" class="input" id="telegramJam" value="21:00">
             </label>
             <label class="field">
-              <span>Chat ID owner / penerima</span>
-              <input type="text" class="input" id="telegramChatId" maxlength="64" placeholder="contoh: 123456789 atau @namachannel">
+              <span>Chat ID penerima</span>
+              <input type="text" class="input" id="telegramChatId" maxlength="64" placeholder="Contoh: 123456789 atau @namachannel">
             </label>
           </div>
 
@@ -755,10 +783,10 @@
           </label>
 
           <p class="tiny muted">
-            Setiap pengiriman berisi satu file database lengkap (semua data) dengan nama rentang
-            tanggal, sehingga tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet.
-            Jika backup harian terlewat (misalnya internet mati), aplikasi langsung mengirimkannya
-            begitu internet tersedia tanpa menunggu jam kirim.
+            Setiap kiriman berisi satu file backup lengkap: pelanggan, unit, riwayat servis,
+            transaksi keuangan, stok, dan pengaturan bengkel. Nama file memakai rentang tanggal,
+            jadi tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet. Jika
+            jadwal terlewat, backup dikirim begitu internet tersedia.
           </p>
 
           <div class="form-actions">
@@ -776,10 +804,10 @@
           </div>
           <p class="tiny muted">
             Kasir dapat membuat transaksi, membatalkan nota, dan mencatat retur. Pengaturan,
-            backup, dan pemulihan database tetap khusus pemilik.
+            backup, dan pemulihan data tetap khusus pemilik.
           </p>
           <label class="field">
-            <span>PIN kasir (4&ndash;12 angka)</span>
+            <span>PIN kasir (4 sampai 12 angka)</span>
             <input type="password" class="input" id="kasirPinInput" inputmode="numeric" autocomplete="new-password" maxlength="12" placeholder="PIN baru untuk kasir">
           </label>
           <div class="form-actions">
@@ -791,7 +819,7 @@
         <section class="card hidden" id="pinSecurityCard">
           <div class="card-head">
             <div>
-              <h2>Keamanan aplikasi (APK)</h2>
+              <h2>Keamanan aplikasi</h2>
               <p class="muted">PIN diminta setiap aplikasi dibuka dan setelah aplikasi lama di latar belakang.</p>
             </div>
           </div>
@@ -815,8 +843,8 @@
       <section class="view hidden" id="view-customers">
         <div class="page-head">
           <div>
-            <h1>Database pelanggan</h1>
-            <p class="muted">Pelanggan bengkel beserta unit mobil dan radiator yang dimiliki.</p>
+            <h1>Pelanggan</h1>
+            <p class="muted">Daftar pelanggan bengkel beserta unit mobil dan radiatornya.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-ghost" id="btnRefreshCustomers">Muat ulang</button>
@@ -845,18 +873,18 @@
 
         <section class="card">
           <div class="search-row">
-            <input type="text" class="input" id="customerDirectorySearch" placeholder="Cari nama / nomor HP pelanggan...">
+            <input type="text" class="input" id="customerDirectorySearch" placeholder="Cari nama atau nomor HP pelanggan">
             <span class="pill-count" id="customerDirectoryCount">0 pelanggan</span>
           </div>
           <div class="customer-grid" id="customerDirectoryGrid"></div>
-          <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat kepemilikan unit.</div>
+          <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat unit servis.</div>
         </section>
       </section>
     </main>
 
       <footer class="app-footer">
         <span>BengkelPOS Radiator v2.0</span>
-        <span>Offline-first &middot; data lokal SQLite</span>
+        <span>Berjalan tanpa internet</span>
       </footer>
     </div>
   </div>
@@ -867,18 +895,18 @@
       <div class="modal-head">
         <div>
           <h3 id="customerModalTitle">Tambah pelanggan</h3>
-          <p class="muted">Nomor HP akan dinormalisasi otomatis.</p>
+          <p class="muted">Format nomor HP dirapikan otomatis.</p>
         </div>
         <button type="button" class="icon-btn" id="customerModalClose" aria-label="Tutup">&times;</button>
       </div>
       <form id="customerForm">
         <label class="field">
           <span>Nama pelanggan <em>*</em></span>
-          <input type="text" class="input" id="custNama" required minlength="2" maxlength="255" placeholder="contoh: Pak Slamet">
+          <input type="text" class="input" id="custNama" required minlength="2" maxlength="255" placeholder="Contoh: Pak Slamet">
         </label>
         <label class="field">
           <span>Nomor HP <em>*</em></span>
-          <input type="text" class="input" id="custHp" required minlength="8" maxlength="64" placeholder="contoh: 0812-3456-7890">
+          <input type="text" class="input" id="custHp" required minlength="8" maxlength="64" placeholder="Contoh: 0812-3456-7890">
         </label>
         <label class="field">
           <span>Alamat</span>
@@ -892,13 +920,137 @@
     </div>
   </div>
 
+  <!-- ============================ PRINTER MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="printerModal" role="dialog" aria-modal="true" aria-labelledby="printerModalTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="printerModalTitle">Tambah printer</h3>
+          <p class="muted" id="printerModalSubtitle">Simpan perangkat sekali, lalu sambungkan saat dibutuhkan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="printerModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="printerForm">
+        <input type="hidden" id="printerId">
+        <div class="form-grid">
+          <label class="field">
+            <span>Nama printer <em>*</em></span>
+            <input type="text" class="input" id="printerName" required maxlength="80" placeholder="Contoh: Printer kasir">
+          </label>
+          <label class="field">
+            <span>Cara menghubungkan <em>*</em></span>
+            <select class="input" id="printerConnectionType">
+              <option value="BLUETOOTH">Bluetooth</option>
+              <option value="NETWORK">Wi-Fi / LAN</option>
+              <option value="USB">USB OTG</option>
+              <option value="SYSTEM">Cetak Android</option>
+              <option value="WEB">Cetak browser</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Lebar kertas</span>
+            <select class="input" id="printerPaperWidth">
+              <option value="58">58 mm</option>
+              <option value="80">80 mm</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Mode cetak</span>
+            <select class="input" id="printerPrintMode"></select>
+          </label>
+          <label class="field">
+            <span>Encoding teks</span>
+            <input type="text" class="input" id="printerEncoding" maxlength="32" value="CP437" placeholder="CP437">
+          </label>
+          <div class="field printer-supported" id="printerSupportedNote">
+            <span>Dukungan perangkat</span>
+            <p class="tiny muted" id="printerSupportedText">-</p>
+          </div>
+        </div>
+
+        <div class="printer-type-fields" id="printerBluetoothFields">
+          <label class="field">
+            <span>Alamat Bluetooth <em>*</em></span>
+            <input type="text" class="input" id="printerAddress" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
+          </label>
+        </div>
+
+        <div class="printer-type-fields" id="printerNetworkFields">
+          <div class="form-grid">
+            <label class="field">
+              <span>IP printer <em>*</em></span>
+              <input type="text" class="input" id="printerIp" maxlength="255" placeholder="192.168.1.9" inputmode="decimal" autocomplete="off">
+            </label>
+            <label class="field">
+              <span>Port <em>*</em></span>
+              <input type="number" class="input" id="printerPort" min="1" max="65535" value="9100" inputmode="numeric">
+            </label>
+          </div>
+        </div>
+
+        <div class="printer-type-fields" id="printerUsbFields">
+          <label class="field">
+            <span>Identitas perangkat USB <em>*</em></span>
+            <input type="text" class="input" id="printerUsbIdentity" maxlength="32" placeholder="usb:04b8:0202" autocomplete="off">
+          </label>
+        </div>
+
+        <p class="printer-info hidden" id="printerSystemInfo">
+          Cetak lewat dialog Android. Pilih printer dan jumlah salinan di sana;
+          aplikasi tidak menganggap printer selalu terhubung.
+        </p>
+        <p class="printer-info hidden" id="printerWebInfo">
+          Cetak lewat dialog browser. Pilih printer biasa atau printer thermal
+          yang sudah terpasang di komputer.
+        </p>
+
+        <div class="printer-discovery-row" id="printerDiscoveryRow">
+          <button type="button" class="btn btn-outline btn-sm" id="btnPrinterDiscover">Cari printer</button>
+          <span class="tiny muted" id="printerDiscoveryHint">Mencari printer yang terdeteksi di perangkat ini.</span>
+        </div>
+        <div class="printer-discovery hidden" id="printerDiscoveryResults"></div>
+
+        <label class="switch-row">
+          <span>Jadikan printer utama</span>
+          <input type="checkbox" id="printerMakePrimary">
+          <span class="switch-ui" aria-hidden="true"></span>
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="printerCancel">Batal</button>
+          <button type="submit" class="btn btn-primary" id="printerSubmit">Simpan printer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ PRINTER PICKER ============================ -->
+  <div class="modal-backdrop hidden" id="printerPickerModal" role="dialog" aria-modal="true" aria-labelledby="printerPickerTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="printerPickerTitle">Pilih printer</h3>
+          <p class="muted">Printer utama tetap tersimpan. Pilihan ini hanya untuk struk saat ini.</p>
+        </div>
+        <button type="button" class="icon-btn" id="printerPickerClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="printer-picker-list" id="printerPickerList"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="printerPickerDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================ RECEIPT MODAL ============================ -->
   <div class="modal-backdrop hidden" id="receiptModal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
     <div class="modal modal-wide">
       <div class="modal-head">
         <div>
           <h3 id="receiptTitle">Struk servis</h3>
-          <p class="muted" id="receiptSubtitle">Pratinjau struk thermal.</p>
+          <p class="muted" id="receiptSubtitle">Pratinjau struk sebelum dicetak.</p>
         </div>
         <button type="button" class="icon-btn" id="receiptClose" aria-label="Tutup">&times;</button>
       </div>
@@ -906,16 +1058,35 @@
         <div class="segmented sm" id="receiptWidthSwitch">
           <button type="button" data-width="58" class="active">58 mm</button>
           <button type="button" data-width="80">80 mm</button>
-          <button type="button" data-width="A4">A4</button>
+          <button type="button" data-width="A4" id="receiptWidthA4">A4</button>
         </div>
-        <span class="printer-note" id="receiptNotice">Web Bluetooth belum terhubung.</span>
+        <span class="printer-note" id="receiptNotice">Menyiapkan printer...</span>
       </div>
+
+      <div class="receipt-printer-panel">
+        <div class="receipt-printer-target">
+          <span class="tiny muted">Printer tujuan</span>
+          <strong id="receiptPrinterName">Belum ada printer utama</strong>
+          <span class="badge gray" id="receiptPrinterStatus">Belum diatur</span>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="btnReceiptChoosePrinter">Pilih printer</button>
+      </div>
+
+      <div class="receipt-print-status hidden" id="receiptPrintStatus" role="status" aria-live="polite">
+        <span id="receiptPrintMessage"></span>
+        <div class="receipt-print-actions">
+          <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptRetry">Coba lagi</button>
+          <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptChooseOther">Pilih printer lain</button>
+          <button type="button" class="btn btn-ghost btn-sm hidden" id="btnReceiptOpenSettings">Buka pengaturan printer</button>
+        </div>
+      </div>
+
       <div class="receipt-paper">
         <pre id="receiptPreview"></pre>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak printer sistem</button>
-        <button type="button" class="btn btn-primary" id="btnBluetoothPrint">Cetak Bluetooth</button>
+        <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
+        <button type="button" class="btn btn-primary" id="btnReceiptPrint">Cetak</button>
       </div>
     </div>
   </div>
@@ -979,7 +1150,7 @@
       <div id="customerDetailBody"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="customerDetailDismiss">Tutup</button>
-        <button type="button" class="btn btn-primary" id="btnCustomerDetailService">Buat Servis</button>
+        <button type="button" class="btn btn-primary" id="btnCustomerDetailService">Buat servis</button>
       </div>
     </div>
   </div>
@@ -1008,7 +1179,7 @@
         </div>
         <label class="field">
           <span>Nama sparepart <em>*</em></span>
-          <input type="text" class="input" id="stockNama" required minlength="2" maxlength="255" placeholder="contoh: Tutup Radiator 0.9">
+          <input type="text" class="input" id="stockNama" required minlength="2" maxlength="255" placeholder="Contoh: Tutup radiator 0.9">
         </label>
         <div class="form-grid">
           <label class="field">
@@ -1034,7 +1205,7 @@
       <div class="modal-head">
         <div>
           <h3 id="jasaModalTitle">Tambah tarif jasa</h3>
-          <p class="muted">Tarif standar yang disarankan untuk kasir.</p>
+          <p class="muted">Patokan tarif untuk kasir.</p>
         </div>
         <button type="button" class="icon-btn" id="jasaModalClose" aria-label="Tutup">&times;</button>
       </div>
@@ -1042,7 +1213,7 @@
         <input type="hidden" id="jasaId">
         <label class="field">
           <span>Nama jasa <em>*</em></span>
-          <input type="text" class="input" id="jasaNamaInput" required minlength="2" maxlength="255" placeholder="contoh: Korok Radiator">
+          <input type="text" class="input" id="jasaNamaInput" required minlength="2" maxlength="255" placeholder="Contoh: Korok radiator">
         </label>
         <label class="field">
           <span>Tarif standar (Rp)</span>
@@ -1060,6 +1231,12 @@
 
   <script src="/static/js/native-bridge.js"></script>
   <script src="/static/js/api-client.js"></script>
+  <script src="/static/js/printer-manager.js"></script>
+  <script src="/static/js/bluetooth-native-adapter.js"></script>
+  <script src="/static/js/network-native-adapter.js"></script>
+  <script src="/static/js/usb-native-adapter.js"></script>
+  <script src="/static/js/system-native-adapter.js"></script>
+  <script src="/static/js/web-print-adapter.js"></script>
   <script src="/static/js/bluetooth-printer.js"></script>
   <script src="/static/js/app.js"></script>
 </body>

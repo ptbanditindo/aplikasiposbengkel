@@ -26,6 +26,7 @@ build/
 *.sqlite
 *.sqlite3
 /data/*.db
+/data/printer_config.json
 /backups/*.db
 /backups/*.zip
 

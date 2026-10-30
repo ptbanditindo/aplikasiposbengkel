@@ -62,6 +62,22 @@ class PinStore private constructor(private val prefs: SharedPreferences) {
             .commit()
     }
 
+    /** Hapus hash PIN tanpa menyentuh token instalasi atau data aplikasi. */
+    fun clearPin() {
+        val saved = prefs.edit()
+            .remove(KEY_PIN_HASH)
+            .putInt(KEY_FAILED_ATTEMPTS, 0)
+            .putLong(KEY_LOCK_STARTED_WALL, 0L)
+            .putLong(KEY_LOCK_STARTED_ELAPSED, 0L)
+            .putLong(KEY_LOCK_DURATION, 0L)
+            .commit()
+        if (!saved) {
+            throw PinStorageException(
+                IllegalStateException("Penghapusan PIN gagal disimpan.")
+            )
+        }
+    }
+
     fun state(): LockoutState = LockoutState(
         failedAttempts = prefs.getInt(KEY_FAILED_ATTEMPTS, 0),
         lockStartedWallMs = prefs.getLong(KEY_LOCK_STARTED_WALL, 0L),
@@ -106,8 +122,7 @@ class PinStore private constructor(private val prefs: SharedPreferences) {
 
         fun open(context: Context): PinStore {
             try {
-                val masterKey = MasterKey.Builder(context.applicationContext)
-                    .setKeyAlias(MASTER_KEY_ALIAS)
+                val masterKey = MasterKey.Builder(context.applicationContext, MASTER_KEY_ALIAS)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                     .build()
                 val prefs = EncryptedSharedPreferences.create(

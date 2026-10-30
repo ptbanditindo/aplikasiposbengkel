@@ -536,6 +536,39 @@ class PrinterInfoOut(CompatBase):
     auto_cut: bool
 
 
+class PrinterDeviceIn(StrictBase):
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=80)
+    connection_type: str = Field(max_length=16)
+    paper_width: int
+    print_mode: Optional[str] = Field(default=None, max_length=16)
+    encoding: Optional[str] = Field(default=None, max_length=32)
+    address: Optional[str] = Field(default=None, max_length=255)
+    ip: Optional[str] = Field(default=None, max_length=255)
+    port: Optional[int] = None
+    last_status: Optional[str] = Field(default=None, max_length=16)
+    last_connected_at: Optional[str] = Field(default=None, max_length=40)
+    last_error: Optional[str] = Field(default=None, max_length=300)
+
+
+class PrinterDeviceOut(PrinterDeviceIn):
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PrinterConfigIn(StrictBase):
+    printers: List[PrinterDeviceIn] = Field(default_factory=list)
+    primary_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class PrinterConfigOut(CompatBase):
+    version: int
+    printers: List[PrinterDeviceOut]
+    primary_id: Optional[str] = None
+    updated_at: Optional[str] = None
+    warning: Optional[str] = None
+
+
 class ConfigOut(CompatBase):
     version: str
     bengkel: BengkelInfoOut

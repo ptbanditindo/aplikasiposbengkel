@@ -16,6 +16,7 @@ import pytest
 TEST_ROOT = Path(tempfile.mkdtemp(prefix="bengkelpos_tests_"))
 TEST_DB = TEST_ROOT / "bengkel_test.db"
 TEST_BACKUP_DIR = TEST_ROOT / "backups"
+TEST_PRINTER_CONFIG = TEST_ROOT / "printer_config.json"
 
 os.environ["APP_ENV"] = "test"
 os.environ["APP_HOST"] = "127.0.0.1"
@@ -23,6 +24,7 @@ os.environ["APP_PORT"] = "8000"
 os.environ["AUTH_MODE"] = "session-pin"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["BACKUP_DIR"] = str(TEST_BACKUP_DIR)
+os.environ["PRINTER_CONFIG_PATH"] = str(TEST_PRINTER_CONFIG)
 os.environ["BENGKEL_NAMA"] = "BENGKEL RADIATOR TEST"
 os.environ["BENGKEL_TAGLINE"] = "Spesialis Servis & Las Radiator"
 os.environ["BENGKEL_ALAMAT"] = "Jl. Uji Otomotif No. 1"
@@ -67,11 +69,15 @@ def reset_database(client):
     """Skema bersih + seed standar + PIN kasir untuk setiap skenario uji."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    if TEST_PRINTER_CONFIG.exists():
+        TEST_PRINTER_CONFIG.unlink()
     with SessionLocal() as db:
         seed_defaults(db)
     response = client.post("/api/auth/setup", json={"pin": TEST_PIN})
     assert response.status_code == 201, response.text
     yield
+    if TEST_PRINTER_CONFIG.exists():
+        TEST_PRINTER_CONFIG.unlink()
 
 
 @pytest.fixture()

@@ -16,6 +16,10 @@ PinActivity (gerbang PIN)
        ├─ BackendHealth: polling GET /api/health pada port itu sampai siap
        ├─ WebView.loadUrl("http://127.0.0.1:<port>/")
        └─ Injeksi window.__BENGKEL_ADMIN_TOKEN__ (per-instalasi)
+
+WorkManager (ScheduledBackupWorker)
+  └─ menyalakan backend bila perlu → POST /api/admin/scheduled-backup
+     → snapshot lokal harian → kirim Telegram bila diaktifkan
 ```
 
 - **Kode Python tidak disalin manual.** Gradle task `packageBackend`
@@ -23,43 +27,64 @@ PinActivity (gerbang PIN)
   dan `frontend/` menjadi `bengkel_backend.zip` di folder build, lalu
   menambahkannya sebagai asset. API dan frontend selalu identik dengan repo.
 - **Ekstraksi** dilakukan ke `codeCacheDir/backend` agar kode backend tidak
-  ikut terhapus saat pengguna memilih "Lupa PIN → reset". Penanda `VERSION`
-  berisi `versionName-versionCode`; naikkan `versionCode` setiap kali backend
-  berubah agar ZIP diekstrak ulang.
+  tercampur data pengguna dan bisa diekstrak ulang tanpa menghapus database.
+  Penanda `VERSION` berisi `versionName-versionCode`; naikkan `versionCode`
+  setiap kali backend berubah agar ZIP diekstrak ulang.
 - **Data pengguna** disimpan di `filesDir/`: database SQLite di
-  `files/data/bengkel_radiator.db` dan backup di `files/backups/`.
+  `files/data/bengkel_radiator.db`, backup di `files/backups/`, dan konfigurasi
+  printer di `files/data/printer_config.json`.
 - **Server** hanya mendengarkan `127.0.0.1` pada port bebas pertama di
-  8000-8010 (Ref: T-07). `BackendManager` baru menandai server siap setelah
-  `/api/health` menjawab, sehingga tombol "Coba lagi" benar-benar memulai ulang
-  bila port bentrok atau thread uvicorn mati. Server berhenti otomatis saat
-  proses aplikasi dimatikan. Setelah reset data, `LocalDataResetter` memanggil
-  `BackendManager.stop()` (menutup koneksi SQLite, dispose engine) sebelum
-  menghapus file, lalu `MainActivity` menjalankan server baru dengan database
-  kosong dan token admin baru.
+  8000-8010. `BackendManager` baru menandai server siap setelah `/api/health`
+  menjawab, sehingga tombol "Coba lagi" benar-benar memulai ulang bila port
+  bentrok atau thread uvicorn mati. Server berhenti otomatis saat proses
+  aplikasi dimatikan. Reset PIN tidak menghentikan server dan tidak menyentuh
+  database; hanya hash PIN di `EncryptedSharedPreferences` yang dihapus,
+  sehingga token instalasi dan data usaha tetap berlaku.
 - **Token instalasi**: 32 byte acak per instalasi, disimpan di
   `EncryptedSharedPreferences` (file yang sama dengan PIN), diteruskan ke
   Python lewat `AUTH_MODE=install-token` + `APP_INSTALL_TOKEN` dan disuntikkan
   ke halaman sebagai `window.__BENGKEL_ADMIN_TOKEN__`. Frontend mengirim token
   itu pada setiap request sebagai header `X-Install-Token` tanpa menanyakan ke
-  pengguna. APK tidak memakai layar PIN web karena PIN-nya sudah native; token
-  lama otomatis tidak berlaku setelah reset/restart karena backend dibangun
-  ulang.
+  pengguna. APK tidak memakai layar PIN web karena PIN-nya sudah native.
+- **Printer** memakai `window.BengkelBridge` untuk Bluetooth SPP, TCP 9100
+  (Wi-Fi/LAN), USB bulk (OTG), dan layanan cetak Android. `PrinterManager` di
+  frontend memilih adapter sesuai jenis koneksi dan menyimpan konfigurasi lewat
+  backend lokal. Cetak browser tetap dipakai di versi desktop.
+- **Backup terjadwal** digerakkan `WorkManager` (bukan thread Python/WebView)
+  dengan periode 24 jam, initial delay mengikuti jam pengaturan, dan retry
+  eksponensial maksimal 5 percobaan. Worker dapat menyalakan backend sebentar
+  lalu mematikannya lagi bila aplikasi tidak sedang di depan.
 
 ## Versi Python dan dependensi
 
-Chaquopy **16.0.0** dipakai karena mendukung AGP 8.6.x (Chaquopy 17 mensyaratkan
-AGP 9). Target Python 3.10.
+Chaquopy **16.0.0** dipakai karena mendukung AGP 8.6.x (Chaquopy 17
+mensyaratkan AGP 9). Target runtime Python 3.10; Python 3.12.10 dipakai sebagai
+build Python untuk pip.
 
 Pydantic v2 tidak bisa dipakai di Chaquopy karena `pydantic-core` ditulis dalam
-Rust. Karena itu APK memakai **pydantic 1.10.18** (wheel murni Python) dengan
-FastAPI 0.115.0. `api/schemas.py` sudah dibuat kompatibel untuk v1 dan v2:
+Rust. Karena itu APK memakai pin pure-Python berikut di
+`android/app/build.gradle.kts`:
+
+| Paket | Versi |
+| --- | --- |
+| fastapi | 0.115.0 |
+| starlette | 0.38.6 |
+| pydantic | 1.10.18 |
+| uvicorn | 0.30.6 |
+| SQLAlchemy | 2.0.36 |
+| httpx | 0.27.2 |
+| python-multipart | 0.0.9 |
+| python-dotenv | 1.0.1 |
+
+`api/schemas.py` dibuat kompatibel untuk v1 dan v2:
 
 - `Money` menjadi string dua desimal di kedua versi.
 - `model_validate()` / `model_dump()` tersedia sebagai shim di v1.
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
-Versi desktop di `requirements.txt` tetap memakai pydantic v2; seluruh 119 test
-lulus di kedua jalur (v2 dan v1 + FastAPI 0.115).
+Versi desktop di `requirements.txt` memakai pydantic v2 dan FastAPI terbaru
+yang diverifikasi. Seluruh **226 test** lulus di kedua jalur (v2 dan v1 +
+FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
 `android/app/build.gradle.kts`, sehingga pip hanya mengunduh wheel
@@ -68,17 +93,20 @@ Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
 
 ## Prasyarat build
 
-- JDK 17 dan Android SDK 35 (buka folder `android/` di Android Studio).
-- Python 3.10 (atau 3.8+) terpasang di mesin build. Chaquopy memakai
-  interpreter host untuk menjalankan pip; tidak perlu sama dengan target.
+- JDK 17 dan Android SDK 35.
+- Python 3.10+ di mesin build. Chaquopy memakai interpreter host untuk
+  menjalankan pip; tidak perlu sama dengan target.
 - Koneksi internet saat build pertama (unduh runtime Python Chaquopy + wheel).
-- `gradle/wrapper/gradle-wrapper.jar` belum ada di repo. Buat sekali dengan
-  Gradle yang terpasang (`gradle wrapper --gradle-version 8.7`) atau buka
-  proyek di Android Studio yang akan menambahkannya.
+- `gradle/wrapper/gradle-wrapper.jar` sudah ada di repo, jadi `./gradlew`
+  langsung bisa dipakai.
+- Arahkan SDK lewat `ANDROID_HOME`/`ANDROID_SDK_ROOT` atau berkas
+  `android/local.properties` (`sdk.dir=...`). Berkas itu bersifat lokal dan
+  tidak di-commit. Toolchain portabel yang dipakai saat pengembangan ada di
+  `android/.toolchain/` (diabaikan Git).
 
 ```bash
 cd android
-./gradlew test          # unit test PIN (JVM)
+./gradlew test          # unit test Kotlin (JVM)
 ./gradlew assembleDebug # APK debug
 ```
 
@@ -87,6 +115,20 @@ APK debug ada di `android/app/build/outputs/apk/debug/app-debug.apk`.
 ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 (HP lama), dan `x86_64` (emulator). Menambah ABI memperbesar ukuran APK.
 
+## Hasil build terakhir
+
+- Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
+- Ukuran: 45.202.017 byte
+- SHA-256: `17243585d3a1c8ca147187cd5b6588c02af95c336bd51bc277675694ecaa1d41`
+- Paket: `com.bengkelpos.radiator`, versionName `2.0.0`, versionCode `1`,
+  minSdk 26, targetSdk 35, debug-signed.
+- Asset `frontend/index.html`, `style.css`, `app.js`, `api-client.js`, dan
+  `printer-manager.js` di dalam ZIP sudah dicocokkan hash-nya dengan working
+  tree saat build.
+- Unit test JVM: **143 test lulus**. Pytest backend: **226 test lulus** di
+  masing-masing stack (Pydantic v2 dan Pydantic 1.10).
+- APK belum dipasang/diuji di perangkat Android fisik.
+
 ## Pemeriksaan di perangkat
 
 1. Instal APK, buat PIN, tunggu teks "Menyiapkan server lokal".
@@ -94,9 +136,13 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 3. Simpan pengaturan bengkel/Telegram — tidak boleh ada prompt token atau
    layar PIN web di APK.
 4. Tutup paksa aplikasi lalu buka lagi: PIN diminta, data tetap ada.
-5. Lupa PIN → RESET → buat PIN baru → server berjalan dengan database kosong,
-   token instalasi baru, lalu pulihkan backup lewat Pengaturan.
-6. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN.
+5. Coba screenshot layar kasir/nota (harus berhasil) dan layar PIN (harus
+   kosong/hitam karena `FLAG_SECURE`).
+6. Buka Pengaturan → Printer, tambahkan printer Bluetooth/Wi-Fi/USB, lalu
+   lakukan tes cetak pada perangkat nyata.
+7. Lupa PIN → RESET → buat PIN baru → data dan token instalasi tetap ada.
+8. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN serta jadwal
+   backup WorkManager.
 
 Jika muncul "Server lokal gagal dijalankan", periksa logcat:
 
@@ -109,24 +155,20 @@ saat build, atau ABI perangkat tidak termasuk dalam `abiFilters`.
 
 ## Batasan yang masih ada
 
-- **Cetak struk thermal dari WebView belum diimplementasikan.** Backend sudah
-  menghasilkan teks 58/80 mm dan ESC/POS base64, tetapi jembatan native ke
-  printer Bluetooth/USB (raw ESC/POS) belum ada. `window.print()` WebView juga
-  bukan jalur cetak yang cocok untuk printer thermal.
-- **Backup di APK ditulis native** (Ref: T-03). Tombol "Unduh backup" memanggil
-  jembatan `BengkelNative.saveBackup`, yang mengambil file dari server lokal
-  dengan `X-Install-Token` lalu menulisnya ke folder **Unduhan** lewat
-  MediaStore (Android 10+) atau penyimpanan publik + izin (Android 8-9).
-  Ukuran file diverifikasi sebelum UI menyatakan sukses; tombol "Bagikan backup"
-  mengirim salinan lewat `ACTION_SEND` + FileProvider (WhatsApp, Drive, email).
-  `DownloadListener` juga terpasang sebagai pengaman untuk unduhan http lokal.
-  Restore tetap memakai pemilih file, lalu server lokal dijalankan ulang otomatis.
-- **Scheduler backup Telegram hanya hidup selama proses aplikasi berjalan.**
-  Backup terjadwal jam 21:00 baru terkirim jika aplikasi sedang terbuka;
-  backend tidak berjalan sebagai service latar belakang.
+- **Printer fisik belum diuji di perangkat nyata.** Jalur Bluetooth SPP, TCP
+  9100, USB OTG, dan Android System Print sudah diimplementasikan dan diuji
+  dengan unit test/transport tiruan; perilaku tiap model printer tetap perlu
+  verifikasi manual.
+- **Backup harian berjalan lewat WorkManager.** Android dapat menunda pekerjaan
+  saat baterai rendah; status percobaan terakhir terlihat di Pengaturan.
+  Telegram hanya menerima file bila token/Chat ID diisi dan ada internet.
+- **Restore dari Telegram manual.** Bot API tidak bisa mengunduh file yang
+  dikirim bot itu sendiri, jadi pengguna mengunduh `.db` lalu memilihnya di
+  Pengaturan → Pulihkan data. Server lokal dijalankan ulang otomatis setelah
+  restore.
 - **Proses bisa dimatikan Android** saat aplikasi di latar belakang. Data aman
-  di SQLite, dan server dijalankan lagi saat aplikasi dibuka.
-- APK belum pernah dikompilasi/diuji di mesin ini (tidak ada JDK/Gradle/SDK).
-  Semua validasi yang bisa dilakukan: test backend (64 lulus di pydantic v2
-  dan v1), simulasi ekstraksi paket backend + bootstrap uvicorn (health,
-  autentikasi token, restart dengan token baru), serta scan sintaks Kotlin/XML.
+  di SQLite; server dinyalakan lagi saat aplikasi dibuka atau saat worker
+  backup berjalan.
+- **Belum ada Release APK**; hanya build Debug yang dipakai untuk verifikasi.
+- **Ganti PIN dari dalam aplikasi dan enkripsi file backup Telegram** belum
+  dikerjakan.

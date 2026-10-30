@@ -17,25 +17,24 @@
 
     <string name="forgot_pin">Lupa PIN?</string>
     <string name="forgot_title">Lupa PIN?</string>
-    <string name="forgot_warning">Data lokal aplikasi ini akan dihapus, termasuk PIN, database, dan pengaturan Telegram.\n\nSetelah membuat PIN baru, pulihkan data dari file backup Telegram melalui menu Pengaturan. Transaksi yang belum sempat dibackup akan hilang dan tidak dapat dikembalikan.</string>
+    <string name="forgot_warning">PIN akan dihapus dan Anda dapat membuat PIN baru. Data pelanggan, transaksi, stok, dan backup TIDAK dihapus.\n\nSiapa pun yang memegang perangkat ini dapat membuka aplikasi setelah reset PIN.</string>
     <string name="reset_confirm_title">Konfirmasi reset</string>
-    <string name="reset_confirm_message">Ketik RESET (huruf besar) untuk melanjutkan.</string>
+    <string name="reset_confirm_message">Ketik RESET untuk melanjutkan.</string>
     <string name="reset_type_hint">Ketik RESET untuk melanjutkan</string>
-    <string name="reset_action">Reset aplikasi</string>
-    <string name="reset_done">Data lokal dihapus. Buat PIN baru, lalu pulihkan dari backup Telegram.</string>
+    <string name="reset_action">Reset PIN</string>
+    <string name="reset_done">PIN baru tersimpan. Data pelanggan, transaksi, dan backup tetap aman.</string>
     <string name="reset_done_title">PIN baru dibuat</string>
     <string name="cancel">Batal</string>
     <string name="continue_label">Lanjut</string>
     <string name="ok">OK</string>
 
     <string name="pin_storage_title">Penyimpanan PIN tidak dapat dibuka</string>
-    <string name="pin_storage_message">Kunci keamanan perangkat tidak dapat dipakai untuk membaca PIN. Satu-satunya pilihan adalah mereset data lokal lalu memulihkan dari backup Telegram.</string>
+    <string name="pin_storage_message">Kunci keamanan perangkat tidak dapat dipakai untuk membaca PIN. Tutup lalu buka kembali aplikasi. Jika masih gagal, hubungi teknisi; jangan menghapus data aplikasi.</string>
 
     <string name="delete_digit">Hapus angka</string>
-    <string name="restore_hint">Unduh file backup dari chat Telegram, lalu impor lewat Pengaturan → Pulihkan database.</string>
-    <string name="offline_hint">Server lokal belum merespons.\nCoba lagi.</string>
-    <string name="preparing_hint">Menyiapkan server lokal.\nMohon tunggu…</string>
-    <string name="backend_error_hint">Server lokal gagal dijalankan. Tutup aplikasi lain yang mungkin memakai port 8000-8010, lalu tekan Coba lagi.</string>
+    <string name="offline_hint">Aplikasi belum merespons.\nCoba lagi.</string>
+    <string name="preparing_hint">Menyiapkan aplikasi.\nMohon tunggu…</string>
+    <string name="backend_error_hint">Aplikasi gagal dijalankan. Tutup aplikasi lain yang sedang berjalan, lalu tekan Coba lagi.</string>
     <string name="retry">Coba lagi</string>
     <string name="external_link_blocked">Tautan eksternal diblokir di dalam aplikasi.</string>
     <string name="download_blocked">Unduhan dari alamat luar diblokir.</string>

@@ -63,6 +63,7 @@ class Settings:
     printer_encoding: str
     printer_auto_cut: bool
     printer_open_drawer: bool
+    printer_config_path: Path
 
     default_garansi_bulan: int
     garansi_syarat: str
@@ -108,6 +109,11 @@ def load_settings() -> Settings:
         printer_encoding=os.getenv("PRINTER_DEFAULT_ENCODING", "CP437").strip(),
         printer_auto_cut=_as_bool("PRINTER_AUTO_CUT", False),
         printer_open_drawer=_as_bool("PRINTER_OPEN_DRAWER", False),
+        # Konfigurasi printer bersifat per perangkat dan disimpan di luar
+        # database agar identitas perangkat (MAC/IP) tidak ikut backup.
+        printer_config_path=_as_path(
+            "PRINTER_CONFIG_PATH", "./data/printer_config.json"
+        ),
         default_garansi_bulan=_as_int("DEFAULT_GARANSI_BULAN", 1),
         garansi_syarat=os.getenv(
             "GARANSI_SYARAT_STANDAR",
