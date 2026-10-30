@@ -1,0 +1,155 @@
+"""Pengelolaan stok sparepart & master tarif jasa."""
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+from database.models import HargaJasa, StockItem
+from repositories import stock_repository as repo
+from services.errors import BusinessValidationError, ConflictError, NotFoundError
+from services.utils import clean_text, money
+
+LOW_STOCK_THRESHOLD = 3
+
+
+def list_stock(db: Session) -> List[StockItem]:
+    return repo.list_stock(db)
+
+
+def list_jasa(db: Session) -> List[HargaJasa]:
+    return repo.list_jasa(db)
+
+
+def _validate_stock_fields(
+    nama: str,
+    harga_modal: Decimal,
+    harga_jual: Decimal,
+    jumlah: int,
+) -> tuple[str, Decimal, Decimal, int]:
+    clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
+    if len(clean_nama) < 2:
+        raise BusinessValidationError("Nama sparepart minimal 2 karakter.")
+    modal = money(harga_modal)
+    jual = money(harga_jual)
+    if modal < 0 or jual < 0:
+        raise BusinessValidationError("Harga tidak boleh negatif.")
+    qty = int(jumlah)
+    if qty < 0:
+        raise BusinessValidationError("Jumlah stok tidak boleh negatif.")
+    return clean_nama, modal, jual, qty
+
+
+def create_stock(
+    db: Session,
+    nama: str,
+    harga_modal: Decimal = Decimal("0.00"),
+    harga_jual: Decimal = Decimal("0.00"),
+    jumlah: int = 0,
+    kode: Optional[str] = None,
+) -> StockItem:
+    clean_nama, modal, jual, qty = _validate_stock_fields(
+        nama, harga_modal, harga_jual, jumlah
+    )
+    clean_kode = clean_text(kode, max_length=64, allow_newlines=False) or None
+    if clean_kode and repo.get_stock_by_kode(db, clean_kode):
+        raise ConflictError(f"Kode sparepart '{clean_kode}' sudah terdaftar.")
+
+    item = StockItem(
+        kode=clean_kode,
+        nama=clean_nama,
+        harga_modal=modal,
+        harga_jual=jual,
+        jumlah=qty,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def update_stock(db: Session, stock_id: int, **values) -> StockItem:
+    item = repo.get_stock(db, stock_id)
+    if item is None:
+        raise NotFoundError("Sparepart tidak ditemukan.")
+
+    if "kode" in values:
+        new_kode = clean_text(values["kode"], max_length=64, allow_newlines=False) or None
+        if new_kode:
+            existing = repo.get_stock_by_kode(db, new_kode)
+            if existing is not None and existing.id != item.id:
+                raise ConflictError(f"Kode sparepart '{new_kode}' sudah terdaftar.")
+        item.kode = new_kode
+
+    clean_nama, modal, jual, qty = _validate_stock_fields(
+        values.get("nama", item.nama),
+        values.get("harga_modal", item.harga_modal),
+        values.get("harga_jual", item.harga_jual),
+        values.get("jumlah", item.jumlah),
+    )
+    item.nama = clean_nama
+    item.harga_modal = modal
+    item.harga_jual = jual
+    item.jumlah = qty
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def delete_stock(db: Session, stock_id: int) -> None:
+    item = repo.get_stock(db, stock_id)
+    if item is None:
+        raise NotFoundError("Sparepart tidak ditemukan.")
+    db.delete(item)
+    db.commit()
+
+
+def create_jasa(db: Session, nama: str, harga_standar: Decimal) -> HargaJasa:
+    clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
+    if len(clean_nama) < 2:
+        raise BusinessValidationError("Nama jasa minimal 2 karakter.")
+    harga = money(harga_standar)
+    if harga < 0:
+        raise BusinessValidationError("Tarif jasa tidak boleh negatif.")
+
+    jasa = HargaJasa(nama=clean_nama, harga_standar=harga)
+    db.add(jasa)
+    db.commit()
+    db.refresh(jasa)
+    return jasa
+
+
+def update_jasa(db: Session, jasa_id: int, **values) -> HargaJasa:
+    jasa = repo.get_jasa(db, jasa_id)
+    if jasa is None:
+        raise NotFoundError("Tarif jasa tidak ditemukan.")
+
+    clean_nama = clean_text(
+        values.get("nama", jasa.nama), max_length=255, allow_newlines=False
+    )
+    if len(clean_nama) < 2:
+        raise BusinessValidationError("Nama jasa minimal 2 karakter.")
+    harga = money(values.get("harga_standar", jasa.harga_standar))
+    if harga < 0:
+        raise BusinessValidationError("Tarif jasa tidak boleh negatif.")
+
+    jasa.nama = clean_nama
+    jasa.harga_standar = harga
+    db.commit()
+    db.refresh(jasa)
+    return jasa
+
+
+def delete_jasa(db: Session, jasa_id: int) -> None:
+    jasa = repo.get_jasa(db, jasa_id)
+    if jasa is None:
+        raise NotFoundError("Tarif jasa tidak ditemukan.")
+    db.delete(jasa)
+    db.commit()
+
+
+def is_low_stock(item: StockItem) -> bool:
+    """Ref: PRD FR-STK-02 - peringatan stok kritis."""
+    return item.jumlah <= LOW_STOCK_THRESHOLD

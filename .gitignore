@@ -1,0 +1,38 @@
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+
+# Dependencies (if Node.js / frontend tools used)
+node_modules/
+dist/
+build/
+
+# Local databases & storage
+*.db
+*.sqlite
+*.sqlite3
+/data/*.db
+/backups/*.db
+/backups/*.zip
+
+# Logs
+logs/
+*.log
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f2f4f7">
+  <title>BengkelPOS Radiator</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="app-sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+            <rect x="4" y="8" width="24" height="17" rx="2.5"></rect>
+            <path d="M8 11v11M12 11v11M16 11v11M20 11v11M24 11v11"></path>
+            <circle cx="16" cy="27" r="2.2"></circle>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <p class="brand-name" id="bengkelNama">BengkelPOS Radiator</p>
+          <p class="brand-tagline" id="bengkelTagline">Sistem kasir &amp; servis radiator</p>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" id="navTabs" aria-label="Navigasi utama">
+        <p class="nav-group-label">Operasional</p>
+        <button type="button" class="nav-tab active" data-view="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"></path><path d="M5 10v10h14V10"></path></svg>
+          Ringkasan
+        </button>
+        <button type="button" class="nav-tab" data-view="pos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M8 9h8M8 13h5"></path></svg>
+          Kasir
+        </button>
+        <button type="button" class="nav-tab" data-view="history">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2"></path><circle cx="12" cy="12" r="8"></circle></svg>
+          Riwayat servis
+        </button>
+        <button type="button" class="nav-tab" data-view="customers">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 19v-1a5 5 0 0 1 10 0v1"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M14 18v-.5a4 4 0 0 1 7 0V18"></path></svg>
+          Pelanggan
+        </button>
+        <button type="button" class="nav-tab" data-view="stock">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4z"></path><path d="M4 7l3-3h10l3 3"></path><path d="M9 11h6"></path></svg>
+          Stok &amp; jasa
+        </button>
+        <button type="button" class="nav-tab" data-view="report">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M11 20V4M17 20v-7"></path></svg>
+          Laporan
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <button type="button" class="printer-pill offline" id="printerBtn" title="Hubungkan printer thermal Bluetooth">
+          <span class="status-dot" id="printerDot"></span>
+          <span id="printerLabel">Printer belum terhubung</span>
+        </button>
+        <div class="clock" id="clock">
+          <span class="clock-date" id="clockDate">-</span>
+          <span class="clock-time" id="clockTime">--:--</span>
+        </div>
+        <p class="sidebar-note">Data lokal &middot; SQLite</p>
+      </div>
+    </aside>
+
+    <div class="app-body">
+      <main class="main-area">
+      <!-- ============================ DASHBOARD ============================ -->
+      <section class="view" id="view-dashboard">
+        <div class="page-head">
+          <div>
+            <h1>Ringkasan hari ini</h1>
+            <p class="muted">Servis dan kas yang tercatat hari ini.</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-outline" id="heroNewCustomer">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-8 0v1"></path><circle cx="12" cy="9" r="3"></circle><path d="M19 8h3M20.5 6.5v3"></path></svg>
+              Pelanggan Baru
+            </button>
+            <button type="button" class="btn btn-primary" id="heroNewService">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              Service Baru
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota hari ini" data-action="dashboard-notas" data-filter="unit">
+            <span class="stat-label">Unit diservis hari ini</span>
+            <strong id="statUnit">0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai hari ini" data-action="dashboard-notas" data-filter="cash">
+            <span class="stat-label">Kas tunai masuk</span>
+            <strong id="statCash">Rp 0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota transfer hari ini" data-action="dashboard-notas" data-filter="transfer">
+            <span class="stat-label">Transfer bank masuk</span>
+            <strong id="statTransfer">Rp 0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="dashboard-notas" data-filter="warranty">
+            <span class="stat-label">Garansi servis aktif</span>
+            <strong id="statWarranty">0</strong>
+          </article>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Transaksi terakhir</h2>
+              <p class="muted">Nota terbaru yang tercatat di kasir.</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="refreshDashboard">Muat ulang</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-recent">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>No. nota</th>
+                  <th>Pelanggan</th>
+                  <th>Unit</th>
+                  <th class="text-right">Total</th>
+                  <th>Metode</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="recentBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="recentEmpty">Belum ada transaksi. Mulai dengan tombol Service Baru.</div>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============================ POS ============================ -->
+      <section class="view hidden" id="view-pos">
+        <div class="page-head">
+          <div>
+            <h1>Transaksi kasir</h1>
+            <p class="muted">Harga jasa &amp; sparepart dapat dinegosiasikan di kolom harga deal.</p>
+          </div>
+          <button type="button" class="btn btn-ghost" id="posReset">Reset form</button>
+        </div>
+
+        <div class="pos-layout">
+          <div class="pos-main">
+            <section class="card step-card">
+              <div class="step-head">
+                <div>
+                  <h2>Pilih pelanggan</h2>
+                  <p class="muted">Cari berdasarkan nama atau nomor HP.</p>
+                </div>
+              </div>
+              <div class="search-row">
+                <div class="autocomplete">
+                  <input type="text" class="input" id="customerSearch" placeholder="Ketik nama / nomor HP pelanggan..." autocomplete="off">
+                  <div class="autocomplete-list hidden" id="customerResults"></div>
+                </div>
+                <button type="button" class="btn btn-outline" id="btnNewCustomerPos">+ Pelanggan baru</button>
+              </div>
+              <div class="selected-box hidden" id="selectedCustomer"></div>
+            </section>
+
+            <section class="card step-card hidden" id="unitCard">
+              <div class="step-head">
+                <div>
+                  <h2>Pilih unit servis</h2>
+                  <p class="muted">Mobil lengkap atau radiator copotan tanpa nopol.</p>
+                </div>
+              </div>
+              <div class="unit-grid" id="unitList"></div>
+              <div class="divider-row"><span>atau daftarkan unit baru</span></div>
+              <div class="segmented" id="unitTypeSwitch">
+                <button type="button" data-type="MOBIL" class="active">Mobil Lengkap</button>
+                <button type="button" data-type="RADIATOR_ONLY">Bawa Radiator Saja</button>
+              </div>
+              <div class="form-grid" id="mobilFields">
+                <label class="field">
+                  <span>Nomor polisi <em>*</em></span>
+                  <input type="text" class="input" id="unitNopol" placeholder="contoh: b 1234 abc" maxlength="32">
+                </label>
+                <label class="field">
+                  <span>Jenis / tipe mobil</span>
+                  <input type="text" class="input" id="unitJenis" placeholder="contoh: Avanza 2018" maxlength="255">
+                </label>
+                <label class="field">
+                  <span>Tahun</span>
+                  <input type="number" class="input" id="unitTahun" min="1900" max="2100" placeholder="2018">
+                </label>
+              </div>
+              <div class="form-grid hidden" id="radiatorFields">
+                <label class="field">
+                  <span>Tipe radiator</span>
+                  <input type="text" class="input" id="unitTipe" placeholder="contoh: Radiator Canter 2-Ply" maxlength="255">
+                </label>
+                <label class="field">
+                  <span>Kondisi awal</span>
+                  <input type="text" class="input" id="unitKondisi" placeholder="contoh: upper tank retak" maxlength="1000">
+                </label>
+                <div class="field hint-box">
+                  <span>Label fisik otomatis</span>
+                  <strong>RAD-YYYYMMDD-XXX</strong>
+                  <small>Dibuat otomatis saat unit disimpan.</small>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Keterangan tambahan</span>
+                  <input type="text" class="input" id="unitKeterangan" placeholder="Catatan unit (opsional)" maxlength="1000">
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="btn btn-outline" id="btnAddUnit">Simpan unit</button>
+              </div>
+            </section>
+
+            <section class="card step-card hidden" id="complaintCard">
+              <div class="step-head">
+                <div>
+                  <h2>Keluhan awal</h2>
+                  <p class="muted">Pilih keluhan populer atau tulis manual.</p>
+                </div>
+              </div>
+              <div class="chips" id="complaintChips"></div>
+              <label class="field">
+                <span>Keluhan pelanggan <em>*</em></span>
+                <textarea class="input textarea" id="keluhanInput" rows="3" placeholder="contoh: air tekor, panas naik saat macet" maxlength="2000"></textarea>
+              </label>
+              <label class="field">
+                <span>Catatan pengerjaan (opsional)</span>
+                <input type="text" class="input" id="catatanPengerjaan" placeholder="contoh: ganti upper tank, tes tekanan" maxlength="2000">
+              </label>
+            </section>
+
+            <section class="card step-card hidden" id="itemsCard">
+              <div class="step-head">
+                <div>
+                  <h2>Rincian pengerjaan</h2>
+                  <p class="muted">Harga master hanya patokan. Ubah harga deal bebas naik/turun.</p>
+                </div>
+              </div>
+
+              <div class="line-form">
+                <div class="line-form-head">
+                  <h4>Jasa</h4>
+                  <span class="tiny muted">Harga deal tidak mengubah tarif master</span>
+                </div>
+                <div class="line-grid">
+                  <select class="input" id="jasaPicker"></select>
+                  <input type="text" class="input" id="jasaNama" placeholder="Nama jasa / kustom" maxlength="255">
+                  <input type="number" class="input qty-input" id="jasaQty" value="1" min="1" placeholder="Qty">
+                  <input type="text" class="input money-input" id="jasaHarga" inputmode="numeric" placeholder="Harga deal">
+                  <button type="button" class="btn btn-outline" id="btnAddJob">+ Tambah jasa</button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="table items-table">
+                  <thead>
+                    <tr><th>Jasa</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="text-right">Subtotal</th><th></th></tr>
+                  </thead>
+                  <tbody id="jobsBody"></tbody>
+                </table>
+                <div class="empty-state sm hidden" id="jobsEmpty">Belum ada jasa ditambahkan.</div>
+              </div>
+
+              <div class="line-form">
+                <div class="line-form-head">
+                  <h4>Sparepart</h4>
+                  <span class="tiny muted" id="partStockHint">Stok gudang otomatis dipotong.</span>
+                </div>
+                <div class="line-grid">
+                  <select class="input" id="partPicker"></select>
+                  <input type="text" class="input" id="partNama" placeholder="Nama sparepart / kustom" maxlength="255">
+                  <input type="number" class="input qty-input" id="partQty" value="1" min="1" placeholder="Qty">
+                  <input type="text" class="input money-input" id="partHarga" inputmode="numeric" placeholder="Harga deal">
+                  <button type="button" class="btn btn-outline" id="btnAddPart">+ Tambah part</button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="table items-table">
+                  <thead>
+                    <tr><th>Sparepart</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="text-right">Subtotal</th><th></th></tr>
+                  </thead>
+                  <tbody id="partsBody"></tbody>
+                </table>
+                <div class="empty-state sm hidden" id="partsEmpty">Belum ada sparepart ditambahkan.</div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="pos-side">
+            <div class="card summary-card">
+              <div class="card-head">
+                <div>
+                  <h2>Ringkasan nota</h2>
+                  <p class="muted" id="summaryCustomer">Belum ada pelanggan dipilih</p>
+                </div>
+              </div>
+
+              <div class="summary-rows">
+                <div class="summary-row"><span>Subtotal jasa</span><strong id="jobSubtotal">Rp 0</strong></div>
+                <div class="summary-row"><span>Subtotal part</span><strong id="partSubtotal">Rp 0</strong></div>
+                <div class="summary-row total"><span>Grand total</span><strong id="grandTotalValue">Rp 0</strong></div>
+              </div>
+
+              <label class="field">
+                <span>Diskon (Rp)</span>
+                <input type="text" class="input money-input" id="diskonInput" inputmode="numeric" value="0">
+              </label>
+
+              <div class="field">
+                <span>Metode pembayaran</span>
+                <div class="pay-options">
+                  <label class="pay-option">
+                    <input type="radio" name="metode" value="CASH" id="metodeCash" checked>
+                    <span class="pay-box"><strong>CASH</strong><small>Hitung kembalian</small></span>
+                  </label>
+                  <label class="pay-option">
+                    <input type="radio" name="metode" value="TRANSFER" id="metodeTransfer">
+                    <span class="pay-box"><strong>TRANSFER</strong><small>Uang pas</small></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="bank-info hidden" id="bankInfo">
+                <span class="tiny">Rekening tujuan transfer</span>
+                <strong id="bankAccount">-</strong>
+                <small id="bankOwner">-</small>
+              </div>
+
+              <label class="field">
+                <span>Uang diterima (Rp)</span>
+                <input type="text" class="input money-input" id="bayarInput" inputmode="numeric" placeholder="0">
+              </label>
+              <div class="summary-row change">
+                <span>Kembalian</span>
+                <strong id="kembalianValue">Rp 0</strong>
+              </div>
+
+              <div class="warranty-box">
+                <label class="switch-row">
+                  <span>Garansi servis</span>
+                  <input type="checkbox" id="garansiAktif" checked>
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <div id="garansiFields">
+                  <label class="field">
+                    <span>Durasi garansi</span>
+                    <select class="input" id="garansiBulan">
+                      <option value="1">1 Bulan (30 hari)</option>
+                      <option value="2">2 Bulan (60 hari)</option>
+                      <option value="3">3 Bulan (90 hari)</option>
+                      <option value="6">6 Bulan (180 hari)</option>
+                      <option value="12">12 Bulan (360 hari)</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Catatan garansi</span>
+                    <textarea class="input textarea" id="garansiCatatan" rows="2"></textarea>
+                  </label>
+                </div>
+              </div>
+
+              <div class="summary-actions">
+                <button type="button" class="btn btn-primary btn-block" id="btnSavePrint">Simpan &amp; cetak struk</button>
+                <button type="button" class="btn btn-outline btn-block" id="btnSaveOnly">Simpan tanpa cetak</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ============================ HISTORY ============================ -->
+      <section class="view hidden" id="view-history">
+        <div class="page-head">
+          <div>
+            <h1>Riwayat servis</h1>
+            <p class="muted">Cari nota, nopol, label radiator, atau nama pelanggan.</p>
+          </div>
+          <button type="button" class="btn btn-ghost" id="btnRefreshHistory">Muat ulang</button>
+        </div>
+        <div class="card">
+          <div class="search-row">
+            <input type="text" class="input" id="historySearch" placeholder="Cari no. nota / nopol / RAD-xxxx / nama / HP...">
+            <span class="pill-count" id="historyCount">0 nota</span>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-history">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>No. nota</th>
+                  <th>Pelanggan</th>
+                  <th>Unit</th>
+                  <th class="text-right">Total</th>
+                  <th>Metode</th>
+                  <th>Garansi</th>
+                  <th class="text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="historyEmpty">Belum ada riwayat servis.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ STOCK ============================ -->
+      <section class="view hidden" id="view-stock">
+        <div class="page-head">
+          <div>
+            <h1>Stok &amp; tarif jasa</h1>
+            <p class="muted">Harga master hanya patokan awal untuk kasir.</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-outline" id="btnAddJasa">+ Tarif jasa</button>
+            <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Sparepart gudang</h2>
+                <p class="muted" id="stockSummary">-</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="table table-stock">
+                <thead>
+                  <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th></th></tr>
+                </thead>
+                <tbody id="stockBody"></tbody>
+              </table>
+              <div class="empty-state hidden" id="stockEmpty">Belum ada data sparepart.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h2>Tarif jasa</h2>
+                <p class="muted">Patokan ongkos pengerjaan.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="table table-jasa">
+                <thead>
+                  <tr><th>Nama Jasa</th><th class="text-right">Tarif</th><th></th></tr>
+                </thead>
+                <tbody id="jasaBody"></tbody>
+              </table>
+              <div class="empty-state hidden" id="jasaEmpty">Belum ada tarif jasa.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ REPORT ============================ -->
+      <section class="view hidden" id="view-report">
+        <div class="page-head">
+          <div>
+            <h1>Laporan kas</h1>
+            <p class="muted">Pemasukan tunai, transfer, dan estimasi laba kotor sparepart.</p>
+          </div>
+          <button type="button" class="btn btn-ghost" id="btnBackup">Backup database</button>
+        </div>
+
+        <div class="card report-controls">
+          <label class="field inline">
+            <span>Periode laporan</span>
+            <select class="input" id="reportPeriod">
+              <option value="today" selected>Hari ini</option>
+              <option value="7d">7 hari terakhir</option>
+              <option value="30d">30 hari terakhir</option>
+              <option value="1y">1 tahun terakhir</option>
+              <option value="all">Seluruhnya</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primary" id="btnLoadReport">Tampilkan</button>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua nota pada periode" data-action="report-notas" data-filter="omset">
+            <span class="stat-label">Total omset</span>
+            <strong id="reportOmset">Rp 0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai pada periode" data-action="report-notas" data-filter="cash">
+            <span class="stat-label">Tunai</span>
+            <strong id="reportCash">Rp 0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota transfer pada periode" data-action="report-notas" data-filter="transfer">
+            <span class="stat-label">Transfer</span>
+            <strong id="reportTransfer">Rp 0</strong>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba kotor part" data-action="report-notas" data-filter="profit">
+            <span class="stat-label">Estimasi laba kotor part</span>
+            <strong id="reportProfit">Rp 0</strong>
+          </article>
+        </div>
+
+        <div class="report-meta" id="reportMeta"></div>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Transaksi pada periode</h2>
+              <p class="muted" id="reportDateLabel">-</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-report">
+              <thead>
+                <tr><th>Waktu</th><th>No. nota</th><th>Pelanggan</th><th>Unit</th><th class="text-right">Total</th><th>Metode</th></tr>
+              </thead>
+              <tbody id="reportBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="reportEmpty">Tidak ada transaksi pada periode ini.</div>
+          </div>
+        </section>
+
+        <div class="card hidden" id="periodWrap">
+          <div class="card-head">
+            <div>
+              <h2>Rekap harian periode</h2>
+              <p class="muted" id="periodNote">Hanya hari yang memiliki transaksi.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-period">
+              <thead>
+                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba kotor part</th></tr>
+              </thead>
+              <tbody id="periodBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <section class="card hidden" id="soldPartsWrap">
+          <div class="card-head">
+            <div>
+              <h2>Stok pernah terjual</h2>
+              <p class="muted" id="soldPartsNote">Harga mengikuti harga akhir (deal); barang sama diurutkan sesuai waktu.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-sold-parts">
+              <thead>
+                <tr><th>Barang</th><th class="text-center">Qty</th><th class="text-right">Harga akhir</th><th class="text-right">Subtotal</th><th>Waktu</th><th>No. nota</th></tr>
+              </thead>
+              <tbody id="soldPartsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ========================= CUSTOMER DIRECTORY ========================= -->
+      <section class="view hidden" id="view-customers">
+        <div class="page-head">
+          <div>
+            <h1>Database pelanggan</h1>
+            <p class="muted">Pelanggan bengkel beserta unit mobil dan radiator yang dimiliki.</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-ghost" id="btnRefreshCustomers">Muat ulang</button>
+            <button type="button" class="btn btn-primary" id="btnAddCustomerDirectory">+ Pelanggan baru</button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card">
+            <span class="stat-label">Total pelanggan</span>
+            <strong id="customerStatTotal">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Total unit terdaftar</span>
+            <strong id="customerStatUnits">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Unit mobil</span>
+            <strong id="customerStatMobil">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Radiator copotan</span>
+            <strong id="customerStatRadiator">0</strong>
+          </article>
+        </div>
+
+        <section class="card">
+          <div class="search-row">
+            <input type="text" class="input" id="customerDirectorySearch" placeholder="Cari nama / nomor HP pelanggan...">
+            <span class="pill-count" id="customerDirectoryCount">0 pelanggan</span>
+          </div>
+          <div class="customer-grid" id="customerDirectoryGrid"></div>
+          <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat kepemilikan unit.</div>
+        </section>
+      </section>
+    </main>
+
+      <footer class="app-footer">
+        <span>BengkelPOS Radiator v2.0</span>
+        <span>Offline-first &middot; data lokal SQLite</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============================ CUSTOMER MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="customerModal" role="dialog" aria-modal="true" aria-labelledby="customerModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="customerModalTitle">Tambah pelanggan</h3>
+          <p class="muted">Nomor HP akan dinormalisasi otomatis.</p>
+        </div>
+        <button type="button" class="icon-btn" id="customerModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="customerForm">
+        <label class="field">
+          <span>Nama pelanggan <em>*</em></span>
+          <input type="text" class="input" id="custNama" required minlength="2" maxlength="255" placeholder="contoh: Pak Slamet">
+        </label>
+        <label class="field">
+          <span>Nomor HP <em>*</em></span>
+          <input type="text" class="input" id="custHp" required minlength="8" maxlength="64" placeholder="contoh: 0812-3456-7890">
+        </label>
+        <label class="field">
+          <span>Alamat</span>
+          <textarea class="input textarea" id="custAlamat" rows="2" maxlength="500" placeholder="Alamat (opsional)"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="customerCancel">Batal</button>
+          <button type="submit" class="btn btn-primary" id="customerSubmit">Simpan pelanggan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ RECEIPT MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="receiptModal" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="receiptTitle">Struk servis</h3>
+          <p class="muted" id="receiptSubtitle">Pratinjau struk thermal.</p>
+        </div>
+        <button type="button" class="icon-btn" id="receiptClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="receipt-toolbar">
+        <div class="segmented sm" id="receiptWidthSwitch">
+          <button type="button" data-width="58" class="active">58 mm</button>
+          <button type="button" data-width="80">80 mm</button>
+        </div>
+        <span class="printer-note" id="receiptNotice">Web Bluetooth belum terhubung.</span>
+      </div>
+      <div class="receipt-paper">
+        <pre id="receiptPreview"></pre>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
+        <button type="button" class="btn btn-primary" id="btnBluetoothPrint">Cetak Bluetooth</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ NOTA LIST MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="notaListModal" role="dialog" aria-modal="true" aria-labelledby="notaListTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="notaListTitle">Daftar nota</h3>
+          <p class="muted" id="notaListSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="notaListClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table table-nota-list">
+          <thead>
+            <tr><th>Waktu</th><th>No. nota</th><th>Pelanggan</th><th class="text-right">Total</th><th>Metode</th></tr>
+          </thead>
+          <tbody id="notaListBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="notaListEmpty">Tidak ada nota pada kategori ini.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="notaListDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ RECORD DETAIL MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="recordModal" role="dialog" aria-modal="true" aria-labelledby="recordTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="recordTitle">Detail nota</h3>
+          <p class="muted" id="recordSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="recordClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="recordDetail"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="recordDismiss">Tutup</button>
+        <button type="button" class="btn btn-outline hidden" id="btnRecordCustomer">Lihat pelanggan</button>
+        <button type="button" class="btn btn-primary" id="btnRecordReprint">Cetak struk</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ CUSTOMER DETAIL MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="customerDetailModal" role="dialog" aria-modal="true" aria-labelledby="customerDetailTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="customerDetailTitle">Detail pelanggan</h3>
+          <p class="muted" id="customerDetailSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="customerDetailClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="customerDetailBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="customerDetailDismiss">Tutup</button>
+        <button type="button" class="btn btn-primary" id="btnCustomerDetailService">Buat Servis</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ STOCK MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="stockModal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="stockModalTitle">Tambah sparepart</h3>
+          <p class="muted">Harga jual di sini adalah patokan awal kasir.</p>
+        </div>
+        <button type="button" class="icon-btn" id="stockModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="stockForm">
+        <input type="hidden" id="stockId">
+        <div class="form-grid">
+          <label class="field">
+            <span>Kode</span>
+            <input type="text" class="input" id="stockKode" maxlength="64" placeholder="SP-013">
+          </label>
+          <label class="field">
+            <span>Jumlah stok</span>
+            <input type="number" class="input" id="stockJumlah" min="0" value="0">
+          </label>
+        </div>
+        <label class="field">
+          <span>Nama sparepart <em>*</em></span>
+          <input type="text" class="input" id="stockNama" required minlength="2" maxlength="255" placeholder="contoh: Tutup Radiator 0.9">
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Harga modal</span>
+            <input type="text" class="input money-input" id="stockModalHarga" inputmode="numeric" value="0">
+          </label>
+          <label class="field">
+            <span>Harga jual patokan</span>
+            <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0">
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="stockCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan sparepart</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ JASA MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="jasaModal" role="dialog" aria-modal="true" aria-labelledby="jasaModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="jasaModalTitle">Tambah tarif jasa</h3>
+          <p class="muted">Tarif standar yang disarankan untuk kasir.</p>
+        </div>
+        <button type="button" class="icon-btn" id="jasaModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="jasaForm">
+        <input type="hidden" id="jasaId">
+        <label class="field">
+          <span>Nama jasa <em>*</em></span>
+          <input type="text" class="input" id="jasaNamaInput" required minlength="2" maxlength="255" placeholder="contoh: Korok Radiator">
+        </label>
+        <label class="field">
+          <span>Tarif standar (Rp)</span>
+          <input type="text" class="input money-input" id="jasaHargaInput" inputmode="numeric" value="0">
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="jasaCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan jasa</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script src="/static/js/api-client.js"></script>
+  <script src="/static/js/bluetooth-printer.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
