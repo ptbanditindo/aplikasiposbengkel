@@ -194,6 +194,7 @@
       request('/api/reports/daily-cash?tanggal=' + qs(dateStr || '')),
     period: (start, end) =>
       request('/api/reports/period?start=' + qs(start) + '&end=' + qs(end)),
+    allTime: () => request('/api/reports/all-time'),
     soldParts: (start, end) =>
       request(
         '/api/reports/sold-parts' +

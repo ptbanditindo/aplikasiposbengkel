@@ -2341,87 +2341,6 @@
     return start;
   }
 
-  function emptyPeriodSummary() {
-    return {
-      jumlah_transaksi: 0,
-      jumlah_unit_servis: 0,
-      total_omset: 0,
-      total_cash: 0,
-      total_transfer: 0,
-      total_jasa: 0,
-      total_part: 0,
-      total_diskon: 0,
-      laba_kotor: 0,
-      garansi_aktif: 0,
-      transaksi_tanpa_modal: 0,
-      harian: [],
-      transaksi: [],
-    };
-  }
-
-  function mergePeriodChunks(chunks) {
-    const merged = emptyPeriodSummary();
-    for (let i = chunks.length - 1; i >= 0; i -= 1) {
-      const chunk = chunks[i];
-      merged.jumlah_transaksi += chunk.jumlah_transaksi;
-      merged.jumlah_unit_servis += chunk.jumlah_unit_servis;
-      merged.total_omset += Number(chunk.total_omset) || 0;
-      merged.total_cash += Number(chunk.total_cash) || 0;
-      merged.total_transfer += Number(chunk.total_transfer) || 0;
-      merged.total_jasa += Number(chunk.total_jasa) || 0;
-      merged.total_part += Number(chunk.total_part) || 0;
-      merged.total_diskon += Number(chunk.total_diskon) || 0;
-      merged.laba_kotor += Number(chunk.laba_kotor) || 0;
-      merged.garansi_aktif = Math.max(
-        merged.garansi_aktif,
-        intValue(chunk.garansi_aktif, 0)
-      );
-      merged.transaksi_tanpa_modal += intValue(
-        chunk.transaksi_tanpa_modal,
-        0
-      );
-      merged.harian = merged.harian.concat(chunk.harian || []);
-      merged.transaksi = merged.transaksi.concat(chunk.transaksi || []);
-    }
-    merged.transaksi.sort(
-      (a, b) =>
-        String(b.waktu_service || '').localeCompare(
-          String(a.waktu_service || '')
-        ) || b.id - a.id
-    );
-    return merged;
-  }
-
-  async function loadAllTimePeriod() {
-    const chunks = [];
-    let windowEnd = new Date();
-    for (let i = 0; i < 20; i += 1) {
-      const windowStart = new Date(windowEnd);
-      windowStart.setDate(windowStart.getDate() - 366);
-      const chunk = await API.period(
-        toISODate(windowStart),
-        toISODate(windowEnd)
-      );
-      if (!chunk.jumlah_transaksi) break;
-      chunks.push(chunk);
-      windowEnd = new Date(windowStart);
-      windowEnd.setDate(windowEnd.getDate() - 1);
-    }
-    if (!chunks.length) {
-      return { data: emptyPeriodSummary(), startISO: todayISO() };
-    }
-    const oldest = chunks[chunks.length - 1];
-    const firstActive = (oldest.harian || []).find(
-      (day) => day.jumlah_transaksi > 0
-    );
-    return {
-      data: mergePeriodChunks(chunks),
-      startISO: firstActive
-        ? String(firstActive.tanggal).slice(0, 10)
-        : todayISO(),
-    };
-  }
-
   function renderPeriodRecap(harian, period, periodLabel) {
     const wrap = $('#periodWrap');
     const activeDays = (harian || []).filter(
@@ -2523,15 +2442,15 @@
     const periodLabel = select.selectedOptions.length
       ? select.selectedOptions[0].textContent.trim()
       : 'Hari ini';
-    const endISO = todayISO();
+    let endISO = todayISO();
     const soldRequest = period === 'all' ? API.soldParts() : null;
     try {
       let data;
       let startISO;
       if (period === 'all') {
-        const allTime = await loadAllTimePeriod();
-        data = allTime.data;
-        startISO = allTime.startISO;
+        data = await API.allTime();
+        startISO = String(data.start).slice(0, 10);
+        endISO = String(data.end).slice(0, 10);
       } else {
         startISO = toISODate(reportRangeStart(period));
         data = await API.period(startISO, endISO);

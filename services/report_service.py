@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database.models import ServiceRecord
@@ -99,6 +100,19 @@ def period_report(db: Session, start_day: date, end_day: date) -> Dict[str, Any]
     summary["end"] = end_day
     summary["harian"] = daily
     return summary
+
+
+def all_time_report(db: Session) -> Dict[str, Any]:
+    """Seluruh riwayat sejak nota tertua, tanpa memotong periode kosong."""
+    oldest = db.scalar(select(func.min(ServiceRecord.waktu_service)))
+    today = date.today()
+    if oldest is None:
+        summary = _summarize_records(db, [])
+        summary["start"] = today
+        summary["end"] = today
+        summary["harian"] = []
+        return summary
+    return period_report(db, oldest.date(), today)
 
 
 def sold_parts_report(

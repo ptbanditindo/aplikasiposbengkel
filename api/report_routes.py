@@ -49,6 +49,11 @@ def period_report(
     return PeriodReportOut.model_validate(report_service.period_report(db, start, end))
 
 
+@router.get("/reports/all-time", response_model=PeriodReportOut)
+def all_time_report(db: Session = Depends(get_db)):
+    return PeriodReportOut.model_validate(report_service.all_time_report(db))
+
+
 @router.get("/reports/sold-parts", response_model=SoldPartsReportOut)
 def sold_parts(
     start: date | None = Query(default=None),
