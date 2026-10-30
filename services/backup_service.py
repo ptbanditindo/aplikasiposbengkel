@@ -4,6 +4,8 @@ Ref: PRD NFR-DAT-02 / TC-20.
 """
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import sqlite3
 from datetime import datetime
@@ -11,6 +13,8 @@ from pathlib import Path
 
 from config import settings
 from services.errors import BusinessValidationError
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_TABLES = {
     "customers",
@@ -185,6 +189,7 @@ def restore_backup(file_bytes: bytes) -> None:
 
     from database import session as db_session
 
+    safety = None
     if target.exists():
         settings.backup_dir.mkdir(parents=True, exist_ok=True)
         safety = settings.backup_dir / (
@@ -195,9 +200,53 @@ def restore_backup(file_bytes: bytes) -> None:
         shutil.copy2(target, safety)
         _redact_secrets(safety)
 
-    db_session.engine.dispose()
-    shutil.move(str(temp_path), str(target))
-    db_session.init_db()
+    # Siapkan berkas di folder database yang sama agar penggantian atomik.
+    staged = target.with_name(target.name + ".restore.new")
+    try:
+        shutil.copy2(temp_path, staged)
+    except OSError as exc:
+        staged.unlink(missing_ok=True)
+        temp_path.unlink(missing_ok=True)
+        raise BusinessValidationError(
+            "Gagal menyiapkan berkas restore di folder database."
+        ) from exc
+
+    try:
+        db_session.engine.dispose()
+        os.replace(str(staged), str(target))
+        db_session.init_db()
+    except Exception as exc:
+        staged.unlink(missing_ok=True)
+        temp_path.unlink(missing_ok=True)
+        logger.exception("Restore gagal; mengembalikan database lama")
+        if safety is None or not safety.exists():
+            raise BusinessValidationError(
+                "Restore gagal dan database baru tidak dapat dipakai. "
+                "Periksa berkas backup lalu coba lagi."
+            ) from exc
+
+        rollback = target.with_name(target.name + ".restore.rollback")
+        try:
+            db_session.engine.dispose()
+            shutil.copy2(safety, rollback)
+            os.replace(str(rollback), str(target))
+            db_session.init_db()
+        except Exception:
+            rollback.unlink(missing_ok=True)
+            logger.exception(
+                "Gagal mengembalikan database lama dari %s", safety
+            )
+            raise BusinessValidationError(
+                "Restore gagal dan database lama gagal dipulihkan otomatis. "
+                f"Pulihkan manual dari {safety.name} di folder backup."
+            ) from exc
+
+        raise BusinessValidationError(
+            "Restore gagal. Database lama sudah dikembalikan; "
+            "periksa berkas backup lalu coba lagi."
+        ) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     from database.seed import mark_seed_done
     from services import settings_service

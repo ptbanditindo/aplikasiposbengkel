@@ -30,6 +30,7 @@ from config import BASE_DIR, settings, validate_runtime
 from database.seed import seed_defaults
 from database.session import SessionLocal, get_db, init_db
 from services import settings_service, telegram_backup_service
+from services.maintenance import HEALTH_PATH, RESTORE_PATH, gate
 from services.errors import (
     AuthenticationError,
     ConflictError,
@@ -115,7 +116,24 @@ def create_app() -> FastAPI:
                     },
                 )
 
-        return await call_next(request)
+        path = request.url.path
+        counted = path not in (HEALTH_PATH, RESTORE_PATH)
+        if counted and not gate.try_enter():
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": (
+                        "Sedang memulihkan database. Tunggu sampai proses "
+                        "selesai lalu coba lagi."
+                    )
+                },
+            )
+
+        try:
+            return await call_next(request)
+        finally:
+            if counted:
+                gate.leave()
 
     @app.exception_handler(NotFoundError)
     async def _not_found(_request: Request, exc: NotFoundError):

@@ -1,6 +1,7 @@
 """Endpoint laporan kas, backup & restore database."""
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -11,6 +12,7 @@ from api.deps import require_auth
 from api.schemas import DailyReportOut, PeriodReportOut, SoldPartsReportOut
 from database.session import get_db
 from services import backup_service, report_service
+from services.maintenance import RESTORE_WAIT_TIMEOUT, gate
 
 router = APIRouter(
     tags=["Laporan & Administrasi"], dependencies=[Depends(require_auth)]
@@ -85,5 +87,17 @@ def backup_database():
 )
 async def restore_database(file: UploadFile = File(...)):
     data = await file.read()
-    backup_service.restore_backup(data)
+    mulai = await asyncio.to_thread(gate.begin_restore, RESTORE_WAIT_TIMEOUT)
+    if not mulai:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Restore lain sedang berjalan atau masih ada transaksi aktif. "
+                "Tunggu sebentar lalu coba lagi."
+            ),
+        )
+    try:
+        await asyncio.to_thread(backup_service.restore_backup, data)
+    finally:
+        gate.end_restore()
     return {"status": "ok", "message": "Database berhasil dipulihkan."}

@@ -20,6 +20,7 @@ from database.models import ServiceRecord
 from database.session import SessionLocal
 from services import backup_service, settings_service
 from services.errors import BusinessValidationError
+from services.maintenance import gate
 from services.utils import sanitize_ascii
 
 logger = logging.getLogger(__name__)
@@ -284,7 +285,13 @@ async def scheduler_loop() -> None:
     while True:
         try:
             await asyncio.sleep(60)
-            await asyncio.to_thread(run_scheduled_backup)
+            # Ikut mode maintenance: backup tidak boleh menulis saat restore.
+            if not gate.try_enter():
+                continue
+            try:
+                await asyncio.to_thread(run_scheduled_backup)
+            finally:
+                gate.leave()
         except asyncio.CancelledError:
             raise
         except Exception:  # jangan sampai loop berhenti karena satu kegagalan
