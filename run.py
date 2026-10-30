@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import replace
 
 import uvicorn
 
-from config import settings, validate_runtime
+from config import set_runtime_port, settings, validate_runtime
 
 
 def main() -> None:
@@ -38,6 +39,12 @@ def main() -> None:
     print(f"  Buka: http://127.0.0.1:{args.port}")
     print("  Tekan Ctrl+C untuk berhenti.")
     print("=" * 58)
+
+    # Host/Origin Guard harus mengizinkan port yang benar-benar dilayani
+    # Uvicorn, termasuk saat `--port` berbeda dari APP_PORT. Env dipakai agar
+    # subprocess `--reload` membaca port yang sama saat impor ulang config.
+    os.environ["APP_PORT"] = str(args.port)
+    set_runtime_port(args.port)
 
     uvicorn.run(
         "api.app:app",

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -127,6 +128,20 @@ def load_settings() -> Settings:
 
 
 settings = load_settings()
+
+# Port efektif proses ini. `run.py --port` dapat berbeda dari APP_PORT;
+# Host/Origin Guard harus memakai port yang benar-benar dilayani Uvicorn.
+_runtime_port: Optional[int] = None
+
+
+def set_runtime_port(port: Optional[int]) -> None:
+    global _runtime_port
+    _runtime_port = port
+
+
+def effective_app_port() -> int:
+    return _runtime_port if _runtime_port is not None else settings.app_port
+
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SUPPORTED_AUTH_MODES = frozenset({"session-pin", "install-token"})

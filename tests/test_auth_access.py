@@ -15,7 +15,7 @@ from api import (
     stock_routes,
 )
 from api.app import app  # noqa: F401  (memastikan validasi runtime & wiring diimpor)
-from config import settings, validate_runtime
+from config import set_runtime_port, settings, validate_runtime
 from database.models import AppSetting, Customer
 from database.session import SessionLocal, engine
 
@@ -136,6 +136,41 @@ def test_host_asing_ditolak(anon_client):
 
     wrong_port = anon_client.get("/api/health", headers={"Host": "127.0.0.1:9999"})
     assert wrong_port.status_code == 400
+
+
+def test_port_runtime_mengikuti_port_override(anon_client):
+    """Port yang diizinkan Host/Origin Guard sama dengan port Uvicorn (ARC-12)."""
+    try:
+        set_runtime_port(8011)
+
+        allowed = anon_client.get("/api/health", headers={"Host": "127.0.0.1:8011"})
+        assert allowed.status_code == 200
+
+        old_port = anon_client.get("/api/health", headers={"Host": "127.0.0.1:8000"})
+        assert old_port.status_code == 400
+
+        foreign = anon_client.get("/api/health", headers={"Host": "evil.example:8011"})
+        assert foreign.status_code == 400
+
+        origin_ok = anon_client.post(
+            "/api/auth/logout",
+            headers={
+                "Host": "127.0.0.1:8011",
+                "Origin": "http://127.0.0.1:8011",
+            },
+        )
+        assert origin_ok.status_code == 200
+
+        origin_old = anon_client.post(
+            "/api/auth/logout",
+            headers={
+                "Host": "127.0.0.1:8011",
+                "Origin": "http://127.0.0.1:8000",
+            },
+        )
+        assert origin_old.status_code == 403
+    finally:
+        set_runtime_port(None)
 
 
 def test_origin_asing_pada_request_tulis_ditolak(anon_client):

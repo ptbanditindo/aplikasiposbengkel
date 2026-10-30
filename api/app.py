@@ -27,7 +27,7 @@ from api.schemas import (
     TelegramInfoOut,
 )
 from api.security import UNSAFE_METHODS, allowed_origins, host_header_allowed
-from config import BASE_DIR, settings, validate_runtime
+from config import BASE_DIR, effective_app_port, settings, validate_runtime
 from database.seed import seed_defaults
 from database.session import SessionLocal, get_db, init_db
 from services import settings_service, telegram_backup_service
@@ -93,23 +93,22 @@ def create_app() -> FastAPI:
     # dimatikan total dan permintaan lintas-origin ditolak oleh middleware.
     @app.middleware("http")
     async def _access_guard(request: Request, call_next):
+        port = effective_app_port()
         host_header = request.headers.get("host", "")
-        if not host_header_allowed(host_header, settings.app_port):
+        if not host_header_allowed(host_header, port):
             return JSONResponse(
                 status_code=400,
                 content={
                     "detail": (
                         "Alamat server tidak diizinkan. Buka aplikasi dari "
-                        f"http://127.0.0.1:{settings.app_port} pada PC ini."
+                        f"http://127.0.0.1:{port} pada PC ini."
                     )
                 },
             )
 
         if request.method in UNSAFE_METHODS:
             origin = request.headers.get("origin", "")
-            if origin and origin.rstrip("/") not in allowed_origins(
-                settings.app_port
-            ):
+            if origin and origin.rstrip("/") not in allowed_origins(port):
                 return JSONResponse(
                     status_code=403,
                     content={
