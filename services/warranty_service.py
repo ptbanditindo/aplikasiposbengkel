@@ -7,12 +7,14 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from config import settings
 from database.models import ServiceRecord
+from database.session import begin_immediate
 from repositories import service_record_repository as repo
-from services.errors import NotFoundError, WarrantyError
+from services.errors import ConflictError, NotFoundError, WarrantyError
 
 
 def warranty_end_date(
@@ -54,23 +56,35 @@ def warranty_status(record: ServiceRecord, today: Optional[date] = None) -> str:
 def claim_warranty(
     db: Session, record_id: int, today: Optional[date] = None
 ) -> ServiceRecord:
-    record = repo.get_record(db, record_id)
-    if record is None:
-        raise NotFoundError("Nota servis tidak ditemukan.")
-
-    if not record.bergaransi or record.garansi_sampai is None:
-        raise WarrantyError("Transaksi ini tidak memiliki garansi servis.")
-
     day = today or date.today()
-    if day > record.garansi_sampai:
-        raise WarrantyError(
-            f"Masa garansi telah habis pada {record.garansi_sampai:%d/%m/%Y}."
-        )
-    if record.status_klaim == "Sudah claim":
-        raise WarrantyError("Garansi untuk nota ini sudah pernah diklaim.")
 
-    record.status_klaim = "Sudah claim"
-    record.tanggal_klaim = day
-    db.commit()
+    # Ref: R-01 - kunci tulis sejak awal agar dua klaim terserialisasi.
+    with db.begin():
+        begin_immediate(db)
+        record = repo.get_record(db, record_id)
+        if record is None:
+            raise NotFoundError("Nota servis tidak ditemukan.")
+
+        if not record.bergaransi or record.garansi_sampai is None:
+            raise WarrantyError("Transaksi ini tidak memiliki garansi servis.")
+        if record.status_klaim == "Sudah claim":
+            raise ConflictError("Garansi untuk nota ini sudah pernah diklaim.")
+        if day > record.garansi_sampai:
+            raise WarrantyError(
+                f"Masa garansi telah habis pada {record.garansi_sampai:%d/%m/%Y}."
+            )
+
+        result = db.execute(
+            update(ServiceRecord)
+            .where(
+                ServiceRecord.id == record_id,
+                ServiceRecord.status_klaim != "Sudah claim",
+            )
+            .values(status_klaim="Sudah claim", tanggal_klaim=day)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 0:
+            raise ConflictError("Garansi untuk nota ini sudah pernah diklaim.")
+
     db.refresh(record)
     return record

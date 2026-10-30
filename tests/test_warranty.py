@@ -68,7 +68,7 @@ def test_tc15_klaim_garansi_masa_aktif_berhasil(
     assert record["garansi_aktif"] is False
 
     repeated = client.put(f"/api/service-records/{record_id}/claim")
-    assert repeated.status_code == 400
+    assert repeated.status_code == 409
     assert "sudah pernah" in repeated.json()["detail"].lower()
 
 
