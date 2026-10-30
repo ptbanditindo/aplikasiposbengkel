@@ -24,11 +24,13 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
     laba_kotor = Decimal("0.00")
     units = set()
     active_warranty = 0
+    transaksi_tanpa_modal = 0
 
     for record in records:
         units.add(record.unit_id)
         if warranty_service.is_active(record):
             active_warranty += 1
+        modal_lengkap = True
         total_jasa += record.biaya_jasa
         total_part += record.total_part
         total_diskon += record.diskon
@@ -41,8 +43,12 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
             modal = part.harga_modal
             if modal is None and part.stock_item is not None:
                 modal = part.stock_item.harga_modal
-            if modal is not None:
-                laba_kotor += (part.harga_satuan - modal) * part.jumlah
+            if modal is None:
+                modal_lengkap = False
+                continue
+            laba_kotor += (part.harga_satuan - modal) * part.jumlah
+        if not modal_lengkap:
+            transaksi_tanpa_modal += 1
 
     return {
         "jumlah_transaksi": len(records),
@@ -55,6 +61,7 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
         "total_diskon": money(total_diskon),
         "laba_kotor": money(laba_kotor),
         "garansi_aktif": int(active_warranty),
+        "transaksi_tanpa_modal": transaksi_tanpa_modal,
         "transaksi": [record_summary(record) for record in records],
     }
 

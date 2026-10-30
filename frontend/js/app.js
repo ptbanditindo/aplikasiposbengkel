@@ -887,18 +887,22 @@
 
     const quantity = Math.max(1, intValue($('#partQty').value, 1));
     const price = parseMoney($('#partHarga').value);
+    const modalInput = $('#partModal').value.trim();
+    const modal = modalInput ? parseMoney(modalInput) : null;
 
     state.parts.push({
       stock_item_id: stock ? stock.id : null,
       nama_part: name,
       jumlah: quantity,
       harga_satuan: String(price),
+      harga_modal: stock ? null : modal,
     });
 
     $('#partPicker').value = '';
     $('#partNama').value = '';
     $('#partQty').value = '1';
     $('#partHarga').value = '';
+    $('#partModal').value = '';
     $('#partStockHint').textContent = 'Stok gudang otomatis dipotong.';
     renderItems();
   }
@@ -950,6 +954,16 @@
             : '';
         const subtotal =
           parseMoney(part.harga_satuan) * intValue(part.jumlah, 0);
+        const modalCell = stock
+          ? '<span class="cell-sub">' + fmtRp(stock.harga_modal) + '</span>'
+          : '<input class="table-input price" inputmode="numeric" data-kind="part" data-index="' +
+            index +
+            '" data-field="harga_modal" value="' +
+            esc(part.harga_modal == null ? '' : part.harga_modal) +
+            '" placeholder="Modal">' +
+            (part.harga_modal == null || part.harga_modal === ''
+              ? '<span class="stock-warn">belum diisi</span>'
+              : '');
         return (
           '<tr>' +
           '<td><input class="table-input" data-kind="part" data-index="' +
@@ -969,6 +983,9 @@
           '" data-field="harga_satuan" value="' +
           esc(part.harga_satuan) +
           '"></td>' +
+          '<td>' +
+          modalCell +
+          '</td>' +
           '<td class="text-right item-subtotal">' +
           fmtRp(subtotal) +
           '</td>' +
@@ -1189,6 +1206,10 @@
         nama_part: part.nama_part,
         jumlah: Math.max(1, intValue(part.jumlah, 1)),
         harga_satuan: String(parseMoney(part.harga_satuan)),
+        harga_modal:
+          part.stock_item_id || part.harga_modal === '' || part.harga_modal == null
+            ? null
+            : String(parseMoney(part.harga_modal)),
       })),
     };
   }
@@ -1754,6 +1775,7 @@
             (opts.showProfit
               ? '<span class="cell-sub">Laba ' +
                 fmtRp(record.laba_kotor) +
+                (record.modal_tidak_diketahui ? ' · modal belum diisi' : '') +
                 '</span>'
               : '') +
             '</td>' +
@@ -2331,6 +2353,7 @@
       total_diskon: 0,
       laba_kotor: 0,
       garansi_aktif: 0,
+      transaksi_tanpa_modal: 0,
       harian: [],
       transaksi: [],
     };
@@ -2352,6 +2375,10 @@
       merged.garansi_aktif = Math.max(
         merged.garansi_aktif,
         intValue(chunk.garansi_aktif, 0)
+      );
+      merged.transaksi_tanpa_modal += intValue(
+        chunk.transaksi_tanpa_modal,
+        0
       );
       merged.harian = merged.harian.concat(chunk.harian || []);
       merged.transaksi = merged.transaksi.concat(chunk.transaksi || []);
@@ -2541,7 +2568,12 @@
         '</strong></span>' +
         '<span class="meta-chip">Garansi aktif <strong>' +
         data.garansi_aktif +
-        '</strong></span>';
+        '</strong></span>' +
+        (intValue(data.transaksi_tanpa_modal, 0) > 0
+          ? '<span class="meta-chip">Laba belum lengkap: <strong>' +
+            data.transaksi_tanpa_modal +
+            '</strong> nota tanpa modal</span>'
+          : '');
 
       const body = $('#reportBody');
       if (!rows.length) {
@@ -2575,6 +2607,9 @@
               fmtRp(record.total_servis) +
               '<span class="cell-sub">Laba kotor ' +
               fmtRp(record.laba_kotor) +
+              (record.modal_tidak_diketahui
+                ? ' · modal part belum diisi'
+                : '') +
               '</span></td>' +
               '<td>' +
               metodeBadge(record.metode_bayar) +

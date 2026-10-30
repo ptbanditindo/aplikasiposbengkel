@@ -148,13 +148,24 @@ def _create_transaction_locked(
             if not name:
                 raise BusinessValidationError("Nama sparepart wajib diisi.")
 
+            if stock is not None:
+                harga_modal = stock.harga_modal
+            else:
+                raw_modal = getattr(part, "harga_modal", None)
+                harga_modal = money(raw_modal) if raw_modal is not None else None
+                if harga_modal is None:
+                    warnings.append(
+                        f"Modal {name} belum diisi; laba kotor part ini "
+                        "tidak dihitung."
+                    )
+
             part_lines.append(
                 {
                     "stock_item_id": stock.id if stock is not None else None,
                     "nama_part": name,
                     "jumlah": qty,
                     "harga_satuan": price,
-                    "harga_modal": stock.harga_modal if stock is not None else None,
+                    "harga_modal": harga_modal,
                 }
             )
 

@@ -182,6 +182,7 @@ class ServicePartInput(CompatBase):
     nama_part: str = Field(default="", max_length=255)
     jumlah: int = Field(default=1, ge=1)
     harga_satuan: Decimal = Field(..., ge=0)
+    harga_modal: Optional[Decimal] = Field(default=None, ge=0)
 
 
 class CreateServiceTransactionRequest(CompatBase):
@@ -243,6 +244,7 @@ class ServiceRecordOut(ORMModel):
     warranty_status: str
     jumlah_item: int = 0
     laba_kotor: Money = ZERO_MONEY
+    modal_tidak_diketahui: bool = False
 
 
 class ReceiptOut(ORMModel):
@@ -305,6 +307,7 @@ class DailySummaryOut(CompatBase):
     total_diskon: Money
     laba_kotor: Money
     garansi_aktif: int
+    transaksi_tanpa_modal: int = 0
 
 
 class DailyReportOut(DailySummaryOut):
@@ -324,6 +327,7 @@ class PeriodReportOut(CompatBase):
     total_diskon: Money
     laba_kotor: Money
     garansi_aktif: int
+    transaksi_tanpa_modal: int = 0
     transaksi: List[ServiceRecordOut] = Field(default_factory=list)
     harian: List[DailySummaryOut] = Field(default_factory=list)
 

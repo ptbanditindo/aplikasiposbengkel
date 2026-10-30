@@ -181,11 +181,13 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
     unit = record.unit
     customer = unit.customer
     laba_kotor = Decimal("0.00")
+    modal_tidak_diketahui = False
     for part in record.parts:
         modal = part.harga_modal
         if modal is None and part.stock_item is not None:
             modal = part.stock_item.harga_modal
         if modal is None:
+            modal_tidak_diketahui = True
             continue
         laba_kotor += (part.harga_satuan - modal) * part.jumlah
     return {
@@ -214,6 +216,7 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "warranty_status": warranty_service.warranty_status(record),
         "jumlah_item": len(record.jobs) + len(record.parts),
         "laba_kotor": laba_kotor,
+        "modal_tidak_diketahui": modal_tidak_diketahui,
     }
 
 
