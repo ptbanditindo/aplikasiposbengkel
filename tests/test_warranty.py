@@ -65,7 +65,7 @@ def test_tc15_klaim_garansi_masa_aktif_berhasil(
     assert record["status_klaim"] == "Sudah claim"
     assert record["tanggal_klaim"] == date.today().isoformat()
     assert record["warranty_status"] == "SUDAH CLAIM"
-    assert record["garansi_aktif"] is True
+    assert record["garansi_aktif"] is False
 
     repeated = client.put(f"/api/service-records/{record_id}/claim")
     assert repeated.status_code == 400

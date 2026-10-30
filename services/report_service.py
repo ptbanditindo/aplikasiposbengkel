@@ -5,11 +5,11 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database.models import ServiceRecord, StockItem
 from repositories import service_record_repository as record_repo
+from services import warranty_service
 from services.customer_service import describe_unit
 from services.receipt_service import record_summary
 from services.utils import money
@@ -23,11 +23,14 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
     total_diskon = Decimal("0.00")
     laba_kotor = Decimal("0.00")
     units = set()
+    active_warranty = 0
 
     stock_cache: Dict[int, StockItem | None] = {}
 
     for record in records:
         units.add(record.unit_id)
+        if warranty_service.is_active(record):
+            active_warranty += 1
         total_jasa += record.biaya_jasa
         total_part += record.total_part
         total_diskon += record.diskon
@@ -48,16 +51,6 @@ def _summarize_records(db: Session, records: List[ServiceRecord]) -> Dict[str, A
                     modal = stock.harga_modal
             if modal is not None:
                 laba_kotor += (part.harga_satuan - modal) * part.jumlah
-
-    active_warranty = db.scalar(
-        select(func.count())
-        .select_from(ServiceRecord)
-        .where(
-            ServiceRecord.bergaransi.is_(True),
-            ServiceRecord.garansi_sampai.is_not(None),
-            ServiceRecord.garansi_sampai >= date.today(),
-        )
-    ) or 0
 
     return {
         "jumlah_transaksi": len(records),

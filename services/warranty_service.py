@@ -36,6 +36,8 @@ def warranty_end_date(
 def is_active(record: ServiceRecord, today: Optional[date] = None) -> bool:
     if not record.bergaransi or record.garansi_sampai is None:
         return False
+    if record.status_klaim == "Sudah claim":
+        return False
     return (today or date.today()) <= record.garansi_sampai
 
 
