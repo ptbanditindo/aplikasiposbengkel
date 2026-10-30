@@ -66,8 +66,16 @@ def test_ubah_identitas_tersimpan_dan_tampil_di_config(client, db_session):
     assert bengkel["atas_nama"] == "Bengkel Radiator Jaya"
 
     keys = {row.key for row in db_session.scalars(select(AppSetting)).all()}
-    assert "bengkel.nama" in keys
-    assert len(keys) == 8
+    assert {key for key in keys if key.startswith("bengkel.")} == {
+        "bengkel.nama",
+        "bengkel.tagline",
+        "bengkel.alamat",
+        "bengkel.telepon",
+        "bengkel.wa",
+        "bengkel.bank_nama",
+        "bengkel.no_rekening",
+        "bengkel.atas_nama",
+    }
 
 
 def test_tagline_kosong_menimpa_default(client):

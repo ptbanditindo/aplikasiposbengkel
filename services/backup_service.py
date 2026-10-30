@@ -174,15 +174,15 @@ def restore_backup(file_bytes: bytes) -> None:
     shutil.move(str(temp_path), str(target))
     db_session.init_db()
 
-    from database.seed import seed_defaults
+    from database.seed import mark_seed_done
     from services import settings_service
 
+    # Restore harus menyalin kondisi backup apa adanya: tanpa seed ulang.
     with db_session.SessionLocal() as db:
-        seed_defaults(db)
+        mark_seed_done(db)
 
-    # Backup sengaja tidak menyimpan token; tandai agar UI meminta token ulang
-    # bila konfigurasi aktif tidak lagi lengkap setelah restore.
-    with db_session.SessionLocal() as db:
+        # Backup sengaja tidak menyimpan token; tandai agar UI meminta token ulang
+        # bila konfigurasi aktif tidak lagi lengkap setelah restore.
         config = settings_service.get_telegram_config(db)
         settings_service.set_setting(
             db,

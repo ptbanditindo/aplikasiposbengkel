@@ -9,7 +9,16 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database.models import HargaJasa, StockItem
+from database.models import (
+    AppSetting,
+    Customer,
+    HargaJasa,
+    ServiceRecord,
+    StockItem,
+    VehicleOrUnit,
+)
+
+SEED_DONE_KEY = "seed.done"
 
 DEFAULT_STOCK = [
     ("SP-001", "Upper Tank Fiber Avanza", "85000", "135000", 8),
@@ -40,7 +49,40 @@ DEFAULT_JASA = [
 ]
 
 
+def _seed_done(db: Session) -> bool:
+    row = db.get(AppSetting, SEED_DONE_KEY)
+    return row is not None and row.value == "1"
+
+
+def _set_seed_done(db: Session) -> None:
+    row = db.get(AppSetting, SEED_DONE_KEY)
+    if row is None:
+        db.add(AppSetting(key=SEED_DONE_KEY, value="1"))
+    else:
+        row.value = "1"
+
+
+def mark_seed_done(db: Session) -> None:
+    """Tandai database sudah pernah di-seed tanpa menambah data apa pun."""
+    _set_seed_done(db)
+    db.commit()
+
+
+def _has_any_data(db: Session) -> bool:
+    for model in (StockItem, HargaJasa, Customer, VehicleOrUnit, ServiceRecord):
+        if db.scalar(select(func.count()).select_from(model)):
+            return True
+    return False
+
+
 def seed_defaults(db: Session) -> None:
+    if _seed_done(db):
+        return
+    if _has_any_data(db):
+        # Database lama: hormati isinya, cukup tandai agar tidak di-seed ulang.
+        mark_seed_done(db)
+        return
+
     stock_count = db.scalar(select(func.count()).select_from(StockItem)) or 0
     if stock_count == 0:
         db.add_all(
@@ -65,4 +107,5 @@ def seed_defaults(db: Session) -> None:
             ]
         )
 
+    _set_seed_done(db)
     db.commit()
