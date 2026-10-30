@@ -3024,3 +3024,117 @@ textarea.input, textarea.textarea { border-radius: var(--radius-control); }
   .page-actions { width: 100%; }
   .page-actions .btn { flex: 1; }
 }
+
+/* -------------------- POS input zones & customer history ------------------ */
+/* Satu warna per jenis baris agar tombol tambah jasa dan sparepart tidak tertukar. */
+.line-form.line-form--jasa,
+.line-form.line-form--part {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.line-form.line-form--jasa {
+  border-left-color: var(--info-ink);
+  background: var(--info-soft);
+}
+.line-form.line-form--part {
+  border-left-color: var(--warning-ink);
+  background: var(--warning-soft);
+}
+.line-form--jasa .line-form-head h4,
+.items-block--jasa .items-table th { color: var(--info-ink); }
+.line-form--part .line-form-head h4,
+.items-block--part .items-table th { color: var(--warning-ink); }
+.line-form--jasa .line-form-head h4::before,
+.line-form--part .line-form-head h4::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: currentColor;
+}
+.line-form--jasa .line-grid .btn {
+  border-color: var(--info-ink);
+  color: var(--info-ink);
+}
+.line-form--part .line-grid .btn {
+  border-color: var(--warning-ink);
+  color: var(--warning-ink);
+}
+.line-form--jasa .line-grid .btn:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--info-ink);
+}
+.line-form--part .line-grid .btn:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--warning-ink);
+}
+
+.detail-history-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  padding-right: 4px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.detail-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color .12s ease, background .12s ease;
+}
+.detail-history-item:hover {
+  border-color: var(--accent);
+  background: var(--raised);
+}
+.detail-history-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.detail-history-main { display: grid; gap: 2px; min-width: 0; }
+.detail-history-note { font-size: 12.5px; font-weight: 600; }
+.detail-history-unit {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+.detail-history-side { display: grid; gap: 2px; text-align: right; }
+.detail-history-total {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.detail-history-date { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.detail-history-badges {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .detail-history-item { grid-template-columns: 1fr; }
+  .detail-history-side {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    text-align: left;
+  }
+}

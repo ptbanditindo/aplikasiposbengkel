@@ -12,10 +12,13 @@ build step) di `http://127.0.0.1:8000`.
 ## Fitur
 
 - **Pelanggan & unit** — satu pelanggan bisa punya banyak mobil/radiator;
-  pencarian cepat dan ringkasan jumlah unit per pelanggan.
+  pencarian cepat, ringkasan jumlah unit per pelanggan, dan riwayat servis
+  pelanggan yang bisa dibuka langsung dari kartu pelanggan.
 - **Transaksi servis (POS)** — jasa + sparepart dalam satu nota, diskon,
   pembayaran CASH/TRANSFER, kembalian, validasi stok, serta opsi izinkan stok
-  minus.
+  minus. Zona input jasa dan sparepart dibedakan warna agar kasir tidak salah
+  memasukkan item, dan kolom uang otomatis memakai pemisah ribuan
+  (`1.000.000`) saat diketik.
 - **Pembatalan dan retur** — nota bisa dibatalkan (VOID) atau diretur sebagian
   maupun seluruhnya. Stok dikembalikan secara atomik lewat ledger pergerakan
   stok, bukan dengan menyunting angka stok manual.

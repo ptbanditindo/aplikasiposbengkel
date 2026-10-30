@@ -40,11 +40,58 @@
     return digits ? Number(digits) : 0;
   }
 
+  function formatMoneyValue(value) {
+    const digits = String(value == null ? '' : value)
+      .replace(/\D/g, '')
+      .replace(/^0+(?=\d)/, '');
+    if (!digits) return '';
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+
+  function setMoneyValue(input, value) {
+    if (!input) return;
+    input.value = value == null || value === '' ? '' : formatMoneyValue(value);
+  }
+
+  function formatMoneyField(input) {
+    if (!input) return;
+    const raw = input.value;
+    const caret =
+      typeof input.selectionStart === 'number'
+        ? input.selectionStart
+        : raw.length;
+    const digitsBefore = raw.slice(0, caret).replace(/\D/g, '').length;
+    const formatted = formatMoneyValue(raw);
+    if (input.value === formatted) return;
+    input.value = formatted;
+    if (document.activeElement !== input) return;
+    let position = 0;
+    let seen = 0;
+    while (position < formatted.length && seen < digitsBefore) {
+      if (/\d/.test(formatted[position])) seen += 1;
+      position += 1;
+    }
+    try {
+      input.setSelectionRange(position, position);
+    } catch (err) {
+      /* Input tanpa dukungan seleksi caret tetap memakai nilai baru. */
+    }
+  }
+
+  function isMoneyField(target) {
+    if (!target) return false;
+    if (target.classList.contains('money-input')) return true;
+    return (
+      target.matches('[data-kind][data-field]') &&
+      /^(harga|harga_satuan|harga_modal)$/.test(target.dataset.field)
+    );
+  }
+
   function readMoneyInput(input, label) {
     const raw = input ? input.value : '';
     if (!moneyInputValid(raw)) {
       toast(
-        label + ' harus berupa rupiah bulat tanpa desimal. Contoh: 150000.',
+        label + ' harus berupa rupiah bulat tanpa desimal. Contoh: 150.000.',
         'warning'
       );
       if (input) input.focus();
@@ -159,6 +206,8 @@
     detailReturns: [],
     returnMode: false,
     detailCustomer: null,
+    customerHistory: [],
+    customerHistorySeq: 0,
     receipt: null,
     receiptWidth: 58,
     customerReturnToPos: false,
@@ -940,7 +989,7 @@
     const master = state.jasa.find((jasa) => jasa.id === id);
     if (!master) return;
     $('#jasaNama').value = master.nama;
-    $('#jasaHarga').value = String(Math.round(Number(master.harga_standar) || 0));
+    setMoneyValue($('#jasaHarga'), Math.round(Number(master.harga_standar) || 0));
     $('#jasaQty').value = '1';
   }
 
@@ -953,7 +1002,7 @@
       return;
     }
     $('#partNama').value = stock.nama;
-    $('#partHarga').value = String(Math.round(Number(stock.harga_jual) || 0));
+    setMoneyValue($('#partHarga'), Math.round(Number(stock.harga_jual) || 0));
     $('#partQty').value = '1';
     if (hint) {
       hint.textContent =
@@ -1050,7 +1099,7 @@
           '<td><input class="table-input price" inputmode="numeric" data-kind="job" data-index="' +
           index +
           '" data-field="harga" value="' +
-          esc(job.harga) +
+          esc(formatMoneyValue(job.harga)) +
           '"></td>' +
           '<td class="text-right item-subtotal" data-subtotal-kind="job" data-subtotal-index="' +
           index +
@@ -1077,7 +1126,7 @@
           : '<input class="table-input price" inputmode="numeric" data-kind="part" data-index="' +
             index +
             '" data-field="harga_modal" value="' +
-            esc(part.harga_modal == null ? '' : part.harga_modal) +
+            esc(formatMoneyValue(part.harga_modal)) +
             '" placeholder="Modal">' +
             (part.harga_modal == null || part.harga_modal === ''
               ? '<span class="stock-warn">belum diisi</span>'
@@ -1099,7 +1148,7 @@
           '<td><input class="table-input price" inputmode="numeric" data-kind="part" data-index="' +
           index +
           '" data-field="harga_satuan" value="' +
-          esc(part.harga_satuan) +
+          esc(formatMoneyValue(part.harga_satuan)) +
           '"></td>' +
           '<td>' +
           modalCell +
@@ -1219,7 +1268,7 @@
       return;
     }
 
-    if (transfer) paidInput.value = String(moneyToCents(preview.total_servis) / 100);
+    if (transfer) setMoneyValue(paidInput, moneyToCents(preview.total_servis) / 100);
 
     setLineSubtotals('job', preview.jobs);
     setLineSubtotals('part', preview.parts);
@@ -1264,7 +1313,7 @@
     ) {
       renderPreview(
         null,
-        'Format angka tidak valid. Gunakan rupiah bulat. Contoh: 150000.'
+        'Format angka tidak valid. Gunakan rupiah bulat. Contoh: 150.000.'
       );
       return;
     }
@@ -3111,6 +3160,7 @@
   /* --------------------------- Detail & drilldown ------------------------- */
   function findRecordById(id) {
     const lists = [
+      state.customerHistory,
       state.history,
       state.reportRows,
       state.dashboardRecords,
@@ -3566,7 +3616,72 @@
       ')</h4>' +
       '<div class="detail-unit-list">' +
       unitsHtml +
-      '</div></div>';
+      '</div></div>' +
+      '<div class="detail-section" id="customerHistorySection"></div>';
+  }
+
+  function customerHistoryItem(record) {
+    return (
+      '<button type="button" class="detail-history-item" data-action="record-detail" data-id="' +
+      record.id +
+      '" title="Buka nota ' +
+      esc(record.no_nota) +
+      '">' +
+      '<span class="detail-history-main">' +
+      '<span class="detail-history-note">' +
+      esc(record.no_nota) +
+      '</span>' +
+      '<span class="detail-history-unit">' +
+      esc(record.unit_deskripsi || '-') +
+      '</span>' +
+      '</span>' +
+      '<span class="detail-history-side">' +
+      '<span class="detail-history-total">' +
+      fmtRp(netTotal(record)) +
+      '</span>' +
+      '<span class="detail-history-date">' +
+      esc(fmtDate(record.waktu_service)) +
+      '</span>' +
+      '</span>' +
+      '<span class="detail-history-badges">' +
+      metodeBadge(record.metode_bayar) +
+      warrantyBadge(record) +
+      '</span>' +
+      '</button>'
+    );
+  }
+
+  async function loadCustomerHistory(customer) {
+    const section = $('#customerHistorySection');
+    if (!section) return;
+    const seq = (state.customerHistorySeq += 1);
+    state.customerHistory = [];
+    section.innerHTML =
+      '<h4 class="detail-section-title">Riwayat servis</h4>' +
+      '<div class="empty-state sm">Memuat riwayat servis...</div>';
+
+    try {
+      const records = await API.records(customer.nomor_hp || '');
+      if (seq !== state.customerHistorySeq) return;
+      const list = (records || []).filter(
+        (record) => record.customer_id === customer.id
+      );
+      state.customerHistory = list;
+      section.innerHTML =
+        '<h4 class="detail-section-title">Riwayat servis (' +
+        list.length +
+        ')</h4>' +
+        (list.length
+          ? '<div class="detail-history-list">' +
+            list.map(customerHistoryItem).join('') +
+            '</div>'
+          : '<div class="empty-state sm">Belum ada riwayat servis untuk pelanggan ini.</div>');
+    } catch (err) {
+      if (seq !== state.customerHistorySeq) return;
+      section.innerHTML =
+        '<h4 class="detail-section-title">Riwayat servis</h4>' +
+        '<div class="empty-state sm">Riwayat servis gagal dimuat. Coba lagi.</div>';
+    }
   }
 
   async function openCustomerDetail(id) {
@@ -3595,6 +3710,7 @@
     state.detailCustomer = customer;
     renderCustomerDetail(customer);
     openModal('#customerDetailModal');
+    loadCustomerHistory(customer);
   }
 
   function openDashboardNotas(filter) {
@@ -3934,12 +4050,14 @@
     $('#stockId').value = item ? item.id : '';
     $('#stockKode').value = item ? item.kode || '' : '';
     $('#stockNama').value = item ? item.nama : '';
-    $('#stockModalHarga').value = item
-      ? String(Math.round(Number(item.harga_modal) || 0))
-      : '0';
-    $('#stockJualHarga').value = item
-      ? String(Math.round(Number(item.harga_jual) || 0))
-      : '0';
+    setMoneyValue(
+      $('#stockModalHarga'),
+      item ? Math.round(Number(item.harga_modal) || 0) : 0
+    );
+    setMoneyValue(
+      $('#stockJualHarga'),
+      item ? Math.round(Number(item.harga_jual) || 0) : 0
+    );
     $('#stockJumlah').value = item ? item.jumlah : '0';
     openModal('#stockModal');
     setTimeout(() => $('#stockNama').focus(), 60);
@@ -3986,9 +4104,10 @@
     $('#jasaModalTitle').textContent = jasa ? 'Edit tarif jasa' : 'Tambah tarif jasa';
     $('#jasaId').value = jasa ? jasa.id : '';
     $('#jasaNamaInput').value = jasa ? jasa.nama : '';
-    $('#jasaHargaInput').value = jasa
-      ? String(Math.round(Number(jasa.harga_standar) || 0))
-      : '0';
+    setMoneyValue(
+      $('#jasaHargaInput'),
+      jasa ? Math.round(Number(jasa.harga_standar) || 0) : 0
+    );
     openModal('#jasaModal');
     setTimeout(() => $('#jasaNamaInput').focus(), 60);
   }
@@ -4815,6 +4934,17 @@
 
   function handleGlobalInput(event) {
     const target = event.target;
+    if (isMoneyField(target)) {
+      formatMoneyField(target);
+      if (target.matches('[data-kind][data-field]')) {
+        handleItemInput(target);
+        return;
+      }
+      if (target.id === 'diskonInput' || target.id === 'bayarInput') {
+        updateSummary();
+      }
+      return;
+    }
     if (target.matches('[data-kind][data-field]')) {
       handleItemInput(target);
       return;
@@ -5126,6 +5256,7 @@
   async function init() {
     initTheme();
     bindEvents();
+    $$('.money-input').forEach(formatMoneyField);
     startClock();
     initPrinter();
     initPinSecurityCard();

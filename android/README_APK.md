@@ -54,13 +54,15 @@ WorkManager (ScheduledBackupWorker)
   dengan periode 24 jam, initial delay mengikuti jam pengaturan, dan retry
   eksponensial maksimal 5 percobaan. Worker dapat menyalakan backend sebentar
   lalu mematikannya lagi bila aplikasi tidak sedang di depan.
-- **Tampilan dan area aman**: UI 2.1 memakai dasar kertas putih dengan aksen
+- **Tampilan dan area aman**: UI 2.2 memakai dasar kertas putih dengan aksen
   warna pada angka dan status. Pilihan Terang/Gelap di Pengaturan disimpan di
   `localStorage` (`bengkel.theme`) dan diteruskan ke shell lewat
   `BengkelPin.applyChromeTheme` agar warna status bar dan navigation bar ikut
   berubah. `MainActivity` memakai edge-to-edge dengan padding
   `systemBars() or displayCutout()` pada `appRoot`, sehingga konten tidak
-  tertutup status bar atau notch.
+  tertutup status bar atau notch. Di kasir, blok jasa dan sparepart diberi latar
+  tipis berbeda, detail pelanggan menampilkan riwayat servis, dan kolom uang
+  memakai pemisah ribuan otomatis.
 
 ## Versi Python dan dependensi
 
@@ -125,37 +127,47 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.219.668 byte
-- SHA-256: `a3c9635c2cd813db6dbf81f29a1b6011c2550310ce55947464bff27ba73d02a7`
-- Paket: `com.bengkelpos.radiator`, versionName `2.1.0`, versionCode `2`,
+- Ukuran: 45.018.304 byte
+- SHA-256: `64fbd0aa3591778751d45d9e3c4c85be2fc0dc451d5c89f54e575f2f6c0a6cac`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.0`, versionCode `3`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 205.387 byte, SHA-256
-  `61ed84306bce0a749cd33822527db2a7714c7b39d2b6160d40722bd2d58229fb`.
+- Asset `assets/bengkel_backend.zip`: 207.282 byte, SHA-256
+  `392754855f46a0ec7bc42b39de63c9c412a5a2024849fa241366972b44024c84`.
   `frontend/index.html` di dalam ZIP dicocokkan hash-nya dengan working tree
-  saat build dan memuat footer v2.1, kontrol Terang/Gelap, serta placeholder
-  baru. `style.css`, `app.js`, `api-client.js`, dan `printer-manager.js` juga
-  ikut dalam ZIP yang sama.
-- Unit test JVM: **143 test lulus**. Pytest backend: **226 test lulus** di
-  masing-masing stack (Pydantic v2 dan Pydantic 1.10).
+  saat build dan memuat footer v2.2, riwayat servis di detail pelanggan, zona
+  warna input kasir, kontrol Terang/Gelap, serta format ribuan pada kolom uang.
+  `style.css`, `app.js`, `api-client.js`, dan `printer-manager.js` juga ikut
+  dalam ZIP yang sama dan hash-nya sama dengan working tree.
+- Unit test JVM: **143 test per varian** (Debug dan Release, total 286 run)
+  lulus. Pytest backend: **226 test lulus** di masing-masing stack (Pydantic v2
+  dan Pydantic 1.10).
 - APK belum dipasang/diuji di perangkat Android fisik.
 
 ## Pemeriksaan di perangkat
 
-1. Instal APK, buat PIN, tunggu teks "Menyiapkan server lokal".
+1. Instal APK, buat PIN, tunggu teks "Menyiapkan server lokal". Bila memasang
+   menimpa APK 2.1, versi yang naik memaksa backend diekstrak ulang sehingga
+   tampilan terbaru ikut terpakai.
 2. Pastikan halaman kasir muncul dan transaksi bisa disimpan.
-3. Simpan pengaturan bengkel/Telegram — tidak boleh ada prompt token atau
+3. Buka detail pelanggan yang punya nota: bagian Riwayat servis terisi dan
+   baris riwayat bisa diketuk untuk membuka detail nota.
+4. Di kasir, pastikan blok Jasa dan Sparepart punya latar berbeda dan tombol
+   tambahnya tidak tertukar.
+5. Ketik `1000000` di kolom uang: nilai tampil menjadi `1.000.000` dan total
+   nota tetap dihitung backend seperti biasa.
+6. Simpan pengaturan bengkel/Telegram — tidak boleh ada prompt token atau
    layar PIN web di APK.
-4. Tutup paksa aplikasi lalu buka lagi: PIN diminta, data tetap ada.
-5. Coba screenshot layar kasir/nota (harus berhasil) dan layar PIN (harus
+7. Tutup paksa aplikasi lalu buka lagi: PIN diminta, data tetap ada.
+8. Coba screenshot layar kasir/nota (harus berhasil) dan layar PIN (harus
    kosong/hitam karena `FLAG_SECURE`).
-6. Buka Pengaturan, ganti Warna aplikasi ke Gelap lalu Terang. Warna status
+9. Buka Pengaturan, ganti Warna aplikasi ke Gelap lalu Terang. Warna status
    bar ikut berubah dan pilihan tetap tersimpan setelah aplikasi dibuka lagi.
-7. Pastikan judul halaman dan tombol aksi tidak tertutup status bar, kamera
-   punch-hole, atau navigation bar pada perangkat dengan layar penuh.
-8. Buka Pengaturan → Printer, tambahkan printer Bluetooth/Wi-Fi/USB, lalu
-   lakukan tes cetak pada perangkat nyata.
-9. Lupa PIN → RESET → buat PIN baru → data dan token instalasi tetap ada.
-10. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN serta jadwal
+10. Pastikan judul halaman dan tombol aksi tidak tertutup status bar, kamera
+    punch-hole, atau navigation bar pada perangkat dengan layar penuh.
+11. Buka Pengaturan → Printer, tambahkan printer Bluetooth/Wi-Fi/USB, lalu
+    lakukan tes cetak pada perangkat nyata.
+12. Lupa PIN → RESET → buat PIN baru → data dan token instalasi tetap ada.
+13. Uji ganti jam perangkat dan reboot untuk perilaku kunci PIN serta jadwal
     backup WorkManager.
 
 Jika muncul "Server lokal gagal dijalankan", periksa logcat:

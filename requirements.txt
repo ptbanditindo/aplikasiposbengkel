@@ -1,9 +1,10 @@
 # BengkelPOS Radiator - dependency versi desktop
 # Diverifikasi pada Python 3.12.10 (Windows) dengan 226 test lulus.
-# Dirilis bersama UI 2.1.0 (mode terang/gelap, layout aman status bar).
+# Dirilis bersama UI 2.2.0 (riwayat servis di detail pelanggan, zona warna
+# input kasir, dan pemisah ribuan otomatis pada kolom uang).
 # Catatan: APK Android (Chaquopy) memakai pin pure-Python tersendiri di
 # android/app/build.gradle.kts (pydantic 1.10 + fastapi 0.115), bukan berkas ini.
-# Tidak ada dependensi baru untuk UI 2.1.0; daftar di bawah tidak berubah.
+# Tidak ada dependensi baru untuk UI 2.2.0; daftar di bawah tidak berubah.
 fastapi==0.162.0
 uvicorn[standard]==0.54.0
 SQLAlchemy==2.1.6

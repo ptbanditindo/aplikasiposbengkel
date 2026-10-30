@@ -50,7 +50,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.1 |
+| Versi | BengkelPOS Radiator v2.2 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -91,6 +91,7 @@ Aturan yang dipakai:
 | Tombol | + Tambah jasa, + Tambah sparepart |
 | Tabel sparepart | Sparepart, Qty, Harga deal, Modal, Subtotal |
 | Keterangan stok | Stok gudang otomatis dipotong. Stok tersedia N. Harga patokan Rp X. |
+| Zona input | Blok jasa dan blok sparepart memakai latar tipis berbeda beserta penanda warna pada judul dan tombol tambah, sehingga kasir mudah membedakan keduanya. |
 | Kosong | Belum ada jasa ditambahkan. Belum ada sparepart ditambahkan. |
 | Ringkasan | Ringkasan nota, Subtotal jasa, Subtotal sparepart, Total nota, Diskon (Rp) |
 | Catatan | Perkiraan sementara. Nilai final dicatat saat nota disimpan. |
@@ -98,7 +99,8 @@ Aturan yang dipakai:
 | Garansi | Garansi servis, Durasi garansi, 1 bulan (30 hari), 2 bulan (60 hari), 3 bulan (90 hari), 6 bulan (180 hari), 12 bulan (360 hari), Atur sendiri, Jumlah bulan (1 sampai 120), Catatan garansi |
 | Tombol | Simpan dan cetak struk, Simpan tanpa cetak |
 | Validasi | Pilih pelanggan terlebih dahulu. Pilih unit servis terlebih dahulu. Keluhan awal wajib diisi. Tambahkan minimal satu jasa atau sparepart. |
-| Validasi uang | Angka uang harus rupiah bulat tanpa desimal. Label harus berupa rupiah bulat tanpa desimal. Contoh: 150000. |
+| Validasi uang | Angka uang harus rupiah bulat tanpa desimal. Label harus berupa rupiah bulat tanpa desimal. Contoh: 150.000. |
+| Format uang | Kolom uang otomatis memakai pemisah ribuan saat diketik, misalnya 1.000.000. Nilai yang dikirim ke backend tetap angka bulat tanpa pemisah, dan total tetap dihitung backend. |
 | Konfirmasi stok | <pesan server>\n\nTetap simpan transaksi dengan stok minus? |
 | Sukses | Nota <nomor> berhasil disimpan. |
 | Gagal | <pesan kesalahan yang sudah disederhanakan> |
@@ -153,6 +155,11 @@ Aturan yang dipakai:
 | Tombol | Tutup, Buat servis |
 | Ringkasan | Total unit, Unit mobil, Radiator copotan |
 | Bagian | Unit terdaftar (N) |
+| Bagian riwayat | Riwayat servis (N) |
+| Memuat riwayat | Memuat riwayat servis... |
+| Kosong riwayat | Belum ada riwayat servis untuk pelanggan ini. |
+| Gagal riwayat | Riwayat servis gagal dimuat. Coba lagi. |
+| Baris riwayat | No. nota, unit dan jenis mobil, total neto, tanggal servis, metode bayar, status garansi. Ketuk baris untuk membuka detail nota. |
 | Kosong | Belum ada unit terdaftar. |
 | Gagal muat | Detail pelanggan gagal dimuat. Coba lagi. |
 | Tidak ditemukan | Data pelanggan tidak ditemukan. |
