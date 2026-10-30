@@ -110,6 +110,10 @@ def _pending_schema_changes(conn, tables: set[str]) -> list[str]:
     pending: list[str] = []
     if "service_parts" in tables and "harga_modal" not in _table_columns(conn, "service_parts"):
         pending.append("kolom service_parts.harga_modal")
+    if "service_records" in tables and "request_id" not in _table_columns(
+        conn, "service_records"
+    ):
+        pending.append("kolom service_records.request_id")
     if any(table in tables for table in CORE_TABLES) and "nota_counters" not in tables:
         pending.append("tabel nota_counters")
     return pending
@@ -174,6 +178,29 @@ def _apply_sqlite_migrations(bind: Engine) -> None:
                 "tanggal VARCHAR(8) NOT NULL PRIMARY KEY, "
                 "terakhir INTEGER NOT NULL DEFAULT 0)"
             )
+
+        if "service_records" in tables:
+            columns = _table_columns(conn, "service_records")
+            if "request_id" not in columns:
+                conn.exec_driver_sql(
+                    "ALTER TABLE service_records ADD COLUMN request_id VARCHAR(64)"
+                )
+            has_duplicate = conn.exec_driver_sql(
+                "SELECT 1 FROM service_records "
+                "WHERE request_id IS NOT NULL "
+                "GROUP BY request_id HAVING COUNT(*) > 1 LIMIT 1"
+            ).first()
+            if has_duplicate:
+                logger.warning(
+                    "Indeks unik service_records.request_id dilewati: "
+                    "data lama berisi request_id duplikat."
+                )
+            else:
+                conn.exec_driver_sql(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "ix_service_records_request_id "
+                    "ON service_records (request_id)"
+                )
 
 
 def init_db(bind: Optional[Engine] = None) -> None:

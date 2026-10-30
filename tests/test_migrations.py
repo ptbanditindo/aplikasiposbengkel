@@ -26,9 +26,13 @@ def test_migrasi_legacy_membuat_backup_pra_migrasi_dan_data_tetap(
         db.add(Customer(nama="Pelanggan Lama", nomor_hp="081200000030"))
         db.commit()
 
-    # Database versi lama: belum punya tabel counter nota.
+    # Database versi lama: belum punya tabel counter nota & kolom request_id.
     with legacy.begin() as conn:
         conn.exec_driver_sql("DROP TABLE nota_counters")
+        conn.exec_driver_sql("DROP INDEX IF EXISTS ix_service_records_request_id")
+        conn.exec_driver_sql(
+            "ALTER TABLE service_records DROP COLUMN request_id"
+        )
 
     init_db(legacy)
 
@@ -43,6 +47,20 @@ def test_migrasi_legacy_membuat_backup_pra_migrasi_dan_data_tetap(
             )
         }
         assert "nota_counters" in tables
+        columns = {
+            row[1]
+            for row in conn.exec_driver_sql(
+                "PRAGMA table_info(service_records)"
+            )
+        }
+        assert "request_id" in columns
+        indexes = {
+            row[1]: row[2]
+            for row in conn.exec_driver_sql(
+                "PRAGMA index_list(service_records)"
+            )
+        }
+        assert indexes.get("ix_service_records_request_id") == 1
         assert conn.exec_driver_sql("SELECT nama FROM customers").scalar() == (
             "Pelanggan Lama"
         )

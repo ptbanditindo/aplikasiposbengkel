@@ -117,6 +117,9 @@ class ServiceRecord(Base):
         ForeignKey("vehicle_or_units.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     no_nota: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    request_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     waktu_service: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, nullable=False, index=True
     )

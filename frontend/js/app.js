@@ -124,6 +124,7 @@
     editingJasa: null,
     searchTimer: null,
     saving: false,
+    pendingRequest: null,
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -1094,7 +1095,36 @@
     updateGaransiFields();
   }
 
+  function makeRequestId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i += 1) {
+        bytes[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    let value = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+      value += bytes[i].toString(16).padStart(2, '0');
+    }
+    return value;
+  }
+
+  // Idempotency key dipakai ulang hanya bila isi transaksi tidak berubah.
+  function ensureRequestId(payload) {
+    const signature = JSON.stringify(payload);
+    if (!state.pendingRequest || state.pendingRequest.signature !== signature) {
+      state.pendingRequest = { signature, id: makeRequestId() };
+    }
+    return state.pendingRequest.id;
+  }
+
   function resetPosState() {
+    state.pendingRequest = null;
     state.selectedCustomer = null;
     state.customerResults = [];
     state.units = [];
@@ -1193,6 +1223,7 @@
     }
 
     const payload = buildTransactionPayload();
+    const requestId = ensureRequestId(payload);
     const button = printAfter ? $('#btnSavePrint') : $('#btnSaveOnly');
     state.saving = true;
     setBusy(button, true, 'Menyimpan...');
@@ -1204,7 +1235,10 @@
       for (;;) {
         try {
           result = await API.createTransaction(
-            Object.assign({}, payload, { izinkan_stok_minus: allowNegative })
+            Object.assign({}, payload, {
+              izinkan_stok_minus: allowNegative,
+              request_id: requestId,
+            })
           );
           break;
         } catch (err) {

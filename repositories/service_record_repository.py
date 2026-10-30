@@ -15,6 +15,11 @@ def get_record(db: Session, record_id: int) -> Optional[ServiceRecord]:
     return db.get(ServiceRecord, record_id)
 
 
+def get_record_by_request_id(db: Session, request_id: str) -> Optional[ServiceRecord]:
+    statement = select(ServiceRecord).where(ServiceRecord.request_id == request_id)
+    return db.scalar(statement)
+
+
 def list_records(db: Session, query: str = "", limit: int = 200) -> List[ServiceRecord]:
     statement = (
         select(ServiceRecord)

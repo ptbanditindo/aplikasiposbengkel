@@ -186,6 +186,7 @@ class ServicePartInput(CompatBase):
 
 class CreateServiceTransactionRequest(CompatBase):
     unit_id: int = Field(..., gt=0)
+    request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
     keluhan_awal: str = Field(..., min_length=1, max_length=2000)
     catatan_pengerjaan: Optional[str] = Field(default=None, max_length=2000)
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)

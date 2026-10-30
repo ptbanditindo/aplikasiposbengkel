@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any, Dict, List
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -39,13 +40,54 @@ class TransactionResult:
     laba_kotor: Decimal = Decimal("0.00")
 
 
+def _record_gross_profit(record: ServiceRecord) -> Decimal:
+    return pricing_service.calculate_gross_profit(
+        [
+            {
+                "harga_satuan": part.harga_satuan,
+                "harga_modal": part.harga_modal,
+                "jumlah": part.jumlah,
+            }
+            for part in record.parts
+        ]
+    )
+
+
+def _existing_result(record: ServiceRecord) -> TransactionResult:
+    return TransactionResult(
+        record=record, warnings=[], laba_kotor=_record_gross_profit(record)
+    )
+
+
 def create_transaction(db: Session, payload: Any) -> TransactionResult:
+    request_id = (getattr(payload, "request_id", None) or "").strip() or None
+    try:
+        return _create_transaction_locked(db, payload, request_id)
+    except IntegrityError:
+        # Balapan request_id yang tidak tertangkap pengecekan awal.
+        db.rollback()
+        if request_id:
+            existing = record_repo.get_record_by_request_id(db, request_id)
+            if existing is not None:
+                return _existing_result(existing)
+        raise
+
+
+def _create_transaction_locked(
+    db: Session, payload: Any, request_id: str | None
+) -> TransactionResult:
     warnings: List[str] = []
 
     # Ref: FR-POS-08 - seluruh proses dalam satu transaksi database atomik.
     with db.begin():
         # Kunci tulis diambil sejak awal agar alokasi nota & stok terserialisasi.
         begin_immediate(db)
+
+        if request_id:
+            existing = record_repo.get_record_by_request_id(db, request_id)
+            if existing is not None:
+                return _existing_result(existing)
+
         unit = db.get(VehicleOrUnit, payload.unit_id)
         if unit is None:
             raise NotFoundError("Unit servis tidak ditemukan.")
@@ -165,6 +207,7 @@ def create_transaction(db: Session, payload: Any) -> TransactionResult:
         record = ServiceRecord(
             unit_id=unit.id,
             no_nota=record_repo.allocate_nota(db, now.date()),
+            request_id=request_id,
             waktu_service=now,
             keluhan_awal=keluhan,
             catatan_pengerjaan=clean_text(payload.catatan_pengerjaan, max_length=2000)
