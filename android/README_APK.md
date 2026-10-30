@@ -119,7 +119,7 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
 - Ukuran: 45.202.017 byte
-- SHA-256: `17243585d3a1c8ca147187cd5b6588c02af95c336bd51bc277675694ecaa1d41`
+- SHA-256: `ccecba81981e22a8af8adc7f4e4f7f18ebf75f7ef8be34b59c629767957e8d37`
 - Paket: `com.bengkelpos.radiator`, versionName `2.0.0`, versionCode `1`,
   minSdk 26, targetSdk 35, debug-signed.
 - Asset `frontend/index.html`, `style.css`, `app.js`, `api-client.js`, dan
