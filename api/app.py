@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from api import (
+    audit_routes,
     auth_routes,
     customer_routes,
     pos_routes,
@@ -194,6 +195,7 @@ def create_app() -> FastAPI:
     app.include_router(stock_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
+    app.include_router(audit_routes.router, prefix=api_prefix)
 
     @app.get("/api/health", tags=["Sistem"])
     def health():

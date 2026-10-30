@@ -72,14 +72,14 @@ def test_s06_void_atomik_mengembalikan_stok_dan_menyimpan_audit(
 
     response = client.post(
         f"/api/service-records/{record['id']}/void",
-        json={"alasan": "Salah input pelanggan", "oleh": "Kasir Pagi"},
+        json={"alasan": "Salah input pelanggan"},
     )
 
     assert response.status_code == 200, response.text
     voided = response.json()
     assert voided["status"] == "VOID"
     assert voided["void_reason"] == "Salah input pelanggan"
-    assert voided["voided_by"] == "Kasir Pagi"
+    assert voided["voided_by"] == "Pemilik"
     assert voided["voided_at"]
     assert voided["total_neto"] == "0.00"
     assert voided["garansi_aktif"] is False
@@ -93,7 +93,7 @@ def test_s06_void_atomik_mengembalikan_stok_dan_menyimpan_audit(
     assert void_moves[0]["jumlah"] == 2
     assert void_moves[0]["service_record_id"] == record["id"]
     assert "Salah input pelanggan" in (void_moves[0]["alasan"] or "")
-    assert void_moves[0]["oleh"] == "Kasir Pagi"
+    assert void_moves[0]["oleh"] == "Pemilik"
 
     # Nota tidak dihapus; riwayat dan rincian tetap tersedia.
     history = client.get("/api/service-records").json()
@@ -134,7 +134,7 @@ def test_s06_void_gagal_tidak_merusak_stok_dan_status(
     with pytest.raises(RuntimeError):
         client.post(
             f"/api/service-records/{record_id}/void",
-            json={"alasan": "Salah input", "oleh": "Kasir"},
+            json={"alasan": "Salah input"},
         )
 
     detail = client.get(f"/api/service-records/{record_id}").json()
@@ -197,7 +197,6 @@ def test_s06_retur_sebagian_atomik_stok_dan_nilai(
         f"/api/service-records/{record['id']}/returns",
         json={
             "alasan": "Barang tidak cocok",
-            "oleh": "Kasir Pagi",
             "items": [{"service_part_id": part_id(body), "jumlah": 1}],
         },
     )
@@ -206,7 +205,7 @@ def test_s06_retur_sebagian_atomik_stok_dan_nilai(
     retur = response.json()
     assert retur["service_record_id"] == record["id"]
     assert retur["alasan"] == "Barang tidak cocok"
-    assert retur["oleh"] == "Kasir Pagi"
+    assert retur["oleh"] == "Pemilik"
     assert retur["total_nilai"] == "160000.00"
     assert retur["items"][0]["nama_item"] == "Upper Tank Fiber Avanza"
     assert retur["items"][0]["jumlah"] == 1

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import tempfile
 from datetime import date, timedelta
@@ -11,12 +12,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from api.deps import require_auth
+from api.deps import require_auth, require_owner
 from api.schemas import DailyReportOut, PeriodReportOut, SoldPartsReportOut
 from config import settings
-from database.session import get_db
-from services import backup_service, report_service
+from database.session import SessionLocal, get_db
+from services import audit_service, backup_service, report_service
+from services.auth_service import Operator
 from services.maintenance import RESTORE_WAIT_TIMEOUT, gate
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 UPLOAD_PREFIX = "upload_restore_"
@@ -83,6 +87,7 @@ def sold_parts(
 @router.post(
     "/admin/backup",
     response_class=FileResponse,
+    dependencies=[Depends(require_owner)],
 )
 def backup_database():
     """Unduh salinan database SQLite (Ref: PRD TC-20)."""
@@ -132,8 +137,12 @@ async def _save_upload(file: UploadFile, max_bytes: int) -> Path:
 @router.post(
     "/admin/restore",
 )
-async def restore_database(file: UploadFile = File(...)):
+async def restore_database(
+    file: UploadFile = File(...),
+    operator: Operator = Depends(require_owner),
+):
     batas = settings.backup_max_restore_mb * 1024 * 1024
+    berkas = Path(file.filename or "backup.db").name
     temp_path = await _save_upload(file, batas)
     try:
         mulai = await asyncio.to_thread(gate.begin_restore, RESTORE_WAIT_TIMEOUT)
@@ -151,4 +160,21 @@ async def restore_database(file: UploadFile = File(...)):
             gate.end_restore()
     finally:
         temp_path.unlink(missing_ok=True)
+
+    # Database sudah diganti; catat tindakan restore pada database hasil
+    # pemulihan memakai identitas operator dari sesi sebelum restore.
+    try:
+        with SessionLocal() as db:
+            audit_service.record_event(
+                db,
+                operator,
+                audit_service.ACTION_RESTORE,
+                audit_service.REFERENCE_DATABASE,
+                reference_id=berkas,
+                reason="Pemulihan database dari berkas backup",
+            )
+            db.commit()
+    except Exception:  # pragma: no cover - audit tidak boleh menggagalkan restore
+        logger.exception("Gagal mencatat audit restore")
+
     return {"status": "ok", "message": "Database berhasil dipulihkan."}

@@ -25,6 +25,7 @@ from services import (
     warranty_service,
 )
 from services.errors import NotFoundError
+from services.auth_service import Operator
 from services.receipt_service import build_receipt_payload, record_summary
 
 router = APIRouter(
@@ -87,10 +88,13 @@ def claim_warranty(record_id: int, db: Session = Depends(get_db)):
 
 @router.post("/service-records/{record_id}/void", response_model=ServiceRecordOut)
 def void_service_record(
-    record_id: int, payload: VoidRequest, db: Session = Depends(get_db)
+    record_id: int,
+    payload: VoidRequest,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
 ):
     record = void_return_service.void_record(
-        db, record_id, payload.alasan, payload.oleh
+        db, record_id, payload.alasan, operator
     )
     return ServiceRecordOut.model_validate(record_summary(record))
 
@@ -104,13 +108,14 @@ def create_service_return(
     record_id: int,
     payload: CreateServiceReturnRequest,
     db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
 ):
     retur = void_return_service.create_return(
         db,
         record_id,
         payload.alasan,
         payload.items,
-        payload.oleh,
+        operator,
     )
     return ServiceReturnOut.model_validate(retur)
 

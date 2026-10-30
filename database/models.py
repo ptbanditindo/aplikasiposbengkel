@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -325,3 +326,36 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class AuditEvent(Base):
+    """Jejak audit append-only untuk tindakan penting (ARC-15).
+
+    Tidak ada endpoint ubah/hapus; listener di bawah menolak perubahan agar
+    riwayat tetap utuh walau ada kode yang mencoba memodifikasi baris.
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    operator_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    operator_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    reference_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    reference_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+
+
+def _reject_audit_change(_mapper, _connection, target):  # pragma: no cover - guard
+    raise ValueError(
+        f"Audit trail bersifat tetap; perubahan {target!r} ditolak."
+    )
+
+
+event.listen(AuditEvent, "before_update", _reject_audit_change)
+event.listen(AuditEvent, "before_delete", _reject_audit_change)

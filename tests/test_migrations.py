@@ -267,7 +267,7 @@ def test_migrasi_s06_menambah_void_retur_dan_ledger(tmp_path, monkeypatch):
         assert (
             conn.exec_driver_sql("PRAGMA user_version").scalar()
             == migrations.SCHEMA_VERSION
-            == 6
+            == 7
         )
         tables = {
             row[0]

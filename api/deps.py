@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 from config import settings
 from database.session import SessionLocal
 from services import auth_service
+from services.auth_service import Operator
 
 INSTALL_TOKEN_HEADER = "X-Install-Token"
 
@@ -28,20 +29,21 @@ def _install_token_valid(presented: str | None) -> bool:
     )
 
 
-def require_auth(request: Request) -> None:
+def require_auth(request: Request) -> Operator:
+    """Kembalikan principal terautentikasi; identitas tidak dari frontend."""
     mode = settings.auth_mode
 
     if mode == "session-pin":
         token = request.cookies.get(auth_service.COOKIE_NAME)
         with SessionLocal() as db:
-            valid = auth_service.verify_session_token(db, token)
-        if not valid:
+            operator = auth_service.verify_session_token(db, token)
+        if operator is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Silakan masuk dengan PIN kasir terlebih dahulu.",
                 headers={"WWW-Authenticate": "Session"},
             )
-        return
+        return operator
 
     if mode == "install-token":
         presented = request.headers.get(INSTALL_TOKEN_HEADER)
@@ -51,9 +53,20 @@ def require_auth(request: Request) -> None:
                 detail="Token instalasi aplikasi tidak valid.",
                 headers={"WWW-Authenticate": "InstallToken"},
             )
-        return
+        # APK adalah perangkat milik bengkel; token acak per instalasi menjadi
+        # principal pemilik dengan hak pengelolaan yang sama.
+        return auth_service.OWNER
 
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Mode autentikasi server tidak dikenal.",
     )
+
+
+def require_owner(operator: Operator = Depends(require_auth)) -> Operator:
+    if operator.role != auth_service.OWNER_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tindakan ini hanya untuk pemilik bengkel.",
+        )
+    return operator

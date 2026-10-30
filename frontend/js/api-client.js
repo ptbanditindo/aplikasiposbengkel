@@ -106,6 +106,10 @@
     authLogin: (pin) =>
       request('/api/auth/login', { method: 'POST', body: { pin: pin } }),
     authLogout: () => request('/api/auth/logout', { method: 'POST' }),
+    setKasirPin: (pin) =>
+      request('/api/auth/kasir-pin', { method: 'PUT', body: { pin: pin } }),
+    clearKasirPin: () =>
+      request('/api/auth/kasir-pin', { method: 'DELETE' }),
 
     getConfig: () => request('/api/config'),
     health: () => request('/api/health'),

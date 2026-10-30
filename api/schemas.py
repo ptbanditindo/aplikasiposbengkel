@@ -34,6 +34,11 @@ if PYDANTIC_V2:
     class CompatBase(BaseModel):
         pass
 
+    class StrictBase(CompatBase):
+        """Menolak field tak dikenal, mis. identitas operator dari frontend."""
+
+        model_config = ConfigDict(extra="forbid")
+
     class ORMModel(CompatBase):
         model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +78,10 @@ else:  # Pydantic v1
 
         def model_dump(self, **kwargs: Any) -> Dict[str, Any]:
             return self.dict(**kwargs)
+
+    class StrictBase(CompatBase):
+        class Config(CompatBase.Config):
+            extra = "forbid"
 
     class ORMModel(CompatBase):
         pass
@@ -221,9 +230,8 @@ class ServicePartOut(ORMModel):
     subtotal: Money
 
 
-class VoidRequest(CompatBase):
+class VoidRequest(StrictBase):
     alasan: str = Field(..., min_length=3, max_length=500)
-    oleh: str = Field(default="Kasir", max_length=64)
 
 
 class ServiceReturnItemInput(CompatBase):
@@ -232,9 +240,8 @@ class ServiceReturnItemInput(CompatBase):
     jumlah: int = Field(..., ge=1)
 
 
-class CreateServiceReturnRequest(CompatBase):
+class CreateServiceReturnRequest(StrictBase):
     alasan: str = Field(..., min_length=3, max_length=500)
-    oleh: str = Field(default="Kasir", max_length=64)
     items: List[ServiceReturnItemInput] = Field(default_factory=list)
 
 
@@ -522,3 +529,18 @@ class AuthStatusOut(CompatBase):
     pin_configured: bool
     authenticated: bool
     locked_seconds: int = 0
+    kasir_configured: bool = False
+    operator_id: Optional[str] = None
+    role: Optional[str] = None
+    operator_label: Optional[str] = None
+
+
+class AuditEventOut(ORMModel):
+    id: int
+    operator_id: str
+    operator_role: str
+    action: str
+    reference_type: str
+    reference_id: str
+    reason: Optional[str] = None
+    created_at: datetime

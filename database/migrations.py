@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def get_user_version(conn) -> int:
@@ -278,6 +278,29 @@ def _migrate_006_void_retur_ledger(cursor) -> None:
         )
 
 
+def _migrate_007_audit_events(cursor) -> None:
+    """ARC-15: jejak audit append-only untuk void, retur, dan restore."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS audit_events ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "operator_id VARCHAR(64) NOT NULL, "
+        "operator_role VARCHAR(16) NOT NULL, "
+        "action VARCHAR(32) NOT NULL, "
+        "reference_type VARCHAR(32) NOT NULL, "
+        "reference_id VARCHAR(64) NOT NULL DEFAULT '', "
+        "reason TEXT, "
+        "created_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_audit_events_action "
+        "ON audit_events (action)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_audit_events_created_at "
+        "ON audit_events (created_at)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -285,6 +308,7 @@ MIGRATIONS: List[Migration] = [
     (4, _migrate_004_unique_label),
     (5, _migrate_005_modal_estimasi),
     (6, _migrate_006_void_retur_ledger),
+    (7, _migrate_007_audit_events),
 ]
 
 

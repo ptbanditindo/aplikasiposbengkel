@@ -1907,8 +1907,7 @@
       '</div>' +
       '<label class="detail-label" for="returnReason">Alasan retur</label>' +
       '<input type="text" class="input" id="returnReason" maxlength="500" placeholder="Contoh: barang tidak cocok / salah pasang">' +
-      '<label class="detail-label" for="returnBy">Dicatat oleh</label>' +
-      '<input type="text" class="input" id="returnBy" maxlength="64" value="Kasir">' +
+      '<p class="tiny muted">Operator pencatat diambil otomatis dari sesi yang masuk.</p>' +
       '<div class="return-actions">' +
       '<button type="button" class="btn btn-ghost" data-action="return-cancel" data-id="' +
       receipt.id +
@@ -2293,7 +2292,6 @@
       return;
     }
     const reasonEl = $('#returnReason');
-    const byEl = $('#returnBy');
     const reason = (reasonEl ? reasonEl.value : '').trim();
     if (reason.length < 3) {
       toast('Alasan retur minimal 3 karakter.', 'error', 5000);
@@ -2307,11 +2305,9 @@
     ) {
       return;
     }
-    const oleh = ((byEl ? byEl.value : '') || 'Kasir').trim() || 'Kasir';
     try {
       await API.createReturn(recordId, {
         alasan: reason,
-        oleh: oleh,
         items: items,
       });
       state.returnMode = false;
@@ -2337,7 +2333,7 @@
     const reason = window.prompt('Alasan pembatalan (minimal 3 karakter):', '');
     if (reason === null) return;
     try {
-      await API.voidRecord(recordId, { alasan: reason.trim(), oleh: 'Kasir' });
+      await API.voidRecord(recordId, { alasan: reason.trim() });
       toast('Nota dibatalkan.', 'success');
       await refreshAfterRecordChange(recordId);
     } catch (err) {
@@ -2885,6 +2881,7 @@
   const authState = {
     mode: 'session-pin',
     started: false,
+    role: 'owner',
   };
 
   let lastUnauthorizedAt = 0;
@@ -2926,6 +2923,28 @@
     showAuthGate('login', 'Sesi berakhir. Masukkan PIN lagi.');
   }
 
+  function applyOperator(status) {
+    const role = (status && status.role) || 'owner';
+    authState.role = role;
+    const settingsTab = document.querySelector('.nav-tab[data-view="settings"]');
+    if (settingsTab) settingsTab.classList.toggle('hidden', role !== 'owner');
+    const settingsView = $('#view-settings');
+    if (
+      role !== 'owner' &&
+      settingsView &&
+      !settingsView.classList.contains('hidden')
+    ) {
+      navigate('dashboard');
+    }
+    const statusEl = $('#kasirPinStatus');
+    if (statusEl) {
+      statusEl.textContent =
+        status && status.kasir_configured
+          ? 'PIN kasir aktif. Kasir dapat masuk memakai PIN-nya sendiri.'
+          : 'Belum diatur. Hanya pemilik yang dapat membuat PIN kasir.';
+    }
+  }
+
   async function ensureAuthenticated() {
     let status;
     try {
@@ -2942,9 +2961,12 @@
     authState.mode = status.mode || 'session-pin';
     if (authState.mode !== 'session-pin') {
       // APK memakai token per-instalasi dan PIN native, bukan PIN web.
+      // Perangkat bengkel tetap memiliki hak pengelolaan (principal owner).
+      applyOperator({ role: 'owner' });
       hideAuthGate();
       return true;
     }
+    applyOperator(status);
     if (status.authenticated) {
       hideAuthGate();
       return true;
@@ -2979,6 +3001,7 @@
       await API.authSetup(pin);
       $('#authSetupPin').value = '';
       $('#authSetupPinConfirm').value = '';
+      applyOperator({ role: 'owner' });
       await startApp();
     } catch (err) {
       setAuthError($('#authSetupError'), err.message);
@@ -3003,11 +3026,57 @@
     try {
       await API.authLogin(pin);
       input.value = '';
+      applyOperator(await API.authStatus());
       await startApp();
     } catch (err) {
       input.value = '';
       setAuthError($('#authLoginError'), err.message);
       input.focus();
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleKasirPinSubmit(event) {
+    event.preventDefault();
+    const input = $('#kasirPinInput');
+    const pin = normalizePin(input.value);
+    if (pin.length < 4) {
+      toast('PIN kasir minimal 4 angka.', 'warning');
+      input.focus();
+      return;
+    }
+    const button = $('#kasirPinSimpan');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.setKasirPin(pin);
+      input.value = '';
+      applyOperator(await API.authStatus());
+      toast('PIN kasir tersimpan.', 'success');
+    } catch (err) {
+      toast('Gagal menyimpan PIN kasir: ' + err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleKasirPinDelete() {
+    if (
+      !window.confirm(
+        'Hapus PIN kasir? Kasir tidak dapat masuk lagi sampai PIN baru dibuat.'
+      )
+    ) {
+      return;
+    }
+    const button = $('#kasirPinHapus');
+    setBusy(button, true, 'Menghapus...');
+    try {
+      await API.clearKasirPin();
+      $('#kasirPinInput').value = '';
+      applyOperator(await API.authStatus());
+      toast('PIN kasir dihapus.', 'success');
+    } catch (err) {
+      toast('Gagal menghapus PIN kasir: ' + err.message, 'error', 7000);
     } finally {
       setBusy(button, false);
     }
@@ -3529,6 +3598,8 @@
 
     $('#telegramForm').addEventListener('submit', handleTelegramSubmit);
     $('#telegramSendNow').addEventListener('click', handleTelegramSendNow);
+    $('#kasirPinForm').addEventListener('submit', handleKasirPinSubmit);
+    $('#kasirPinHapus').addEventListener('click', handleKasirPinDelete);
 
     $('#authSetupForm').addEventListener('submit', handleAuthSetupSubmit);
     $('#authLoginForm').addEventListener('submit', handleAuthLoginSubmit);

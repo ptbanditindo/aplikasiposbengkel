@@ -766,6 +766,27 @@
           </div>
         </form>
 
+        <form class="card" id="kasirPinForm">
+          <div class="card-head">
+            <div>
+              <h2>PIN kasir</h2>
+              <p class="muted" id="kasirPinStatus">Belum diatur. Hanya pemilik yang dapat membuat PIN kasir.</p>
+            </div>
+          </div>
+          <p class="tiny muted">
+            Kasir dapat membuat transaksi, membatalkan nota, dan mencatat retur. Pengaturan,
+            backup, dan pemulihan database tetap khusus pemilik.
+          </p>
+          <label class="field">
+            <span>PIN kasir (4&ndash;12 angka)</span>
+            <input type="password" class="input" id="kasirPinInput" inputmode="numeric" autocomplete="new-password" maxlength="12" placeholder="PIN baru untuk kasir">
+          </label>
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" id="kasirPinHapus">Hapus PIN kasir</button>
+            <button type="submit" class="btn btn-primary" id="kasirPinSimpan">Simpan PIN kasir</button>
+          </div>
+        </form>
+
         <section class="card hidden" id="pinSecurityCard">
           <div class="card-head">
             <div>

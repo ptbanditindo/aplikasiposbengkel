@@ -19,6 +19,8 @@ from database.models import (
     StockMovement,
 )
 from database.session import begin_immediate
+from services import audit_service
+from services.auth_service import Operator
 from services.errors import (
     BusinessValidationError,
     ConflictError,
@@ -44,20 +46,16 @@ def _clean_reason(value: str) -> str:
     return reason
 
 
-def _clean_user(value: Optional[str]) -> str:
-    return clean_text(value or "Kasir", max_length=64, allow_newlines=False) or "Kasir"
-
-
 def void_record(
     db: Session,
     record_id: int,
     reason: str,
-    oleh: Optional[str] = None,
+    operator: Operator,
     now: Optional[datetime] = None,
 ) -> ServiceRecord:
     """Batalkan nota tanpa menghapusnya dan kembalikan stok part secara atomik."""
     clean_reason = _clean_reason(reason)
-    user = _clean_user(oleh)
+    user = operator.label
     moment = now or datetime.now()
 
     with db.begin():
@@ -123,6 +121,16 @@ def void_record(
                 )
             )
 
+        audit_service.record_event(
+            db,
+            operator,
+            audit_service.ACTION_VOID,
+            audit_service.REFERENCE_SERVICE_RECORD,
+            reference_id=record.no_nota,
+            reason=clean_reason,
+            now=moment,
+        )
+
     db.refresh(record)
     return record
 
@@ -132,7 +140,7 @@ def create_return(
     record_id: int,
     reason: str,
     items: List,
-    oleh: Optional[str] = None,
+    operator: Operator,
     now: Optional[datetime] = None,
 ) -> ServiceReturn:
     """Catat retur sebagian/seluruh item dan kembalikan stok part secara atomik.
@@ -141,7 +149,7 @@ def create_return(
     asli, sehingga retur ganda/berlebih ditolak walau request berulang.
     """
     clean_reason = _clean_reason(reason)
-    user = _clean_user(oleh)
+    user = operator.label
     moment = now or datetime.now()
     if not items:
         raise BusinessValidationError("Retur harus memiliki minimal satu item.")
@@ -342,6 +350,16 @@ def create_return(
                 retur_count=ServiceRecord.retur_count + 1,
             )
             .execution_options(synchronize_session=False)
+        )
+
+        audit_service.record_event(
+            db,
+            operator,
+            audit_service.ACTION_RETURN,
+            audit_service.REFERENCE_SERVICE_RECORD,
+            reference_id=record.no_nota,
+            reason=clean_reason,
+            now=moment,
         )
 
     return retur

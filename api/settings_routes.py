@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from api.deps import require_auth
+from api.deps import require_owner
 from api.schemas import (
     BengkelInfoIn,
     BengkelInfoOut,
@@ -15,7 +15,7 @@ from api.schemas import (
 from database.session import get_db
 from services import settings_service, telegram_backup_service
 
-router = APIRouter(tags=["Pengaturan"], dependencies=[Depends(require_auth)])
+router = APIRouter(tags=["Pengaturan"], dependencies=[Depends(require_owner)])
 
 
 @router.put(
