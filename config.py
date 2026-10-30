@@ -113,7 +113,7 @@ def load_settings() -> Settings:
             "Garansi kebocoran berlaku pada titik pengerjaan las & penggantian tangki baru.",
         ).strip(),
         backup_dir=_as_path("BACKUP_DIR", "./backups"),
-        backup_keep=_as_int("BACKUP_KEEP", 14),
+        backup_keep=max(1, _as_int("BACKUP_KEEP", 14)),
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.getenv("TELEGRAM_CHAT_ID", "").strip(),
         telegram_backup_enabled=_as_bool("TELEGRAM_BACKUP_ENABLED", False),
