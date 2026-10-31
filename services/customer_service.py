@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from database.models import Customer, VehicleOrUnit
 from database.session import begin_immediate
 from repositories import customer_repository as repo
+from services import audit_service
+from services.auth_service import Operator
 from services.errors import BusinessValidationError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
@@ -16,7 +18,11 @@ VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY"}
 
 
 def create_customer(
-    db: Session, nama: str, nomor_hp: str, alamat: Optional[str] = None
+    db: Session,
+    nama: str,
+    nomor_hp: str,
+    alamat: Optional[str] = None,
+    wa_consent: bool = True,
 ) -> Customer:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
@@ -27,7 +33,34 @@ def create_customer(
         raise BusinessValidationError("Nomor HP tidak valid (8-15 digit).")
 
     clean_alamat = clean_text(alamat, max_length=500) or None
-    return repo.create_customer(db, clean_nama, phone, clean_alamat)
+    return repo.create_customer(db, clean_nama, phone, clean_alamat, bool(wa_consent))
+
+
+def set_wa_consent(
+    db: Session,
+    customer_id: int,
+    consent: bool,
+    operator: Optional[Operator] = None,
+) -> Customer:
+    """Simpan izin WhatsApp per pelanggan; perubahan dicatat pada audit."""
+    with db.begin():
+        begin_immediate(db)
+        customer = repo.get_customer(db, customer_id)
+        if customer is None:
+            raise NotFoundError("Pelanggan tidak ditemukan.")
+        customer.wa_consent = bool(consent)
+        if operator is not None:
+            audit_service.record_event(
+                db,
+                operator,
+                audit_service.ACTION_WHATSAPP,
+                audit_service.REFERENCE_CUSTOMER,
+                reference_id=str(customer.id),
+                reason="Izin WhatsApp: " + ("Ya" if consent else "Tidak"),
+            )
+        db.flush()
+    db.refresh(customer)
+    return customer
 
 
 def search_customers(db: Session, query: str = "", limit: int = 20) -> List[Customer]:

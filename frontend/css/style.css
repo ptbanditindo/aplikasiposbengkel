@@ -3181,3 +3181,267 @@ textarea.input, textarea.textarea { border-radius: var(--radius-control); }
     text-align: left;
   }
 }
+
+/* ==================== Tahap 11-13: pembayaran, follow-up, WhatsApp ======= */
+
+.stat-card { position: relative; }
+.stat-sub {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+.stats-grid--secondary .stat-card strong { font-size: 22px; }
+
+a.btn { text-decoration: none; }
+
+.line-hint {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--info-ink);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  color: var(--info-ink);
+}
+.items-table .table-input.interval { max-width: 92px; text-align: center; }
+.table .col-interval { width: 112px; }
+.table-jasa .cell-sub { margin-top: 2px; }
+
+/* Ringkasan pengingat */
+.reminder-list { display: grid; gap: 8px; }
+.reminder-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  transition: border-color .12s ease, background .12s ease;
+}
+.reminder-item:hover { border-color: var(--accent); background: var(--raised); }
+.reminder-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.reminder-main { display: grid; gap: 2px; min-width: 0; }
+.reminder-main strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
+.reminder-main small { color: var(--muted); font-size: 11.5px; }
+.reminder-side { display: grid; gap: 2px; text-align: right; }
+.reminder-side strong {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.reminder-side small { color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+/* Papan follow-up */
+.followup-controls { padding: 14px 16px; margin-bottom: 16px; }
+.followup-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.followup-filter-row .field.inline { min-width: 170px; }
+.followup-filter-row .pill-count { margin-left: auto; align-self: center; }
+.followup-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(264px, 1fr);
+  gap: 12px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.followup-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--raised);
+}
+.followup-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.followup-col-head strong { font-size: 12.5px; font-weight: 600; }
+.followup-col-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 96px;
+  padding: 10px;
+}
+.followup-col-empty {
+  padding: 18px 8px;
+  color: var(--faint);
+  font-size: 12px;
+  text-align: center;
+}
+.followup-card {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.followup-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.followup-card-title { overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
+.followup-card-meta { color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+.followup-card-meta strong { color: var(--text); font-weight: 600; }
+.followup-card-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.followup-card-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 2px; }
+.followup-card-actions .btn { height: 28px; padding: 0 10px; font-size: 12px; }
+.followup-card-actions .btn-ghost { border-color: var(--border); }
+.followup-card.is-late { border-left: 3px solid var(--negative); }
+
+/* Detail follow-up */
+.followup-detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.followup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.followup-actions .btn { height: 32px; padding: 0 12px; font-size: 12.5px; }
+.followup-form { display: grid; gap: 10px; margin-top: 12px; }
+.followup-form .form-grid { margin-top: 0; }
+.followup-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 12px;
+}
+.followup-event small { color: var(--muted); font-size: 11px; }
+.followup-event-list { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+
+/* Pembayaran di detail nota */
+.payment-list { display: grid; gap: 6px; }
+.payment-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 12px;
+}
+.payment-row small { color: var(--muted); font-size: 11px; }
+.payment-row strong {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+.payment-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+}
+.payment-form .form-grid { margin-top: 0; }
+.payment-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Piutang */
+.receivable-group {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.receivable-list { display: grid; gap: 10px; }
+.receivable-group + .receivable-group { margin-top: 10px; }
+.receivable-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.receivable-head strong { font-size: 13px; }
+.receivable-head span { color: var(--muted); font-size: 11.5px; }
+.receivable-head .receivable-total {
+  color: var(--negative);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+.receivable-records {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.receivable-records th {
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.receivable-records td { padding: 7px 8px; border-bottom: 1px solid var(--rule); }
+.receivable-records tr:last-child td { border-bottom: 0; }
+.receivable-records .num {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* WhatsApp */
+.wa-log-list { display: grid; gap: 6px; }
+.wa-log-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 12px;
+}
+.wa-log-row small { color: var(--muted); font-size: 11px; }
+#waModalNumber { font-family: var(--mono); }
+
+/* Grid ops */
+.form-grid--ops { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+@media (max-width: 1080px) {
+  .followup-board { grid-auto-columns: minmax(248px, 80%); }
+}
+
+@media (max-width: 760px) {
+  .stats-grid--secondary .stat-card strong { font-size: 19px; }
+  .followup-board { grid-auto-columns: minmax(240px, 86%); }
+  .reminder-item { grid-template-columns: auto minmax(0, 1fr); }
+  .reminder-side { grid-column: 2; grid-template-columns: auto auto; justify-content: flex-start; gap: 8px; text-align: left; }
+}
+
+@media (max-width: 560px) {
+  .followup-filter-row .field.inline { min-width: 100%; }
+  .followup-filter-row .pill-count { margin-left: 0; }
+  .followup-board { grid-auto-columns: minmax(232px, 92%); }
+  .receivable-records { min-width: 520px; }
+  .receivable-table-wrap { overflow-x: auto; }
+  .payment-form .form-grid { grid-template-columns: 1fr; }
+}

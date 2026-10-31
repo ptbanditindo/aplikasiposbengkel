@@ -5,9 +5,9 @@ Ref: PRD FR-POS-01 s/d FR-POS-08.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +18,7 @@ from database.models import (
     HargaJasa,
     ServiceJob,
     ServicePart,
+    ServicePayment,
     ServiceRecord,
     StockItem,
     StockMovement,
@@ -25,7 +26,13 @@ from database.models import (
 )
 from database.session import begin_immediate
 from repositories import service_record_repository as record_repo
-from services import customer_service, pricing_service, warranty_service
+from services import (
+    customer_service,
+    pricing_service,
+    settings_service,
+    warranty_service,
+)
+from services.auth_service import Operator
 from services.errors import (
     BusinessValidationError,
     InsufficientStockError,
@@ -60,10 +67,12 @@ def _existing_result(record: ServiceRecord) -> TransactionResult:
     )
 
 
-def create_transaction(db: Session, payload: Any) -> TransactionResult:
+def create_transaction(
+    db: Session, payload: Any, operator: Optional[Operator] = None
+) -> TransactionResult:
     request_id = (getattr(payload, "request_id", None) or "").strip() or None
     try:
-        return _create_transaction_locked(db, payload, request_id)
+        return _create_transaction_locked(db, payload, request_id, operator)
     except IntegrityError:
         # Balapan request_id yang tidak tertangkap pengecekan awal.
         db.rollback()
@@ -75,7 +84,10 @@ def create_transaction(db: Session, payload: Any) -> TransactionResult:
 
 
 def _create_transaction_locked(
-    db: Session, payload: Any, request_id: str | None
+    db: Session,
+    payload: Any,
+    request_id: str | None,
+    operator: Optional[Operator] = None,
 ) -> TransactionResult:
     warnings: List[str] = []
 
@@ -116,14 +128,26 @@ def _create_transaction_locked(
             description = clean_text(job.deskripsi, max_length=255, allow_newlines=False)
             if not description:
                 raise BusinessValidationError("Deskripsi jasa wajib diisi.")
-            if job.harga_jasa_id is not None and db.get(HargaJasa, job.harga_jasa_id) is None:
-                raise NotFoundError("Master tarif jasa tidak ditemukan.")
+            master: Optional[HargaJasa] = None
+            if job.harga_jasa_id is not None:
+                master = db.get(HargaJasa, job.harga_jasa_id)
+                if master is None:
+                    raise NotFoundError("Master tarif jasa tidak ditemukan.")
+            interval = getattr(job, "interval_servis_bulan", None)
+            if interval is None:
+                interval = int(getattr(master, "interval_servis_bulan", 0) or 0)
+            interval = int(interval)
+            if interval < 0 or interval > 120:
+                raise BusinessValidationError(
+                    "Interval servis berkala harus antara 0 dan 120 bulan."
+                )
             job_lines.append(
                 {
                     "harga_jasa_id": job.harga_jasa_id,
                     "deskripsi": description,
                     "jumlah": qty,
                     "harga": price,
+                    "interval_servis_bulan": interval,
                 }
             )
 
@@ -199,9 +223,33 @@ def _create_transaction_locked(
         totals = pricing_service.compute_invoice(
             job_lines, part_lines, payload.diskon
         )
-        payment = pricing_service.compute_payment(
-            totals["total_servis"], payload.metode_bayar, payload.bayar
-        )
+        jenis_bayar = (getattr(payload, "jenis_bayar", "LUNAS") or "LUNAS").strip().upper()
+        jatuh_tempo: date | None = None
+        if jenis_bayar == "DP":
+            dp_value = getattr(payload, "dp", None)
+            if dp_value is None or money(dp_value) <= 0:
+                dp_value = payload.bayar
+            payment = pricing_service.compute_dp_payment(
+                totals["total_servis"], dp_value
+            )
+            jatuh_tempo = getattr(payload, "jatuh_tempo", None)
+            if jatuh_tempo is None:
+                ops = settings_service.get_ops_settings(db)
+                jatuh_tempo = now.date() + timedelta(days=ops["tempo_hari"])
+            if jatuh_tempo < now.date():
+                raise BusinessValidationError(
+                    "Jatuh tempo tidak boleh di masa lalu."
+                )
+            status_bayar = "BELUM_LUNAS"
+            total_dibayar = payment["bayar"]
+        elif jenis_bayar == "LUNAS":
+            payment = pricing_service.compute_payment(
+                totals["total_servis"], payload.metode_bayar, payload.bayar
+            )
+            status_bayar = "LUNAS"
+            total_dibayar = totals["total_servis"]
+        else:
+            raise BusinessValidationError("Jenis bayar harus LUNAS atau DP.")
 
         garansi_sampai: date | None = None
         catatan_garansi: str | None = None
@@ -234,6 +282,9 @@ def _create_transaction_locked(
             metode_bayar=payload.metode_bayar.strip().upper(),
             bayar=payment["bayar"],
             kembalian=payment["kembalian"],
+            status_bayar=status_bayar,
+            jatuh_tempo=jatuh_tempo,
+            total_dibayar=money(total_dibayar),
             bergaransi=bool(payload.bergaransi),
             garansi_sampai=garansi_sampai,
             catatan_garansi=catatan_garansi,
@@ -241,6 +292,22 @@ def _create_transaction_locked(
         )
         db.add(record)
         db.flush()
+
+        operator_label = operator.label if operator is not None else "Kasir"
+        if money(total_dibayar) > 0:
+            db.add(
+                ServicePayment(
+                    service_record_id=record.id,
+                    jenis="DP" if status_bayar == "BELUM_LUNAS" else "PELUNASAN",
+                    metode=payload.metode_bayar.strip().upper(),
+                    nominal=money(total_dibayar),
+                    waktu=now,
+                    operator=operator_label,
+                    catatan="DP saat nota dibuat"
+                    if status_bayar == "BELUM_LUNAS"
+                    else "Pembayaran nota",
+                )
+            )
 
         for line in job_lines:
             db.add(
@@ -251,6 +318,7 @@ def _create_transaction_locked(
                     jumlah=line["jumlah"],
                     harga=line["harga"],
                     subtotal=money(Decimal(line["jumlah"]) * line["harga"]),
+                    interval_servis_bulan=line["interval_servis_bulan"],
                 )
             )
 

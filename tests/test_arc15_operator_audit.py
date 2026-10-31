@@ -310,7 +310,6 @@ def test_migrasi_v6_menambah_tabel_audit(tmp_path, monkeypatch):
         assert (
             conn.exec_driver_sql("PRAGMA user_version").scalar()
             == migrations.SCHEMA_VERSION
-            == 7
         )
         tables = {
             row[0]
@@ -337,7 +336,8 @@ def test_migrasi_v6_menambah_tabel_audit(tmp_path, monkeypatch):
     init_db(legacy)
     with legacy.connect() as conn:
         assert (
-            conn.exec_driver_sql("PRAGMA user_version").scalar() == 7
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
         )
 
 

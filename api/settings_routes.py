@@ -8,6 +8,8 @@ from api.deps import require_owner
 from api.schemas import (
     BengkelInfoIn,
     BengkelInfoOut,
+    OpsSettingsIn,
+    OpsSettingsOut,
     ScheduledBackupOut,
     TelegramInfoOut,
     TelegramSettingsIn,
@@ -16,6 +18,24 @@ from database.session import get_db
 from services import settings_service, telegram_backup_service
 
 router = APIRouter(tags=["Pengaturan"], dependencies=[Depends(require_owner)])
+
+
+@router.get(
+    "/settings/ops",
+    response_model=OpsSettingsOut,
+)
+def get_ops(db: Session = Depends(get_db)):
+    return OpsSettingsOut(**settings_service.get_ops_settings(db))
+
+
+@router.put(
+    "/settings/ops",
+    response_model=OpsSettingsOut,
+)
+def update_ops(payload: OpsSettingsIn, db: Session = Depends(get_db)):
+    return OpsSettingsOut(
+        **settings_service.update_ops_settings(db, payload.model_dump())
+    )
 
 
 @router.put(

@@ -76,6 +76,30 @@ def normalize_phone(raw: Any) -> str:
     return digits
 
 
+def normalize_whatsapp(raw: Any) -> str:
+    """Normalisasi nomor WhatsApp: 08… / 8… / +62… menjadi 628…."""
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if digits.startswith("0"):
+        digits = "62" + digits[1:]
+    elif digits.startswith("8"):
+        digits = "62" + digits
+    elif digits.startswith("620"):
+        digits = "62" + digits[3:]
+    return digits
+
+
+def is_valid_whatsapp(raw: Any) -> bool:
+    digits = normalize_whatsapp(raw)
+    return digits.startswith("62") and 10 <= len(digits) <= 15
+
+
+def mask_phone(raw: Any) -> str:
+    digits = re.sub(r"\D", "", str(raw or ""))
+    if len(digits) <= 7:
+        return "****"
+    return digits[:4] + "****" + digits[-3:]
+
+
 def normalize_nopol(raw: Any) -> str:
     """Normalisasi nopol: 'b 1234 abc' -> 'B 1234 ABC'."""
     text = str(raw or "").upper()

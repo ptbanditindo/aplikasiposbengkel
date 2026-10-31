@@ -13,11 +13,13 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     event,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +37,10 @@ class Customer(Base):
     nama: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     nomor_hp: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     alamat: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Izin mengirim pesan WhatsApp (Tahap 12). Dapat dimatikan per pelanggan.
+    wa_consent: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -97,6 +103,10 @@ class HargaJasa(Base):
     harga_standar: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
+    # 0 = Nonaktif; bulan interval servis berkala (Tahap 13).
+    interval_servis_bulan: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -145,6 +155,15 @@ class ServiceRecord(Base):
     kembalian: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
+    # LUNAS | BELUM_LUNAS. Nota VOID selalu dianggap lunas untuk perhitungan
+    # piutang; status void dibaca dari kolom `status`.
+    status_bayar: Mapped[str] = mapped_column(
+        String(16), default="LUNAS", nullable=False, index=True
+    )
+    jatuh_tempo: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    total_dibayar: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
     bergaransi: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     garansi_sampai: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     catatan_garansi: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -189,6 +208,154 @@ class ServiceRecord(Base):
         cascade="all, delete-orphan",
         order_by="ServiceReturn.created_at",
     )
+    payments: Mapped[List["ServicePayment"]] = relationship(
+        back_populates="service_record",
+        cascade="all, delete-orphan",
+        order_by="ServicePayment.waktu, ServicePayment.id",
+    )
+    whatsapp_logs: Mapped[List["WhatsAppLog"]] = relationship(
+        back_populates="service_record",
+        cascade="all, delete-orphan",
+        order_by="WhatsAppLog.created_at, WhatsAppLog.id",
+    )
+
+
+class ServicePayment(Base):
+    """Buku pembayaran nota: DP, pelunasan, dan refund (append-only)."""
+
+    __tablename__ = "service_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[int] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # DP | PELUNASAN | REFUND (refund bernilai negatif)
+    jenis: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    metode: Mapped[str] = mapped_column(String(16), nullable=False)  # CASH | TRANSFER
+    nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    waktu: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+    operator: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    request_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    service_record: Mapped["ServiceRecord"] = relationship(back_populates="payments")
+
+
+class WhatsAppLog(Base):
+    """Catatan upaya membuka WhatsApp (append-only, Tahap 12).
+
+    Aplikasi tidak mengirim pesan sendiri; baris ini mencatat apakah jendela
+    WhatsApp dibuka, dibatalkan, atau nomor tidak tersedia.
+    """
+
+    __tablename__ = "wa_message_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    customer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    nomor_masked: Mapped[str] = mapped_column(String(32), nullable=False)
+    # struk | followup | garansi | piutang
+    jenis: Mapped[str] = mapped_column(
+        String(16), default="struk", nullable=False
+    )
+    # DIBUKA | DIBATALKAN | TIDAK_TERSEDIA
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    pesan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    operator: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+
+    service_record: Mapped[Optional["ServiceRecord"]] = relationship(
+        back_populates="whatsapp_logs"
+    )
+
+
+class FollowupItem(Base):
+    """Pengingat follow-up aktif per pelanggan dan jenis (Tahap 13)."""
+
+    __tablename__ = "followup_items"
+    __table_args__ = (
+        Index(
+            "ux_followup_items_active",
+            "jenis",
+            "customer_id",
+            unique=True,
+            sqlite_where=text("status != 'ARSIP'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # prospek | servis_berkala | garansi | piutang
+    jenis: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    unit_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vehicle_or_units.id", ondelete="SET NULL"), nullable=True
+    )
+    service_record_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_records.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    judul: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    jatuh_tempo: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    status: Mapped[str] = mapped_column(
+        String(24), default="BARU", nullable=False, index=True
+    )
+    penanggung_jawab: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    diambil_pada: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    followup_terakhir: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    janji_bayar: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    alasan_arsip: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    customer: Mapped["Customer"] = relationship()
+    unit: Mapped[Optional["VehicleOrUnit"]] = relationship()
+    service_record: Mapped[Optional["ServiceRecord"]] = relationship()
+    events: Mapped[List["FollowupEvent"]] = relationship(
+        back_populates="item",
+        cascade="all, delete-orphan",
+        order_by="FollowupEvent.created_at, FollowupEvent.id",
+    )
+
+
+class FollowupEvent(Base):
+    """Riwayat perpindahan status follow-up (append-only)."""
+
+    __tablename__ = "followup_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    item_id: Mapped[int] = mapped_column(
+        ForeignKey("followup_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_status: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    alasan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    operator: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+
+    item: Mapped["FollowupItem"] = relationship(back_populates="events")
 
 
 class ServiceJob(Base):
@@ -206,6 +373,10 @@ class ServiceJob(Base):
     harga: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # harga deal
     subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     jumlah_retur: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Snapshot interval saat nota disimpan; perubahan master tidak mengubahnya.
+    interval_servis_bulan: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="jobs")
 
@@ -359,3 +530,16 @@ def _reject_audit_change(_mapper, _connection, target):  # pragma: no cover - gu
 
 event.listen(AuditEvent, "before_update", _reject_audit_change)
 event.listen(AuditEvent, "before_delete", _reject_audit_change)
+
+# Buku pembayaran tidak boleh diubah/dihapus diam-diam; koreksi memakai
+# refund/void yang tercatat sebagai baris baru.
+event.listen(ServicePayment, "before_update", _reject_audit_change)
+event.listen(ServicePayment, "before_delete", _reject_audit_change)
+
+# Log WhatsApp juga tidak boleh diubah/dihapus; status baru ditambahkan.
+event.listen(WhatsAppLog, "before_update", _reject_audit_change)
+event.listen(WhatsAppLog, "before_delete", _reject_audit_change)
+
+# Riwayat perpindahan follow-up tidak boleh diubah/dihapus.
+event.listen(FollowupEvent, "before_update", _reject_audit_change)
+event.listen(FollowupEvent, "before_delete", _reject_audit_change)

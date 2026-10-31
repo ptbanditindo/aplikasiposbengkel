@@ -1,6 +1,7 @@
 """Endpoint transaksi POS, riwayat servis, cetak ulang & klaim garansi."""
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
@@ -39,11 +40,17 @@ router = APIRouter(
 
 @router.post("/pos/transaction", response_model=TransactionResponse, status_code=201)
 def create_transaction(
-    payload: CreateServiceTransactionRequest, db: Session = Depends(get_db)
+    payload: CreateServiceTransactionRequest,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
 ):
-    result = pos_service.create_transaction(db, payload)
+    result = pos_service.create_transaction(db, payload, operator)
     receipt = ReceiptOut.model_validate(
-        build_receipt_payload(result.record, settings_service.get_bengkel_info(db))
+        build_receipt_payload(
+            result.record,
+            settings_service.get_bengkel_info(db),
+            wa_template=settings_service.get_ops_settings(db)["wa_template"],
+        )
     )
     summary = ServiceRecordOut.model_validate(record_summary(result.record))
     return TransactionResponse(
@@ -67,9 +74,30 @@ def preview_transaction(payload: TransactionPreviewRequest):
     totals = pricing_service.compute_invoice(
         job_lines, part_lines, payload.diskon
     )
-    payment = pricing_service.compute_payment_preview(
-        totals["total_servis"], payload.metode_bayar, payload.bayar
-    )
+    jenis_bayar = (payload.jenis_bayar or "LUNAS").strip().upper()
+    if jenis_bayar == "DP":
+        dp_value = payload.dp if payload.dp is not None else payload.bayar
+        if Decimal(str(dp_value or 0)) <= 0:
+            # Pratinjau tetap menampilkan total saat DP belum diisi; simpan
+            # transaksi tetap memakai aturan DP yang ketat.
+            payment = {
+                "bayar": Decimal("0.00"),
+                "kembalian": Decimal("0.00"),
+                "sisa": totals["total_servis"],
+            }
+        else:
+            payment = pricing_service.compute_dp_payment(
+                totals["total_servis"], dp_value
+            )
+        payment["kekurangan"] = Decimal("0.00")
+        status_bayar = "BELUM_LUNAS"
+        sisa_bayar = payment["sisa"]
+    else:
+        payment = pricing_service.compute_payment_preview(
+            totals["total_servis"], payload.metode_bayar, payload.bayar
+        )
+        status_bayar = "LUNAS"
+        sisa_bayar = Decimal("0.00")
     return TransactionPreviewOut(
         is_final=False,
         biaya_jasa=totals["biaya_jasa"],
@@ -80,6 +108,9 @@ def preview_transaction(payload: TransactionPreviewRequest):
         bayar=payment["bayar"],
         kembalian=payment["kembalian"],
         kekurangan=payment["kekurangan"],
+        jenis_bayar=jenis_bayar,
+        status_bayar=status_bayar,
+        sisa_bayar=sisa_bayar,
         jobs=[
             TransactionPreviewLineOut(
                 subtotal=pricing_service.line_subtotal(
@@ -125,7 +156,11 @@ def get_receipt(record_id: int, db: Session = Depends(get_db)):
     if record is None:
         raise NotFoundError("Nota servis tidak ditemukan.")
     return ReceiptOut.model_validate(
-        build_receipt_payload(record, settings_service.get_bengkel_info(db))
+        build_receipt_payload(
+            record,
+            settings_service.get_bengkel_info(db),
+            wa_template=settings_service.get_ops_settings(db)["wa_template"],
+        )
     )
 
 

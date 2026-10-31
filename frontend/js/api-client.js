@@ -190,6 +190,11 @@
     customerOverview: (q) => request('/api/customers/overview?q=' + qs(q)),
     createCustomer: (data) =>
       request('/api/customers', { method: 'POST', body: data }),
+    setCustomerConsent: (customerId, waConsent) =>
+      request('/api/customers/' + customerId + '/consent', {
+        method: 'PUT',
+        body: { wa_consent: Boolean(waConsent) },
+      }),
     customerUnits: (customerId) =>
       request('/api/customers/' + customerId + '/units'),
     createUnit: (data) => request('/api/units', { method: 'POST', body: data }),
@@ -229,6 +234,61 @@
       }),
     returns: (id) =>
       request('/api/service-records/' + id + '/returns'),
+
+    payments: (recordId) =>
+      request('/api/service-records/' + recordId + '/payments'),
+    createPayment: (recordId, data) =>
+      request('/api/service-records/' + recordId + '/payments', {
+        method: 'POST',
+        body: data,
+      }),
+    receivables: (customerId) =>
+      request(
+        '/api/receivables' +
+          (customerId ? '?customer_id=' + qs(customerId) : '')
+      ),
+    customerReceivables: (customerId) =>
+      request('/api/customers/' + customerId + '/receivables'),
+
+    recordWhatsapp: (recordId, data) =>
+      request('/api/service-records/' + recordId + '/whatsapp', {
+        method: 'POST',
+        body: data,
+      }),
+    recordWhatsappLogs: (recordId) =>
+      request('/api/service-records/' + recordId + '/whatsapp-logs'),
+    whatsappLogs: (limit) =>
+      request('/api/whatsapp/logs?limit=' + qs(limit || 100)),
+
+    opsSettings: () => request('/api/settings/ops'),
+    updateOpsSettings: (data) =>
+      request('/api/settings/ops', { method: 'PUT', body: data }),
+
+    followupItems: (filter, jenis, customerId) =>
+      request(
+        '/api/followup/items?filter=' +
+          qs(filter || 'semua') +
+          (jenis ? '&jenis=' + qs(jenis) : '') +
+          (customerId ? '&customer_id=' + qs(customerId) : '')
+      ),
+    followupCounts: () => request('/api/followup/counts'),
+    followupReminders: () => request('/api/followup/reminders'),
+    followupDetail: (id) => request('/api/followup/items/' + id),
+    followupItem: (id, data) =>
+      request('/api/followup/items/' + id + '/followup', {
+        method: 'POST',
+        body: data || {},
+      }),
+    followupStatus: (id, data) =>
+      request('/api/followup/items/' + id + '/status', {
+        method: 'POST',
+        body: data,
+      }),
+    followupAssign: (id, data) =>
+      request('/api/followup/items/' + id + '/assign', {
+        method: 'POST',
+        body: data,
+      }),
 
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),

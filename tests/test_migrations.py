@@ -267,7 +267,7 @@ def test_migrasi_s06_menambah_void_retur_dan_ledger(tmp_path, monkeypatch):
         assert (
             conn.exec_driver_sql("PRAGMA user_version").scalar()
             == migrations.SCHEMA_VERSION
-            == 7
+            == 10
         )
         tables = {
             row[0]
@@ -312,3 +312,144 @@ def test_migrasi_s06_menambah_void_retur_dan_ledger(tmp_path, monkeypatch):
             conn.exec_driver_sql("PRAGMA user_version").scalar()
             == migrations.SCHEMA_VERSION
         )
+
+
+def test_migrasi_s12_menambah_izin_wa_dan_log(tmp_path, monkeypatch):
+    from datetime import datetime
+    from decimal import Decimal
+
+    from database import migrations
+    from database.models import ServiceRecord, VehicleOrUnit
+
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setattr(
+        backup_service, "settings", replace(settings, backup_dir=backup_dir)
+    )
+    legacy = build_engine(f"sqlite:///{(tmp_path / 'legacy_s12.db').as_posix()}")
+    Base.metadata.create_all(legacy)
+    with Session(legacy) as db:
+        customer = Customer(nama="Pelanggan WA Lama", nomor_hp="081200000077")
+        db.add(customer)
+        db.flush()
+        unit = VehicleOrUnit(
+            customer_id=customer.id, unit_type="MOBIL", nopol="B 1201 OLD"
+        )
+        db.add(unit)
+        db.flush()
+        db.add(
+            ServiceRecord(
+                unit_id=unit.id,
+                no_nota="INV-20250101-0012",
+                waktu_service=datetime(2025, 1, 1, 9, 0),
+                keluhan_awal="Nota lama WA",
+                total_servis=Decimal("100000.00"),
+                bayar=Decimal("100000.00"),
+            )
+        )
+        db.commit()
+
+    with legacy.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE wa_message_logs")
+        conn.exec_driver_sql("ALTER TABLE customers DROP COLUMN wa_consent")
+        conn.exec_driver_sql("PRAGMA user_version = 8")
+
+    init_db(legacy)
+
+    with legacy.connect() as conn:
+        assert (
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
+        )
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "wa_message_logs" in tables
+        columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(customers)")
+        }
+        assert "wa_consent" in columns
+        assert conn.exec_driver_sql(
+            "SELECT wa_consent FROM customers"
+        ).scalar() in (1, True)
+
+
+def test_migrasi_s13_menambah_interval_dan_followup(tmp_path, monkeypatch):
+    from datetime import datetime
+    from decimal import Decimal
+
+    from database import migrations
+    from database.models import ServiceRecord, VehicleOrUnit
+
+    backup_dir = tmp_path / "backups"
+    monkeypatch.setattr(
+        backup_service, "settings", replace(settings, backup_dir=backup_dir)
+    )
+    legacy = build_engine(f"sqlite:///{(tmp_path / 'legacy_s13.db').as_posix()}")
+    Base.metadata.create_all(legacy)
+    with Session(legacy) as db:
+        customer = Customer(nama="Pelanggan S13 Lama", nomor_hp="081200000088")
+        db.add(customer)
+        db.flush()
+        unit = VehicleOrUnit(
+            customer_id=customer.id, unit_type="MOBIL", nopol="B 1301 OLD"
+        )
+        db.add(unit)
+        db.flush()
+        db.add(
+            ServiceRecord(
+                unit_id=unit.id,
+                no_nota="INV-20250101-0013",
+                waktu_service=datetime(2025, 1, 1, 9, 0),
+                keluhan_awal="Nota lama follow-up",
+                total_servis=Decimal("150000.00"),
+                bayar=Decimal("150000.00"),
+            )
+        )
+        db.commit()
+
+    with legacy.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE followup_events")
+        conn.exec_driver_sql("DROP TABLE followup_items")
+        conn.exec_driver_sql(
+            "ALTER TABLE harga_jasa DROP COLUMN interval_servis_bulan"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE service_jobs DROP COLUMN interval_servis_bulan"
+        )
+        conn.exec_driver_sql("ALTER TABLE wa_message_logs DROP COLUMN jenis")
+        conn.exec_driver_sql("PRAGMA user_version = 9")
+
+    init_db(legacy)
+
+    with legacy.connect() as conn:
+        assert (
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
+        )
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "followup_items" in tables
+        assert "followup_events" in tables
+        harga_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(harga_jasa)")
+        }
+        assert "interval_servis_bulan" in harga_columns
+        job_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(service_jobs)")
+        }
+        assert "interval_servis_bulan" in job_columns
+        wa_columns = {
+            row[1]
+            for row in conn.exec_driver_sql("PRAGMA table_info(wa_message_logs)")
+        }
+        assert "jenis" in wa_columns
+        assert conn.exec_driver_sql(
+            "SELECT interval_servis_bulan FROM harga_jasa LIMIT 1"
+        ).scalar() in (0, None)

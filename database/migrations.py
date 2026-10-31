@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 10
 
 
 def get_user_version(conn) -> int:
@@ -301,6 +301,188 @@ def _migrate_007_audit_events(cursor) -> None:
     )
 
 
+def _migrate_008_payments(cursor) -> None:
+    """Tahap 11: status bayar, jatuh tempo, dan buku pembayaran nota."""
+    _add_column(
+        cursor,
+        "service_records",
+        "status_bayar",
+        "status_bayar VARCHAR(16) NOT NULL DEFAULT 'LUNAS'",
+    )
+    _add_column(cursor, "service_records", "jatuh_tempo", "jatuh_tempo DATE")
+    _add_column(
+        cursor,
+        "service_records",
+        "total_dibayar",
+        "total_dibayar NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    if "service_records" in _tables(cursor):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_service_records_status_bayar "
+            "ON service_records (status_bayar)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_service_records_jatuh_tempo "
+            "ON service_records (jatuh_tempo)"
+        )
+
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS service_payments ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER NOT NULL, "
+        "jenis VARCHAR(16) NOT NULL, "
+        "metode VARCHAR(16) NOT NULL, "
+        "nominal NUMERIC(14, 2) NOT NULL, "
+        "waktu DATETIME NOT NULL, "
+        "operator VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "catatan TEXT, "
+        "request_id VARCHAR(64), "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE CASCADE)"
+    )
+    for column in ("service_record_id", "jenis", "waktu"):
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_service_payments_{column} "
+            f"ON service_payments ({column})"
+        )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_service_payments_request_id "
+        "ON service_payments (request_id)"
+    )
+
+    if "service_records" not in _tables(cursor):
+        return
+    # Nota lama dianggap LUNAS sebesar nilai yang sudah dibayar (netto retur).
+    # VOID tidak menghasilkan penerimaan dan tidak masuk piutang.
+    cursor.execute(
+        "UPDATE service_records SET "
+        "total_dibayar = CASE WHEN COALESCE(status, 'NORMAL') = 'VOID' THEN 0 "
+        "ELSE MAX(COALESCE(total_servis, 0) - COALESCE(total_retur, 0), 0) END, "
+        "status_bayar = 'LUNAS'"
+    )
+    cursor.execute(
+        "INSERT INTO service_payments ("
+        "service_record_id, jenis, metode, nominal, waktu, operator, catatan, "
+        "request_id, created_at) "
+        "SELECT r.id, 'PELUNASAN', COALESCE(r.metode_bayar, 'CASH'), "
+        "r.total_dibayar, r.waktu_service, 'Kasir', 'Migrasi nota lama', "
+        "NULL, COALESCE(r.created_at, r.waktu_service) "
+        "FROM service_records r "
+        "WHERE r.total_dibayar > 0 AND NOT EXISTS ("
+        "SELECT 1 FROM service_payments p WHERE p.service_record_id = r.id)"
+    )
+
+
+def _migrate_009_whatsapp(cursor) -> None:
+    """Tahap 12: izin WhatsApp pelanggan dan log upaya membuka WhatsApp."""
+    _add_column(
+        cursor,
+        "customers",
+        "wa_consent",
+        "wa_consent BOOLEAN NOT NULL DEFAULT 1",
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS wa_message_logs ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER, "
+        "customer_id INTEGER, "
+        "nomor_masked VARCHAR(32) NOT NULL, "
+        "jenis VARCHAR(16) NOT NULL DEFAULT 'struk', "
+        "status VARCHAR(16) NOT NULL, "
+        "pesan TEXT, "
+        "operator VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE CASCADE, "
+        "FOREIGN KEY(customer_id) REFERENCES customers (id) "
+        "ON DELETE SET NULL)"
+    )
+    for column in ("service_record_id", "customer_id", "status", "created_at"):
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_wa_message_logs_{column} "
+            f"ON wa_message_logs ({column})"
+        )
+
+
+def _migrate_010_followup(cursor) -> None:
+    """Tahap 13: interval jasa dan papan follow-up append-only."""
+    _add_column(
+        cursor,
+        "harga_jasa",
+        "interval_servis_bulan",
+        "interval_servis_bulan INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_jobs",
+        "interval_servis_bulan",
+        "interval_servis_bulan INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "wa_message_logs",
+        "jenis",
+        "jenis VARCHAR(16) NOT NULL DEFAULT 'struk'",
+    )
+
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS followup_items ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "jenis VARCHAR(24) NOT NULL, "
+        "customer_id INTEGER NOT NULL, "
+        "unit_id INTEGER, "
+        "service_record_id INTEGER, "
+        "judul VARCHAR(255) NOT NULL DEFAULT '', "
+        "jatuh_tempo DATE, "
+        "status VARCHAR(24) NOT NULL DEFAULT 'BARU', "
+        "penanggung_jawab VARCHAR(64), "
+        "diambil_pada DATETIME, "
+        "followup_terakhir DATETIME, "
+        "janji_bayar DATE, "
+        "alasan_arsip TEXT, "
+        "archived_at DATETIME, "
+        "created_at DATETIME NOT NULL, "
+        "updated_at DATETIME NOT NULL, "
+        "FOREIGN KEY(customer_id) REFERENCES customers (id) "
+        "ON DELETE CASCADE, "
+        "FOREIGN KEY(unit_id) REFERENCES vehicle_or_units (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE SET NULL)"
+    )
+    for column in ("jenis", "customer_id", "status", "jatuh_tempo"):
+        cursor.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_followup_items_{column} "
+            f"ON followup_items ({column})"
+        )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_followup_items_active "
+        "ON followup_items (jenis, customer_id) WHERE status != 'ARSIP'"
+    )
+
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS followup_events ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "item_id INTEGER NOT NULL, "
+        "from_status VARCHAR(24), "
+        "to_status VARCHAR(24) NOT NULL, "
+        "alasan TEXT, "
+        "operator VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(item_id) REFERENCES followup_items (id) "
+        "ON DELETE CASCADE)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_followup_events_item_id "
+        "ON followup_events (item_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_followup_events_created_at "
+        "ON followup_events (created_at)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -309,6 +491,9 @@ MIGRATIONS: List[Migration] = [
     (5, _migrate_005_modal_estimasi),
     (6, _migrate_006_void_retur_ledger),
     (7, _migrate_007_audit_events),
+    (8, _migrate_008_payments),
+    (9, _migrate_009_whatsapp),
+    (10, _migrate_010_followup),
 ]
 
 

@@ -95,6 +95,7 @@ class CustomerCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
     nomor_hp: str = Field(..., max_length=64)
     alamat: Optional[str] = Field(default=None, max_length=500)
+    wa_consent: bool = True
 
 
 class CustomerOut(ORMModel):
@@ -102,7 +103,12 @@ class CustomerOut(ORMModel):
     nama: str
     nomor_hp: str
     alamat: Optional[str] = None
+    wa_consent: bool = True
     created_at: datetime
+
+
+class CustomerConsentIn(StrictBase):
+    wa_consent: bool
 
 
 class UnitCreate(CompatBase):
@@ -166,17 +172,20 @@ class StockItemOut(ORMModel):
 class HargaJasaCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
     harga_standar: Decimal = Field(..., ge=0)
+    interval_servis_bulan: int = Field(default=0, ge=0, le=120)
 
 
 class HargaJasaUpdate(CompatBase):
     nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
     harga_standar: Optional[Decimal] = Field(default=None, ge=0)
+    interval_servis_bulan: Optional[int] = Field(default=None, ge=0, le=120)
 
 
 class HargaJasaOut(ORMModel):
     id: int
     nama: str
     harga_standar: Money
+    interval_servis_bulan: int = 0
 
 
 # --- TRANSAKSI POS ---
@@ -185,6 +194,7 @@ class ServiceJobInput(CompatBase):
     deskripsi: str = Field(..., min_length=1, max_length=255)
     jumlah: int = Field(default=1, ge=1)
     harga: Decimal = Field(..., ge=0)
+    interval_servis_bulan: Optional[int] = Field(default=None, ge=0, le=120)
 
 
 class ServicePartInput(CompatBase):
@@ -203,6 +213,9 @@ class CreateServiceTransactionRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP)$"))
+    dp: Decimal = Field(default=Decimal("0.00"), ge=0)
+    jatuh_tempo: Optional[date] = None
     bergaransi: bool = True
     garansi_bulan: int = Field(default=1, ge=1, le=120)
     garansi_sampai: Optional[date] = None
@@ -216,6 +229,8 @@ class TransactionPreviewRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP)$"))
+    dp: Decimal = Field(default=Decimal("0.00"), ge=0)
     jobs: List[ServiceJobInput] = Field(default_factory=list)
     parts: List[ServicePartInput] = Field(default_factory=list)
 
@@ -236,6 +251,9 @@ class TransactionPreviewOut(CompatBase):
     bayar: Money
     kembalian: Money
     kekurangan: Money
+    jenis_bayar: str = "LUNAS"
+    status_bayar: str = "LUNAS"
+    sisa_bayar: Money = ZERO_MONEY
     jobs: List[TransactionPreviewLineOut] = Field(default_factory=list)
     parts: List[TransactionPreviewLineOut] = Field(default_factory=list)
 
@@ -247,6 +265,7 @@ class ServiceJobOut(ORMModel):
     jumlah_retur: int = 0
     harga: Money
     subtotal: Money
+    interval_servis_bulan: int = 0
 
 
 class ServicePartOut(ORMModel):
@@ -325,6 +344,10 @@ class ServiceRecordOut(ORMModel):
     metode_bayar: str
     bayar: Money
     kembalian: Money
+    status_bayar: str = "LUNAS"
+    jatuh_tempo: Optional[date] = None
+    total_dibayar: Money = ZERO_MONEY
+    sisa_bayar: Money = ZERO_MONEY
     bergaransi: bool
     garansi_sampai: Optional[date] = None
     catatan_garansi: Optional[str] = None
@@ -343,6 +366,184 @@ class ServiceRecordOut(ORMModel):
     total_retur: Money = ZERO_MONEY
     retur_count: int = 0
     total_neto: Money = ZERO_MONEY
+
+
+# --- PEMBAYARAN & PIUTANG ---
+class PaymentCreate(StrictBase):
+    nominal: Decimal = Field(..., gt=0)
+    metode: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
+    catatan: Optional[str] = Field(default=None, max_length=500)
+    request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
+
+
+class PaymentOut(ORMModel):
+    id: int
+    service_record_id: int
+    jenis: str
+    metode: str
+    nominal: Money
+    waktu: datetime
+    operator: str
+    catatan: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class ReceivableRecordOut(CompatBase):
+    id: int
+    no_nota: str
+    waktu_service: datetime
+    metode_bayar: str
+    total_servis: Money
+    total_neto: Money
+    total_dibayar: Money
+    sisa_bayar: Money
+    jatuh_tempo: Optional[date] = None
+    umur_hari: int
+    umur_bucket: str
+    overdue: bool
+
+
+class ReceivableCustomerOut(CompatBase):
+    customer_id: int
+    nama: str
+    nomor_hp: str
+    jumlah_nota: int
+    total_sisa: Money
+    jatuh_tempo_terdekat: Optional[date] = None
+    umur_tertua_hari: int
+    records: List[ReceivableRecordOut] = Field(default_factory=list)
+
+
+class ReceivablesOut(CompatBase):
+    jumlah_pelanggan: int
+    jumlah_nota: int
+    total_sisa: Money
+    items: List[ReceivableCustomerOut] = Field(default_factory=list)
+
+
+class WhatsAppAttemptIn(StrictBase):
+    status: str = Field(..., **_pattern("^(DIBUKA|DIBATALKAN|TIDAK_TERSEDIA)$"))
+    catatan: Optional[str] = Field(default=None, max_length=500)
+
+
+class WhatsAppLogOut(ORMModel):
+    id: int
+    service_record_id: Optional[int] = None
+    customer_id: Optional[int] = None
+    nomor_masked: str
+    status: str
+    operator: str
+    created_at: datetime
+
+
+class WhatsAppAttemptOut(CompatBase):
+    status: str
+    nomor_masked: str
+    link: str = ""
+    wa_text: str = ""
+    log: WhatsAppLogOut
+
+
+# --- FOLLOW-UP TAHAP 13 ---
+class FollowupRincianOut(CompatBase):
+    no_nota: Optional[str] = None
+    tanggal_servis: Optional[date] = None
+    umur_hari: Optional[int] = None
+    pekerjaan: Optional[str] = None
+    garansi_sampai: Optional[date] = None
+    sisa_hari: Optional[int] = None
+    interval_bulan: Optional[int] = None
+    jatuh_tempo: Optional[date] = None
+    total_servis: Optional[Money] = None
+    sisa_bayar: Optional[Money] = None
+
+
+class FollowupItemOut(CompatBase):
+    id: int
+    jenis: str
+    jenis_label: str
+    customer_id: int
+    customer_nama: str
+    nomor_hp: str
+    nomor_masked: str
+    wa_consent: bool = True
+    unit_id: Optional[int] = None
+    unit_deskripsi: str = "-"
+    service_record_id: Optional[int] = None
+    no_nota: Optional[str] = None
+    judul: str
+    jatuh_tempo: Optional[date] = None
+    sisa_hari: Optional[int] = None
+    terlambat: bool = False
+    status: str
+    status_label: str
+    penanggung_jawab: Optional[str] = None
+    diambil_pada: Optional[datetime] = None
+    followup_terakhir: Optional[datetime] = None
+    sudah_followup: bool = False
+    janji_bayar: Optional[date] = None
+    alasan_arsip: Optional[str] = None
+    cooldown_sampai: Optional[datetime] = None
+    bisa_followup: bool = True
+    rincian: List[FollowupRincianOut] = Field(default_factory=list)
+
+
+class FollowupListOut(CompatBase):
+    items: List[FollowupItemOut] = Field(default_factory=list)
+    jumlah: int = 0
+
+
+class FollowupCountsOut(CompatBase):
+    servis_berkala_due: int = 0
+    prospek_count: int = 0
+    followup_hari_ini: int = 0
+    garansi_akan_habis: int = 0
+    piutang_count: int = 0
+    piutang_customers: int = 0
+    piutang_total: Money = ZERO_MONEY
+
+
+class FollowupActionResultOut(CompatBase):
+    item: FollowupItemOut
+    wa_text: str = ""
+    link: str = ""
+    log: WhatsAppLogOut
+
+
+class FollowupStatusIn(StrictBase):
+    status: str = Field(
+        ...,
+        **_pattern(
+            "^(BARU|SUDAH_FOLLOWUP|JANJI_BAYAR|MASIH_KENDALA|SELESAI|ARSIP)$"
+        ),
+    )
+    alasan: Optional[str] = Field(default=None, max_length=500)
+    janji_bayar: Optional[date] = None
+
+
+class FollowupAssignIn(StrictBase):
+    release: bool = False
+    alasan: Optional[str] = Field(default=None, max_length=500)
+
+
+class FollowupEventOut(ORMModel):
+    id: int
+    item_id: int
+    from_status: Optional[str] = None
+    to_status: str
+    alasan: Optional[str] = None
+    operator: str
+    created_at: datetime
+
+
+class FollowupDetailOut(CompatBase):
+    item: FollowupItemOut
+    events: List[FollowupEventOut] = Field(default_factory=list)
+    pesan: str = ""
+
+
+class FollowupReminderOut(FollowupItemOut):
+    pengingat: str = ""
 
 
 class ReceiptLabelOut(CompatBase):
@@ -369,6 +570,10 @@ class ReceiptOut(ORMModel):
     metode_bayar: str
     bayar: Money
     kembalian: Money
+    status_bayar: str = "LUNAS"
+    jatuh_tempo: Optional[date] = None
+    total_dibayar: Money = ZERO_MONEY
+    sisa_bayar: Money = ZERO_MONEY
     bergaransi: bool
     garansi_sampai: Optional[date] = None
     catatan_garansi: Optional[str] = None
@@ -386,6 +591,10 @@ class ReceiptOut(ORMModel):
     labels: List[ReceiptLabelOut] = Field(default_factory=list)
     jobs: List[ServiceJobOut] = Field(default_factory=list)
     parts: List[ServicePartOut] = Field(default_factory=list)
+    payments: List[PaymentOut] = Field(default_factory=list)
+    wa_text: str = ""
+    customer_wa: str = ""
+    wa_consent: bool = True
     bengkel_nama: str
     bengkel_tagline: str
     bengkel_alamat: str
@@ -399,6 +608,14 @@ class ReceiptOut(ORMModel):
     struk_80: List[str]
     escpos_58_base64: str
     escpos_80_base64: str
+
+
+class PaymentResultOut(CompatBase):
+    payment: PaymentOut
+    record: ServiceRecordOut
+    receipt: ReceiptOut
+    status_bayar: str
+    sisa_bayar: Money
 
 
 class TransactionResponse(CompatBase):
@@ -427,6 +644,16 @@ class DailySummaryOut(CompatBase):
     jumlah_retur: int = 0
     total_void: Money = ZERO_MONEY
     jumlah_void: int = 0
+    penerimaan_cash: Money = ZERO_MONEY
+    penerimaan_transfer: Money = ZERO_MONEY
+    penerimaan_total: Money = ZERO_MONEY
+    piutang_count: int = 0
+    piutang_customers: int = 0
+    piutang_total: Money = ZERO_MONEY
+    garansi_akan_habis: int = 0
+    servis_berkala_due: int = 0
+    followup_hari_ini: int = 0
+    prospek_count: int = 0
 
 
 class DailyReportOut(DailySummaryOut):
@@ -452,6 +679,16 @@ class PeriodReportOut(CompatBase):
     jumlah_retur: int = 0
     total_void: Money = ZERO_MONEY
     jumlah_void: int = 0
+    penerimaan_cash: Money = ZERO_MONEY
+    penerimaan_transfer: Money = ZERO_MONEY
+    penerimaan_total: Money = ZERO_MONEY
+    piutang_count: int = 0
+    piutang_customers: int = 0
+    piutang_total: Money = ZERO_MONEY
+    garansi_akan_habis: int = 0
+    servis_berkala_due: int = 0
+    followup_hari_ini: int = 0
+    prospek_count: int = 0
     transaksi: List[ServiceRecordOut] = Field(default_factory=list)
     harian: List[DailySummaryOut] = Field(default_factory=list)
 
@@ -527,6 +764,20 @@ class BackupStatusOut(CompatBase):
     stale_days: int = 2
 
 
+class OpsSettingsIn(CompatBase):
+    tempo_hari: int = Field(default=7, ge=1, le=365)
+    prospek_hari: int = Field(default=7, ge=1, le=365)
+    cooldown_hari: int = Field(default=7, ge=0, le=90)
+    garansi_akan_habis_hari: int = Field(default=7, ge=1, le=90)
+    servis_berkala_awal_hari: int = Field(default=14, ge=1, le=90)
+    wa_after_print: bool = False
+    wa_template: str = Field(default="", max_length=2000)
+
+
+class OpsSettingsOut(OpsSettingsIn):
+    pass
+
+
 class ScheduledBackupOut(CompatBase):
     status: str
     local_saved: bool = False
@@ -588,6 +839,7 @@ class ConfigOut(CompatBase):
     garansi_syarat: str
     metode_bayar: List[str]
     keluhan_presets: List[str]
+    ops: OpsSettingsOut = Field(default_factory=OpsSettingsOut)
 
 
 class PinRequest(CompatBase):

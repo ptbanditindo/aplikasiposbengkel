@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    CustomerConsentIn,
     CustomerCreate,
     CustomerOut,
     CustomerOverviewOut,
@@ -17,6 +18,7 @@ from api.schemas import (
 from database.models import VehicleOrUnit
 from database.session import get_db
 from services import customer_service
+from services.auth_service import Operator
 from services.customer_service import describe_unit
 
 router = APIRouter(
@@ -57,7 +59,20 @@ def list_customers(
 @router.post("/customers", response_model=CustomerOut, status_code=201)
 def create_customer(payload: CustomerCreate, db: Session = Depends(get_db)):
     customer = customer_service.create_customer(
-        db, payload.nama, payload.nomor_hp, payload.alamat
+        db, payload.nama, payload.nomor_hp, payload.alamat, payload.wa_consent
+    )
+    return CustomerOut.model_validate(customer)
+
+
+@router.put("/customers/{customer_id}/consent", response_model=CustomerOut)
+def update_consent(
+    customer_id: int,
+    payload: CustomerConsentIn,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    customer = customer_service.set_wa_consent(
+        db, customer_id, payload.wa_consent, operator
     )
     return CustomerOut.model_validate(customer)
 
@@ -83,6 +98,7 @@ def customer_overview(
                 nama=customer.nama,
                 nomor_hp=customer.nomor_hp,
                 alamat=customer.alamat,
+                wa_consent=customer.wa_consent,
                 created_at=customer.created_at,
                 total_unit=len(unit_items),
                 total_mobil=sum(

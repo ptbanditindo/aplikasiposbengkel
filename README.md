@@ -30,10 +30,21 @@ build step) di `http://127.0.0.1:8000`.
   stok, bukan dengan menyunting angka stok manual.
 - **Garansi** — masa garansi per nota (bulan bebas), status aktif/kadaluarsa,
   catatan klaim, dan klaim yang hanya bisa dilakukan sekali.
-- **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, snapshot modal
-  saat part dipakai, dan proteksi hapus item yang sudah dipakai transaksi.
-  Daftar stok memakai baris lebih rapat agar lebih banyak item terlihat; tabel
-  jasa, riwayat, dan laporan tidak ikut dirapatkan.
+- **DP & piutang** — nota bisa dibayar sebagian sebagai DP dengan jatuh tempo,
+  lalu dilunasi bertahap dari detail nota. Daftar piutang per pelanggan
+  menampilkan sisa, umur piutang, dan nota yang belum lunas.
+- **WhatsApp manual** — tombol WhatsApp membuka pratinjau pesan dan tautan
+  `wa.me`; kasir tetap menekan kirim sendiri. Setiap upaya dicatat, nomor
+  ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
+- **Follow-up & servis berkala** — papan tindak lanjut untuk piutang, garansi
+  yang akan habis, servis berkala, dan prospek pelanggan. Setiap tarif jasa
+  punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
+  saat dikerjakan dan menjadi pengingat servis berikutnya.
+- **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, interval servis
+  berkala per jasa, snapshot modal saat part dipakai, dan proteksi hapus item
+  yang sudah dipakai transaksi. Daftar stok memakai baris lebih rapat agar
+  lebih banyak item terlihat; tabel jasa, riwayat, dan laporan tidak ikut
+  dirapatkan.
 - **Laporan** — kas harian, rekap periode, penjualan sparepart, laba kotor,
   rincian per metode bayar, dan laporan semua waktu.
 - **Printer universal** — kelola beberapa printer dari Pengaturan: Bluetooth
@@ -185,11 +196,11 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-239 test mencakup transaksi, void/retur, stok, garansi, laporan, pengaturan,
-label barang, printer, backup/restore, Telegram, serta pemeriksaan keamanan
-akses (PIN, sesi, token instalasi, loopback, host/origin). Suite yang sama
-lulus di dua jalur dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 +
-FastAPI 0.115 (kombinasi yang dipakai APK).
+272 test mencakup transaksi, DP/pelunasan/piutang, WhatsApp, follow-up dan
+servis berkala, void/retur, stok, garansi, laporan, pengaturan, label barang,
+printer, backup/restore, Telegram, serta pemeriksaan keamanan akses (PIN,
+sesi, token instalasi, loopback, host/origin). Jalur desktop memakai Pydantic
+v2; kombinasi APK tetap memakai Pydantic 1.10 + FastAPI 0.115.
 
 Unit test Kotlin untuk PIN, backup, dan printer juga tersedia (150 test):
 

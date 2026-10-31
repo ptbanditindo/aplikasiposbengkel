@@ -44,8 +44,16 @@ def get_customer(db: Session, customer_id: int) -> Optional[Customer]:
     return db.get(Customer, customer_id)
 
 
-def create_customer(db: Session, nama: str, nomor_hp: str, alamat: Optional[str]) -> Customer:
-    customer = Customer(nama=nama, nomor_hp=nomor_hp, alamat=alamat)
+def create_customer(
+    db: Session,
+    nama: str,
+    nomor_hp: str,
+    alamat: Optional[str],
+    wa_consent: bool = True,
+) -> Customer:
+    customer = Customer(
+        nama=nama, nomor_hp=nomor_hp, alamat=alamat, wa_consent=wa_consent
+    )
     db.add(customer)
     db.commit()
     db.refresh(customer)

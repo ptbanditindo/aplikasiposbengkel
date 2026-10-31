@@ -100,6 +100,67 @@ def update_bengkel_info(db: Session, payload: Dict[str, Any]) -> Dict[str, str]:
     return get_bengkel_info(db)
 
 
+OPS_PREFIX = "ops."
+OPS_INT_KEYS = {
+    "tempo_hari": (1, 365, 7),
+    "prospek_hari": (1, 365, 7),
+    "cooldown_hari": (0, 90, 7),
+    "garansi_akan_habis_hari": (1, 90, 7),
+    "servis_berkala_awal_hari": (1, 90, 14),
+}
+OPS_BOOL_KEYS = {"wa_after_print": False}
+OPS_TEXT_KEYS = {"wa_template": ""}
+
+
+def get_ops_settings(db: Session) -> Dict[str, Any]:
+    """Pengaturan operasional Tahap 11-13 (DP, follow-up, WhatsApp)."""
+    stored = {
+        row.key[len(OPS_PREFIX):]: row.value
+        for row in db.scalars(
+            select(AppSetting).where(AppSetting.key.like(f"{OPS_PREFIX}%"))
+        ).all()
+    }
+    result: Dict[str, Any] = {}
+    for key, (_low, _high, default) in OPS_INT_KEYS.items():
+        raw = stored.get(key, "")
+        try:
+            result[key] = int(raw) if raw != "" else default
+        except (TypeError, ValueError):
+            result[key] = default
+    for key, default in OPS_BOOL_KEYS.items():
+        result[key] = _stored_bool(stored.get(key), default)
+    for key, default in OPS_TEXT_KEYS.items():
+        result[key] = stored.get(key) or default
+    return result
+
+
+def update_ops_settings(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
+    current = get_ops_settings(db)
+    cleaned: Dict[str, str] = {}
+    for key, (low, high, _default) in OPS_INT_KEYS.items():
+        raw = payload.get(key, current[key])
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise BusinessValidationError(f"Nilai {key} harus berupa angka.")
+        if not low <= value <= high:
+            raise BusinessValidationError(
+                f"Nilai {key} harus antara {low} dan {high}."
+            )
+        cleaned[f"{OPS_PREFIX}{key}"] = str(value)
+    for key in OPS_BOOL_KEYS:
+        value = payload.get(key, current[key])
+        cleaned[f"{OPS_PREFIX}{key}"] = "1" if bool(value) else "0"
+    template = clean_text(
+        payload.get("wa_template", current["wa_template"]), max_length=2000
+    )
+    cleaned[f"{OPS_PREFIX}wa_template"] = template
+    for key, value in cleaned.items():
+        set_setting(db, key, value)
+    db.commit()
+    return get_ops_settings(db)
+
+
 def _stored_values(db: Session) -> Dict[str, str]:
     rows = db.scalars(
         select(AppSetting).where(AppSetting.key.like(f"{TELEGRAM_PREFIX}%"))

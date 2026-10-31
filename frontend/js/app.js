@@ -229,6 +229,17 @@
     printFailure: null,
     printJobTimer: null,
     printJobSeen: new Set(),
+    jenisBayar: 'LUNAS',
+    detailPayments: [],
+    detailWaLogs: [],
+    followupItems: [],
+    followupFilter: 'semua',
+    followupJenis: '',
+    followupDetail: null,
+    receivables: null,
+    receivablesCustomerId: null,
+    waPreview: null,
+    waOffered: new Set(),
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -373,6 +384,35 @@
     return '';
   }
 
+  function paymentBadge(record) {
+    if (!record || record.status === 'VOID') return '';
+    if (record.status_bayar === 'LUNAS') {
+      return '<span class="badge green">Lunas</span>';
+    }
+    if (record.status_bayar === 'BELUM_LUNAS') {
+      const paid = moneyToCents(record.total_dibayar);
+      return paid > 0
+        ? '<span class="badge amber">DP</span>'
+        : '<span class="badge red">Belum bayar</span>';
+    }
+    return '';
+  }
+
+  function dueLabel(item) {
+    if (item.pengingat) return item.pengingat;
+    if (item.sisa_hari == null) return '-';
+    if (item.sisa_hari < 0) return 'Lewat ' + Math.abs(item.sisa_hari) + ' hari';
+    if (item.sisa_hari === 0) return 'Hari ini';
+    return 'H-' + item.sisa_hari;
+  }
+
+  function jenisTone(jenis) {
+    if (jenis === 'piutang') return 'red';
+    if (jenis === 'garansi') return 'amber';
+    if (jenis === 'servis_berkala') return 'blue';
+    return 'gray';
+  }
+
   function netTotal(record) {
     // Selalu pakai total_neto dari server; frontend tidak menghitung ulang.
     return record && record.total_neto != null ? record.total_neto : '0.00';
@@ -416,6 +456,7 @@
 
     if (view === 'dashboard') loadDashboard();
     if (view === 'history') loadHistory($('#historySearch').value.trim());
+    if (view === 'followup') loadFollowup();
     if (view === 'stock') renderStock();
     if (view === 'jasa') renderJasa();
     if (view === 'customers') {
@@ -424,6 +465,7 @@
     if (view === 'report') loadReport();
     if (view === 'settings') {
       fillSettingsForm();
+      fillOpsForm();
       fillTelegramForm();
       initPrinterSettings();
     }
@@ -451,6 +493,7 @@
     renderComplaintChips();
     refreshReceiptPrinterUI();
     fillSettingsForm();
+    fillOpsForm();
     fillTelegramForm();
   }
 
@@ -768,12 +811,14 @@
       nama: $('#custNama').value.trim(),
       nomor_hp: $('#custHp').value.trim(),
       alamat: $('#custAlamat').value.trim() || null,
+      wa_consent: $('#custWaConsent').checked,
     };
 
     setBusy(button, true, 'Menyimpan...');
     try {
       const customer = await API.createCustomer(payload);
       $('#customerForm').reset();
+      $('#custWaConsent').checked = true;
       closeModal('#customerModal');
       toast('Pelanggan ' + customer.nama + ' tersimpan.', 'success');
 
@@ -987,13 +1032,31 @@
     }
   }
 
+  function clampInterval(value) {
+    return Math.min(120, Math.max(0, intValue(value, 0)));
+  }
+
   function onJasaPickerChange() {
     const id = intValue($('#jasaPicker').value, 0);
     const master = state.jasa.find((jasa) => jasa.id === id);
-    if (!master) return;
+    const hint = $('#jasaIntervalHint');
+    if (!master) {
+      if (hint) hint.classList.add('hidden');
+      return;
+    }
     $('#jasaNama').value = master.nama;
     setMoneyValue($('#jasaHarga'), Math.round(Number(master.harga_standar) || 0));
     $('#jasaQty').value = '1';
+    if (hint) {
+      const interval = clampInterval(master.interval_servis_bulan);
+      hint.textContent =
+        interval > 0
+          ? 'Servis berkala: ' +
+            interval +
+            ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
+          : 'Jasa ini tanpa interval servis berkala.';
+      hint.classList.remove('hidden');
+    }
   }
 
   function onPartPickerChange() {
@@ -1035,12 +1098,16 @@
       deskripsi: description,
       jumlah: quantity,
       harga: String(price),
+      interval_servis_bulan: master
+        ? clampInterval(master.interval_servis_bulan)
+        : 0,
     });
 
     $('#jasaPicker').value = '';
     $('#jasaNama').value = '';
     $('#jasaQty').value = '1';
     $('#jasaHarga').value = '';
+    $('#jasaIntervalHint').classList.add('hidden');
     renderItems();
   }
 
@@ -1104,6 +1171,11 @@
           '" data-field="harga" value="' +
           esc(formatMoneyValue(job.harga)) +
           '"></td>' +
+          '<td><input type="number" min="0" max="120" class="table-input interval" data-kind="job" data-index="' +
+          index +
+          '" data-field="interval_servis_bulan" value="' +
+          esc(clampInterval(job.interval_servis_bulan)) +
+          '" title="Interval servis berkala (bulan). 0 = nonaktif."></td>' +
           '<td class="text-right item-subtotal" data-subtotal-kind="job" data-subtotal-index="' +
           index +
           '">&mdash;</td>' +
@@ -1204,13 +1276,22 @@
     return checked ? checked.value : 'CASH';
   }
 
+  function getJenisBayar() {
+    return state.jenisBayar === 'DP' ? 'DP' : 'LUNAS';
+  }
+
   function buildPreviewPayload() {
     const metode = getMetode();
+    const dpMode = getJenisBayar() === 'DP';
     return {
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar:
-        metode === 'CASH' ? String(parseMoney($('#bayarInput').value)) : '0',
+        !dpMode && metode === 'CASH'
+          ? String(parseMoney($('#bayarInput').value))
+          : '0',
+      jenis_bayar: getJenisBayar(),
+      dp: dpMode ? String(parseMoney($('#dpInput').value)) : '0',
       jobs: state.jobs.map((job) => ({
         deskripsi: job.deskripsi || 'Jasa',
         jumlah: Math.max(1, intValue(job.jumlah, 1)),
@@ -1241,15 +1322,18 @@
 
   function renderPreview(preview, error) {
     const transfer = getMetode() === 'TRANSFER';
+    const dpMode = getJenisBayar() === 'DP';
     const paidInput = $('#bayarInput');
-    paidInput.disabled = transfer;
+    paidInput.disabled = transfer || dpMode;
     $('#bankInfo').classList.toggle('hidden', !transfer);
+    $('#dpSummaryRow').classList.toggle('hidden', !dpMode);
 
     if (error) {
       $('#jobSubtotal').textContent = '\u2014';
       $('#partSubtotal').textContent = '\u2014';
       $('#grandTotalValue').textContent = '\u2014';
       $('#kembalianValue').textContent = '\u2014';
+      $('#dpSisaValue').textContent = '\u2014';
       setLineSubtotals('job', null);
       setLineSubtotals('part', null);
       setSummaryNote(error);
@@ -1265,19 +1349,23 @@
       if (zeroChange.parentElement) {
         zeroChange.parentElement.classList.remove('short');
       }
+      $('#dpSisaValue').textContent = 'Rp 0';
       setLineSubtotals('job', null);
       setLineSubtotals('part', null);
       setSummaryNote('Perkiraan sementara. Nilai final dicatat saat nota disimpan.');
       return;
     }
 
-    if (transfer) setMoneyValue(paidInput, moneyToCents(preview.total_servis) / 100);
+    if (transfer && !dpMode) {
+      setMoneyValue(paidInput, moneyToCents(preview.total_servis) / 100);
+    }
 
     setLineSubtotals('job', preview.jobs);
     setLineSubtotals('part', preview.parts);
     $('#jobSubtotal').textContent = fmtRp(preview.biaya_jasa);
     $('#partSubtotal').textContent = fmtRp(preview.total_part);
     $('#grandTotalValue').textContent = fmtRp(preview.total_servis);
+    $('#dpSisaValue').textContent = fmtRp(preview.sisa_bayar);
 
     const kurang = Number(preview.kekurangan) > 0;
     const changeEl = $('#kembalianValue');
@@ -1309,10 +1397,13 @@
   function updateSummary() {
     const diskonInput = $('#diskonInput');
     const bayarInput = $('#bayarInput');
+    const dpInput = $('#dpInput');
     const cash = getMetode() === 'CASH';
+    const dpMode = getJenisBayar() === 'DP';
     if (
       !moneyInputValid(diskonInput.value) ||
-      (cash && !moneyInputValid(bayarInput.value))
+      (cash && !dpMode && !moneyInputValid(bayarInput.value)) ||
+      (dpMode && !moneyInputValid(dpInput.value))
     ) {
       renderPreview(
         null,
@@ -1326,8 +1417,28 @@
 
   function handlePaymentModeChange() {
     const transfer = getMetode() === 'TRANSFER';
-    $('#bayarInput').disabled = transfer;
+    $('#bayarInput').disabled = transfer || getJenisBayar() === 'DP';
     $('#bankInfo').classList.toggle('hidden', !transfer);
+    updateSummary();
+  }
+
+  function updateJenisBayar() {
+    const dpMode = getJenisBayar() === 'DP';
+    $('#lunasFields').classList.toggle('hidden', dpMode);
+    $('#dpFields').classList.toggle('hidden', !dpMode);
+    $('#dpSummaryRow').classList.toggle('hidden', !dpMode);
+    $$('#jenisBayarSwitch button').forEach((button) => {
+      button.classList.toggle('active', button.dataset.jenis === getJenisBayar());
+    });
+    if (dpMode && !$('#jatuhTempoInput').value) {
+      const days = intValue(
+        state.config && state.config.ops ? state.config.ops.tempo_hari : 7,
+        7
+      );
+      const target = new Date();
+      target.setDate(target.getDate() + days);
+      $('#jatuhTempoInput').value = toISODate(target);
+    }
     updateSummary();
   }
 
@@ -1404,8 +1515,11 @@
     $('#catatanPengerjaan').value = '';
     $('#diskonInput').value = '0';
     $('#bayarInput').value = '';
+    $('#dpInput').value = '';
+    $('#jatuhTempoInput').value = '';
     $('#metodeCash').checked = true;
     $('#metodeTransfer').checked = false;
+    state.jenisBayar = 'LUNAS';
     $('#garansiAktif').checked = true;
 
     if (state.config) {
@@ -1416,6 +1530,7 @@
     setUnitType('MOBIL');
     resetUnitForm();
     updateGaransiFields();
+    updateJenisBayar();
     state.preview = null;
     state.previewError = null;
     state.previewSeq += 1;
@@ -1432,9 +1547,10 @@
   /* ---------------------------- Transaction ------------------------------- */
   function buildTransactionPayload() {
     const metode = getMetode();
+    const dpMode = getJenisBayar() === 'DP';
     // Server menghitung nilai final; frontend hanya mengirim angka mentah.
     const paid =
-      metode === 'CASH' ? parseMoney($('#bayarInput').value) : 0;
+      !dpMode && metode === 'CASH' ? parseMoney($('#bayarInput').value) : 0;
 
     return {
       unit_id: state.selectedUnit.id,
@@ -1443,6 +1559,9 @@
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar: String(paid),
+      jenis_bayar: getJenisBayar(),
+      dp: dpMode ? String(parseMoney($('#dpInput').value)) : '0',
+      jatuh_tempo: dpMode ? $('#jatuhTempoInput').value || null : null,
       bergaransi: $('#garansiAktif').checked,
       garansi_bulan: garansiBulanValue(),
       catatan_garansi: $('#garansiCatatan').value.trim() || null,
@@ -1451,6 +1570,7 @@
         deskripsi: job.deskripsi,
         jumlah: Math.max(1, intValue(job.jumlah, 1)),
         harga: String(parseMoney(job.harga)),
+        interval_servis_bulan: clampInterval(job.interval_servis_bulan),
       })),
       parts: state.parts.map((part) => ({
         stock_item_id: part.stock_item_id || null,
@@ -1486,12 +1606,27 @@
     }
     if (
       !moneyInputValid($('#diskonInput').value) ||
-      (getMetode() === 'CASH' && !moneyInputValid($('#bayarInput').value)) ||
+      (getMetode() === 'CASH' &&
+        getJenisBayar() !== 'DP' &&
+        !moneyInputValid($('#bayarInput').value)) ||
+      (getJenisBayar() === 'DP' && !moneyInputValid($('#dpInput').value)) ||
       state.jobs.some((job) => !moneyInputValid(job.harga)) ||
       state.parts.some((part) => !moneyInputValid(part.harga_satuan))
     ) {
       toast('Angka uang harus rupiah bulat tanpa desimal.', 'warning');
       return;
+    }
+    if (getJenisBayar() === 'DP') {
+      if (parseMoney($('#dpInput').value) <= 0) {
+        toast('Isi DP lebih dari Rp 0.', 'warning');
+        $('#dpInput').focus();
+        return;
+      }
+      if (!$('#jatuhTempoInput').value) {
+        toast('Isi tanggal jatuh tempo pelunasan.', 'warning');
+        $('#jatuhTempoInput').focus();
+        return;
+      }
     }
     if (state.previewError) {
       toast(state.previewError, 'warning');
@@ -1624,6 +1759,145 @@
     );
     syncReceiptWidthUI();
     renderReceiptPreview();
+  }
+
+  /* ------------------------------ WhatsApp -------------------------------- */
+  function waDigits(value) {
+    return String(value == null ? '' : value).replace(/\D/g, '');
+  }
+
+  function waLink(number, text) {
+    let target = waDigits(number);
+    if (!target) return '';
+    if (target.charAt(0) === '0') {
+      target = '62' + target.slice(1);
+    } else if (target.charAt(0) === '8') {
+      target = '62' + target;
+    }
+    const suffix = text ? '?text=' + encodeURIComponent(text) : '';
+    return 'https://wa.me/' + target + suffix;
+  }
+
+  async function copyText(value, successMessage) {
+    const text = String(value == null ? '' : value);
+    if (!text.trim()) {
+      toast('Tidak ada teks untuk disalin.', 'warning');
+      return false;
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+      toast(successMessage || 'Teks disalin.', 'success');
+      return true;
+    } catch (err) {
+      toast('Gagal menyalin. Salin manual dari kotak teks.', 'warning');
+      return false;
+    }
+  }
+
+  function waStatusLabel(status) {
+    if (status === 'DIBUKA') return 'Dibuka';
+    if (status === 'DIBATALKAN') return 'Dibatalkan';
+    if (status === 'TIDAK_TERSEDIA') return 'Nomor tidak tersedia';
+    return status || '-';
+  }
+
+  function openWaPreview(options) {
+    const opts = options || {};
+    const link = opts.link || waLink(opts.nomor, opts.text);
+    state.waPreview = {
+      link: link,
+      disabled: Boolean(opts.disabled),
+      onOpen: typeof opts.onOpen === 'function' ? opts.onOpen : null,
+    };
+    $('#waModalTitle').textContent = opts.judul || 'Pesan WhatsApp';
+    $('#waModalSubtitle').textContent =
+      opts.subtitle || 'Periksa pesan sebelum dibuka di WhatsApp.';
+    $('#waModalNumber').value = opts.masked || opts.nomor || '-';
+    $('#waModalText').value = opts.text || '';
+    $('#waModalNote').textContent =
+      opts.note ||
+      'Pesan hanya dibuka di WhatsApp, tidak dikirim otomatis. Upaya dicatat saat tombol dibuka.';
+    const open = $('#waModalOpen');
+    if (!link || opts.disabled) {
+      open.classList.add('hidden');
+    } else {
+      open.classList.remove('hidden');
+      open.href = link;
+    }
+    openModal('#waModal');
+  }
+
+  async function handleWaOpen(event) {
+    const preview = state.waPreview;
+    if (!preview || preview.disabled || !preview.link) {
+      event.preventDefault();
+      return;
+    }
+    const onOpen = preview.onOpen;
+    state.waPreview = null;
+    closeModal('#waModal');
+    if (!onOpen) return;
+    try {
+      await onOpen();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  function receiptWaNumber(receipt) {
+    return receipt.customer_wa || receipt.customer_hp || '';
+  }
+
+  function openReceiptWhatsapp(receipt) {
+    if (!receipt) return;
+    if (!receipt.wa_consent) {
+      toast('Pelanggan belum menyetujui pesan WhatsApp.', 'warning');
+      return;
+    }
+    if (!waDigits(receiptWaNumber(receipt))) {
+      toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
+      return;
+    }
+    if (!(receipt.wa_text || '').trim()) {
+      toast('Pesan WhatsApp untuk nota ini belum tersedia.', 'warning');
+      return;
+    }
+    openWaPreview({
+      judul: 'WhatsApp nota ' + receipt.no_nota,
+      subtitle: 'Periksa pesan untuk ' + receipt.customer_nama + '.',
+      nomor: receiptWaNumber(receipt),
+      text: receipt.wa_text,
+      note: 'Membuka WhatsApp akan mencatat upaya kirim. Kasir tetap menekan tombol kirim di WhatsApp.',
+      onOpen: async () => {
+        await API.recordWhatsapp(receipt.id, { status: 'DIBUKA' });
+        toast('Upaya WhatsApp nota ' + receipt.no_nota + ' tercatat.', 'success');
+        if (state.detailRecord && state.detailRecord.id === receipt.id) {
+          await loadRecordExtras(receipt.id);
+        }
+      },
+    });
+  }
+
+  function maybeOfferWhatsapp(receipt) {
+    if (!receipt) return;
+    const ops = state.config && state.config.ops;
+    if (!ops || !ops.wa_after_print) return;
+    if (state.waOffered.has(receipt.id)) return;
+    if (!receipt.wa_consent) return;
+    if (!waDigits(receiptWaNumber(receipt))) return;
+    state.waOffered.add(receipt.id);
+    openReceiptWhatsapp(receipt);
   }
 
   function hasNativeBridge() {
@@ -1830,6 +2104,7 @@
         'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
         {}
       );
+      maybeOfferWhatsapp(receipt);
       return true;
     }
 
@@ -1925,6 +2200,7 @@
         );
       }
       toast('Perintah cetak dikirim ke ' + target.name + '.', 'success');
+      maybeOfferWhatsapp(receipt);
       return true;
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
@@ -3018,10 +3294,79 @@
       $('#statTransfer').textContent = fmtRp(daily.total_transfer);
       $('#statWarranty').textContent = daily.garansi_aktif;
 
+      $('#statReceivable').textContent = fmtRp(daily.piutang_total);
+      $('#statReceivableSub').textContent =
+        (daily.piutang_count || 0) +
+        ' nota · ' +
+        (daily.piutang_customers || 0) +
+        ' pelanggan';
+      $('#statDueService').textContent = daily.servis_berkala_due || 0;
+      $('#statWarrantyEnding').textContent = daily.garansi_akan_habis || 0;
+      $('#statFollowupToday').textContent = daily.followup_hari_ini || 0;
+
       renderRecent(records.slice(0, 6));
+
+      let reminders = [];
+      try {
+        reminders = await API.followupReminders();
+      } catch (err) {
+        reminders = [];
+      }
+      renderReminders(reminders);
     } catch (err) {
       toast('Ringkasan hari ini gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
+  }
+
+  function reminderAmount(row) {
+    if (row.jenis !== 'piutang') return '';
+    const cents = (row.rincian || []).reduce(
+      (acc, line) => acc + moneyToCents(line.sisa_bayar),
+      0
+    );
+    return cents > 0 ? 'Sisa ' + centsToRp(cents) : '';
+  }
+
+  function renderReminders(rows) {
+    const list = $('#reminderList');
+    const empty = $('#reminderEmpty');
+    if (!list || !empty) return;
+    const items = rows || [];
+    if (!items.length) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    list.innerHTML = items
+      .map((row) => {
+        const amount = reminderAmount(row);
+        const meta = [row.unit_deskripsi, amount, row.no_nota ? 'Nota ' + row.no_nota : '']
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          '<button type="button" class="reminder-item" data-action="followup-detail" data-id="' +
+          row.id +
+          '">' +
+          '<span class="badge ' +
+          jenisTone(row.jenis) +
+          '">' +
+          esc(row.jenis_label) +
+          '</span>' +
+          '<span class="reminder-main"><strong>' +
+          esc(row.customer_nama) +
+          '</strong><small>' +
+          esc(meta) +
+          '</small></span>' +
+          '<span class="reminder-side"><strong>' +
+          esc(dueLabel(row)) +
+          '</strong><small>' +
+          esc(fmtDate(row.jatuh_tempo)) +
+          '</small></span>' +
+          '</button>'
+        );
+      })
+      .join('');
   }
 
   function renderRecent(records) {
@@ -3066,6 +3411,7 @@
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
           '</td>' +
           '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
           record.id +
@@ -3140,6 +3486,7 @@
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
           '</td>' +
           '<td>' +
           warrantyBadge(record) +
@@ -3262,6 +3609,7 @@
             '</td>' +
             '<td>' +
             metodeBadge(record.metode_bayar) +
+            paymentBadge(record) +
             '</td>' +
             '</tr>'
         )
@@ -3402,6 +3750,127 @@
     );
   }
 
+  function paymentSectionHtml(receipt) {
+    if (receipt.status === 'VOID') return '';
+    const payments = state.detailPayments || [];
+    const rows = payments
+      .map(
+        (payment) =>
+          '<div class="payment-row"><div><small>' +
+          esc(fmtDateTime(payment.waktu)) +
+          ' · ' +
+          esc(payment.operator || '-') +
+          '</small><div>' +
+          esc(payment.jenis || 'PEMBAYARAN') +
+          ' · ' +
+          esc(payment.metode || '-') +
+          (payment.catatan ? ' · ' + esc(payment.catatan) : '') +
+          '</div></div><strong>' +
+          fmtRp(payment.nominal) +
+          '</strong></div>'
+      )
+      .join('');
+    const sisa = moneyToCents(receipt.sisa_bayar);
+    const canPay = receipt.status_bayar === 'BELUM_LUNAS' && sisa > 0;
+    const form = canPay
+      ? '<div class="payment-form">' +
+        '<div class="form-grid">' +
+        '<label class="field"><span>Nominal pembayaran</span>' +
+        '<input type="text" class="input money-input" id="paymentNominal" inputmode="numeric" placeholder="0"></label>' +
+        '<label class="field"><span>Metode</span>' +
+        '<select class="input" id="paymentMetode">' +
+        '<option value="CASH">Tunai</option>' +
+        '<option value="TRANSFER">Transfer</option>' +
+        '</select></label>' +
+        '</div>' +
+        '<label class="field"><span>Catatan (opsional)</span>' +
+        '<input type="text" class="input" id="paymentCatatan" maxlength="500" placeholder="Contoh: pelunasan transfer"></label>' +
+        '<div class="payment-form-actions">' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="payment-fill-sisa">Isi sisa</button>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="payment-submit" data-id="' +
+        receipt.id +
+        '">Catat pembayaran</button>' +
+        '</div></div>'
+      : '';
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Pembayaran</h4>' +
+      '<div class="detail-grid">' +
+      detailItem('Status bayar', paymentBadge(receipt) || '-') +
+      detailItem('Total dibayar', fmtRp(receipt.total_dibayar)) +
+      detailItem('Sisa bayar', fmtRp(receipt.sisa_bayar)) +
+      detailItem(
+        'Jatuh tempo',
+        esc(receipt.jatuh_tempo ? fmtDate(receipt.jatuh_tempo) : '-')
+      ) +
+      '</div>' +
+      (payments.length
+        ? '<div class="payment-list">' + rows + '</div>'
+        : '<div class="empty-state sm">Belum ada pembayaran tercatat.</div>') +
+      form +
+      '</div>'
+    );
+  }
+
+  function waSectionHtml(receipt) {
+    const logs = state.detailWaLogs || [];
+    const number = receiptWaNumber(receipt);
+    const canSend =
+      receipt.status !== 'VOID' &&
+      receipt.wa_consent &&
+      Boolean(waDigits(number)) &&
+      Boolean((receipt.wa_text || '').trim());
+    let hint = '';
+    if (!receipt.wa_consent) {
+      hint = 'Pelanggan belum menyetujui pesan WhatsApp.';
+    } else if (!waDigits(number)) {
+      hint = 'Nomor HP pelanggan belum valid untuk WhatsApp.';
+    } else if (!(receipt.wa_text || '').trim()) {
+      hint = 'Pesan WhatsApp belum tersedia untuk nota ini.';
+    }
+    const rows = logs
+      .map((log) => {
+        const tone =
+          log.status === 'DIBUKA'
+            ? 'green'
+            : log.status === 'TIDAK_TERSEDIA'
+              ? 'red'
+              : 'gray';
+        return (
+          '<div class="wa-log-row"><div><strong>' +
+          esc(waStatusLabel(log.status)) +
+          '</strong><small>' +
+          esc(fmtDateTime(log.created_at)) +
+          ' · ' +
+          esc(log.operator || '-') +
+          ' · ' +
+          esc(log.nomor_masked || '-') +
+          '</small></div><span class="badge ' +
+          tone +
+          '">' +
+          esc(log.status) +
+          '</span></div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">WhatsApp</h4>' +
+      (hint ? '<p class="tiny muted">' + esc(hint) + '</p>' : '') +
+      '<div class="form-actions">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="record-wa" data-id="' +
+      receipt.id +
+      '"' +
+      (canSend ? '' : ' disabled') +
+      '>Buka WhatsApp</button>' +
+      '</div>' +
+      (logs.length
+        ? '<div class="wa-log-list">' + rows + '</div>'
+        : '<div class="empty-state sm">Belum ada upaya WhatsApp untuk nota ini.</div>') +
+      '</div>'
+    );
+  }
+
   function renderRecordDetail(receipt) {
     const jobs = receipt.jobs || [];
     const parts = receipt.parts || [];
@@ -3538,6 +4007,8 @@
           esc(receipt.catatan_garansi) +
           '</p></div>'
         : '') +
+      paymentSectionHtml(receipt) +
+      waSectionHtml(receipt) +
       returnHistoryHtml(state.detailReturns) +
       (state.returnMode ? returnFormHtml(receipt) : '');
 
@@ -3562,11 +4033,18 @@
   async function openRecordDetail(id) {
     if (!id) return;
     try {
-      const results = await Promise.all([API.receipt(id), API.returns(id)]);
+      const results = await Promise.all([
+        API.receipt(id),
+        API.returns(id),
+        API.payments(id),
+        API.recordWhatsappLogs(id),
+      ]);
       const receipt = results[0];
       const source = findRecordById(id);
       state.detailRecord = receipt;
       state.detailReturns = results[1] || [];
+      state.detailPayments = results[2] || [];
+      state.detailWaLogs = results[3] || [];
       state.detailRecordCustomerId = source ? source.customer_id : null;
       state.returnMode = false;
       renderRecordDetail(receipt);
@@ -3574,6 +4052,86 @@
     } catch (err) {
       toast('Detail nota gagal dimuat. Coba lagi.', 'error', 6000);
     }
+  }
+
+  async function loadRecordExtras(recordId) {
+    if (!recordId) return;
+    const results = await Promise.all([
+      API.payments(recordId),
+      API.recordWhatsappLogs(recordId),
+    ]);
+    state.detailPayments = results[0] || [];
+    state.detailWaLogs = results[1] || [];
+    if (state.detailRecord && state.detailRecord.id === recordId) {
+      renderRecordDetail(state.detailRecord);
+    }
+  }
+
+  function paymentRequestId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return (
+      'pay-' +
+      Date.now().toString(36) +
+      '-' +
+      Math.random().toString(36).slice(2, 10)
+    );
+  }
+
+  async function submitPayment(recordId) {
+    const record = state.detailRecord;
+    if (!record || record.id !== recordId) return;
+    const nominal = readMoneyInput($('#paymentNominal'), 'Nominal pembayaran');
+    if (nominal === null) return;
+    if (nominal <= 0) {
+      toast('Nominal pembayaran harus lebih dari nol.', 'warning');
+      return;
+    }
+    if (nominal > moneyToCents(record.sisa_bayar)) {
+      toast('Nominal melebihi sisa bayar nota.', 'warning');
+      return;
+    }
+    const metodeEl = $('#paymentMetode');
+    const noteEl = $('#paymentCatatan');
+    const button = $('[data-action="payment-submit"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const result = await API.createPayment(recordId, {
+        nominal: String(nominal),
+        metode: metodeEl ? metodeEl.value : 'CASH',
+        catatan: noteEl && noteEl.value.trim() ? noteEl.value.trim() : null,
+        request_id: paymentRequestId(),
+      });
+      if (result.status_bayar === 'LUNAS') {
+        toast('Nota ' + record.no_nota + ' lunas.', 'success');
+      } else {
+        toast(
+          'Pembayaran tercatat. Sisa ' + fmtRp(result.sisa_bayar) + '.',
+          'success'
+        );
+      }
+      await refreshAfterRecordChange(recordId);
+      if (!$('#receivablesModal').classList.contains('hidden')) {
+        loadReceivables();
+      }
+      if (result.status_bayar === 'LUNAS' && result.receipt) {
+        showReceipt(result.receipt);
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function fillPaymentSisa() {
+    const record = state.detailRecord;
+    if (!record) return;
+    const input = $('#paymentNominal');
+    if (!input) return;
+    setMoneyValue(input, Math.round(moneyToCents(record.sisa_bayar) / 100));
+    input.focus();
   }
 
   function renderCustomerDetail(customer) {
@@ -3620,7 +4178,139 @@
       '<div class="detail-unit-list">' +
       unitsHtml +
       '</div></div>' +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Persetujuan WhatsApp</h4>' +
+      '<label class="switch-row"><span>Pelanggan setuju dihubungi lewat WhatsApp</span>' +
+      '<input type="checkbox" data-customer-consent data-customer-id="' +
+      customer.id +
+      '"' +
+      (customer.wa_consent === false ? '' : ' checked') +
+      '><span class="switch-ui" aria-hidden="true"></span></label>' +
+      '<p class="tiny muted">Bila dimatikan, tombol WhatsApp dan pesan otomatis dinonaktifkan untuk pelanggan ini.</p>' +
+      '</div>' +
+      '<div class="detail-section" id="customerReceivableSection"></div>' +
+      '<div class="detail-section" id="customerFollowupSection"></div>' +
       '<div class="detail-section" id="customerHistorySection"></div>';
+  }
+
+  function renderCustomerReceivables(data) {
+    const section = $('#customerReceivableSection');
+    if (!section) return;
+    const count = intValue(data && data.jumlah_nota, 0);
+    const total = data ? data.total_sisa : 0;
+    if (!count) {
+      section.innerHTML =
+        '<h4 class="detail-section-title">Piutang</h4>' +
+        '<div class="empty-state sm">Tidak ada piutang berjalan.</div>';
+      return;
+    }
+    section.innerHTML =
+      '<h4 class="detail-section-title">Piutang</h4>' +
+      '<div class="receivable-head"><div><strong>' +
+      count +
+      ' nota belum lunas</strong><span>Total sisa ' +
+      fmtRp(total) +
+      '</span></div>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="customer-receivables" data-id="' +
+      intValue(state.detailCustomer && state.detailCustomer.id, 0) +
+      '">Lihat rincian</button></div>';
+  }
+
+  function renderCustomerFollowups(result) {
+    const section = $('#customerFollowupSection');
+    if (!section) return;
+    const items = (result && result.items) || [];
+    section.innerHTML =
+      '<h4 class="detail-section-title">Follow-up (' +
+      items.length +
+      ')</h4>' +
+      (items.length
+        ? '<div class="detail-history-list">' +
+          items
+            .map(
+              (item) =>
+                '<button type="button" class="detail-history-item" data-action="followup-detail" data-id="' +
+                item.id +
+                '"><span class="detail-history-main"><span class="detail-history-note">' +
+                esc(item.jenis_label) +
+                '</span><span class="detail-history-unit">' +
+                esc(item.judul || '-') +
+                '</span></span><span class="detail-history-side"><span class="detail-history-date">' +
+                esc(dueLabel(item)) +
+                '</span><span class="detail-history-total">' +
+                esc(item.status_label) +
+                '</span></span></button>'
+            )
+            .join('') +
+          '</div>'
+        : '<div class="empty-state sm">Tidak ada follow-up aktif.</div>');
+  }
+
+  async function loadCustomerExtras(customer) {
+    if (!customer) return;
+    const receivableSection = $('#customerReceivableSection');
+    if (receivableSection) {
+      receivableSection.innerHTML =
+        '<h4 class="detail-section-title">Piutang</h4>' +
+        '<div class="empty-state sm">Memuat piutang...</div>';
+    }
+    try {
+      const data = await API.customerReceivables(customer.id);
+      if (state.detailCustomer && state.detailCustomer.id === customer.id) {
+        renderCustomerReceivables(data);
+      }
+    } catch (err) {
+      if (receivableSection) {
+        receivableSection.innerHTML =
+          '<h4 class="detail-section-title">Piutang</h4>' +
+          '<div class="empty-state sm">Piutang gagal dimuat.</div>';
+      }
+    }
+    const followupSection = $('#customerFollowupSection');
+    if (followupSection) {
+      followupSection.innerHTML =
+        '<h4 class="detail-section-title">Follow-up</h4>' +
+        '<div class="empty-state sm">Memuat follow-up...</div>';
+    }
+    try {
+      const result = await API.followupItems('semua', null, customer.id);
+      if (state.detailCustomer && state.detailCustomer.id === customer.id) {
+        renderCustomerFollowups(result);
+      }
+    } catch (err) {
+      if (followupSection) {
+        followupSection.innerHTML =
+          '<h4 class="detail-section-title">Follow-up</h4>' +
+          '<div class="empty-state sm">Follow-up gagal dimuat.</div>';
+      }
+    }
+  }
+
+  async function handleCustomerConsent(input) {
+    const id = intValue(input.dataset.customerId, 0);
+    if (!id) return;
+    input.disabled = true;
+    try {
+      const updated = await API.setCustomerConsent(id, input.checked);
+      if (state.detailCustomer && state.detailCustomer.id === id) {
+        state.detailCustomer.wa_consent = updated.wa_consent;
+      }
+      const directoryItem = state.customerDirectory.find(
+        (item) => item.id === id
+      );
+      if (directoryItem) directoryItem.wa_consent = updated.wa_consent;
+      toast(
+        updated.wa_consent
+          ? 'Pelanggan setuju dihubungi lewat WhatsApp.'
+          : 'Persetujuan WhatsApp pelanggan dimatikan.',
+        'success'
+      );
+    } catch (err) {
+      input.checked = !input.checked;
+      toast(err.message, 'error', 6000);
+    } finally {
+      input.disabled = false;
+    }
   }
 
   function customerHistoryItem(record) {
@@ -3648,6 +4338,7 @@
       '</span>' +
       '<span class="detail-history-badges">' +
       metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
       warrantyBadge(record) +
       '</span>' +
       '</button>'
@@ -3713,7 +4404,487 @@
     state.detailCustomer = customer;
     renderCustomerDetail(customer);
     openModal('#customerDetailModal');
+    loadCustomerExtras(customer);
     loadCustomerHistory(customer);
+  }
+
+  /* ------------------------------ Follow-up ------------------------------- */
+  const FOLLOWUP_COLUMNS = [
+    { status: 'BARU', label: 'Baru', tone: 'blue' },
+    { status: 'SUDAH_FOLLOWUP', label: 'Sudah follow up', tone: 'amber' },
+    { status: 'JANJI_BAYAR', label: 'Janji bayar', tone: 'amber' },
+    { status: 'MASIH_KENDALA', label: 'Masih kendala', tone: 'red' },
+    { status: 'SELESAI', label: 'Selesai', tone: 'green' },
+    { status: 'ARSIP', label: 'Arsip', tone: 'gray' },
+  ];
+
+  function followupCardHtml(item) {
+    const late =
+      item.terlambat && item.status !== 'SELESAI' && item.status !== 'ARSIP';
+    const assignee = item.penanggung_jawab
+      ? '<span class="badge blue">' + esc(item.penanggung_jawab) + '</span>'
+      : '<span class="badge amber">Belum ditugaskan</span>';
+    return (
+      '<div class="followup-card' +
+      (late ? ' is-late' : '') +
+      '" role="button" tabindex="0" data-action="followup-detail" data-id="' +
+      item.id +
+      '">' +
+      '<div class="followup-card-top"><span class="badge ' +
+      jenisTone(item.jenis) +
+      '">' +
+      esc(item.jenis_label) +
+      '</span><span class="cell-sub">' +
+      esc(dueLabel(item)) +
+      '</span></div>' +
+      '<div class="followup-card-title">' +
+      esc(item.customer_nama) +
+      '</div>' +
+      '<div class="followup-card-meta"><strong>' +
+      esc(item.judul) +
+      '</strong><br>' +
+      esc(item.unit_deskripsi || '-') +
+      '</div>' +
+      '<div class="followup-card-badges">' +
+      (item.status === 'BARU'
+        ? ''
+        : '<span class="badge gray">' + esc(item.status_label) + '</span>') +
+      (item.no_nota
+        ? '<span class="badge gray">' + esc(item.no_nota) + '</span>'
+        : '') +
+      assignee +
+      '</div></div>'
+    );
+  }
+
+  function renderFollowupBoard() {
+    const board = $('#followupBoard');
+    const empty = $('#followupEmpty');
+    const meta = $('#followupMeta');
+    if (!board) return;
+    const items = state.followupItems || [];
+    if (meta) meta.textContent = items.length + ' item';
+    const archived = state.followupFilter === 'arsip';
+    const columns = FOLLOWUP_COLUMNS.filter(
+      (column) => !archived || column.status === 'ARSIP'
+    );
+    board.innerHTML = columns
+      .map((column) => {
+        const list = archived
+          ? items
+          : items.filter((item) => item.status === column.status);
+        return (
+          '<section class="followup-column"><div class="followup-col-head"><strong>' +
+          esc(column.label) +
+          '</strong><span class="badge ' +
+          column.tone +
+          '">' +
+          list.length +
+          '</span></div><div class="followup-col-body">' +
+          (list.length
+            ? list.map(followupCardHtml).join('')
+            : '<div class="followup-col-empty">Tidak ada item.</div>') +
+          '</div></section>'
+        );
+      })
+      .join('');
+    board.classList.toggle('hidden', items.length === 0);
+    if (empty) empty.classList.toggle('hidden', items.length > 0);
+  }
+
+  async function loadFollowup() {
+    const board = $('#followupBoard');
+    if (!board) return;
+    const filterEl = $('#followupFilter');
+    const jenisEl = $('#followupJenis');
+    if (filterEl) state.followupFilter = filterEl.value || 'semua';
+    if (jenisEl) state.followupJenis = jenisEl.value || '';
+    board.classList.remove('hidden');
+    board.innerHTML = '<div class="empty-state sm">Memuat follow-up...</div>';
+    const empty = $('#followupEmpty');
+    if (empty) empty.classList.add('hidden');
+    try {
+      const result = await API.followupItems(
+        state.followupFilter,
+        state.followupJenis,
+        null
+      );
+      state.followupItems = result.items || [];
+      renderFollowupBoard();
+    } catch (err) {
+      state.followupItems = [];
+      board.innerHTML =
+        '<div class="empty-state sm">Follow-up gagal dimuat. Coba lagi.</div>';
+      const meta = $('#followupMeta');
+      if (meta) meta.textContent = '0 item';
+    }
+  }
+
+  function openFollowupView(jenis) {
+    state.followupFilter = 'semua';
+    state.followupJenis = jenis || '';
+    const filterEl = $('#followupFilter');
+    const jenisEl = $('#followupJenis');
+    if (filterEl) filterEl.value = 'semua';
+    if (jenisEl) jenisEl.value = jenis || '';
+    navigate('followup');
+  }
+
+  function followupRincianHtml(item) {
+    const rows = item.rincian || [];
+    if (!rows.length) return '';
+    return (
+      '<div class="detail-section"><h4 class="detail-section-title">Rincian</h4>' +
+      rows
+        .map((row) => {
+          const bits = [];
+          if (row.no_nota) bits.push('Nota ' + row.no_nota);
+          if (row.tanggal_servis) bits.push(fmtDate(row.tanggal_servis));
+          if (row.pekerjaan) bits.push(row.pekerjaan);
+          const money = [];
+          if (row.total_servis != null) money.push('Total ' + fmtRp(row.total_servis));
+          if (row.sisa_bayar != null && moneyToCents(row.sisa_bayar) > 0) {
+            money.push('Sisa ' + fmtRp(row.sisa_bayar));
+          }
+          return (
+            '<div class="detail-text">' +
+            esc(bits.join(' · ') || '-') +
+            (money.length ? '<br><span class="cell-sub">' + esc(money.join(' · ')) + '</span>' : '') +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function followupEventsHtml(events) {
+    if (!events.length) return '';
+    return (
+      '<div class="detail-section"><h4 class="detail-section-title">Riwayat tindakan</h4>' +
+      '<div class="followup-event-list">' +
+      events
+        .map(
+          (event) =>
+            '<div class="followup-event"><div><strong>' +
+            esc(event.from_status || '-') +
+            ' → ' +
+            esc(event.to_status) +
+            '</strong>' +
+            (event.alasan ? '<div>' + esc(event.alasan) + '</div>' : '') +
+            '<small>' +
+            esc(fmtDateTime(event.created_at)) +
+            ' · ' +
+            esc(event.operator || '-') +
+            '</small></div></div>'
+        )
+        .join('') +
+      '</div></div>'
+    );
+  }
+
+  function followupStatusOptions(current) {
+    return FOLLOWUP_COLUMNS.map(
+      (column) =>
+        '<option value="' +
+        column.status +
+        '"' +
+        (column.status === current ? ' selected' : '') +
+        '>' +
+        esc(column.label) +
+        '</option>'
+    ).join('');
+  }
+
+  function renderFollowupDetail(detail) {
+    const item = detail.item;
+    const events = detail.events || [];
+    $('#followupModalTitle').textContent = item.customer_nama;
+    $('#followupModalSubtitle').textContent =
+      item.jenis_label + ' · ' + item.judul + ' · ' + dueLabel(item);
+    const cooldownHint =
+      item.cooldown_sampai && !item.bisa_followup
+        ? 'Bisa follow up lagi setelah ' + fmtDateTime(item.cooldown_sampai) + '.'
+        : '';
+    const consentHint = item.wa_consent
+      ? ''
+      : 'Pelanggan belum menyetujui pesan WhatsApp.';
+    const assignButton = item.penanggung_jawab
+      ? '<button type="button" class="btn btn-outline btn-sm" data-action="followup-release" data-id="' +
+        item.id +
+        '">Lepas tugas</button>'
+      : '<button type="button" class="btn btn-outline btn-sm" data-action="followup-assign" data-id="' +
+        item.id +
+        '">Ambil tugas</button>';
+    $('#followupDetailBody').innerHTML =
+      '<div class="followup-detail-head">' +
+      '<span class="badge ' +
+      jenisTone(item.jenis) +
+      '">' +
+      esc(item.jenis_label) +
+      '</span>' +
+      '<span class="badge gray">' +
+      esc(item.status_label) +
+      '</span>' +
+      '<span class="badge ' +
+      (item.terlambat ? 'red' : 'gray') +
+      '">' +
+      esc(dueLabel(item)) +
+      '</span>' +
+      (item.penanggung_jawab
+        ? '<span class="badge blue">' + esc(item.penanggung_jawab) + '</span>'
+        : '<span class="badge amber">Belum ditugaskan</span>') +
+      '</div>' +
+      '<div class="detail-grid">' +
+      detailItem('Pelanggan', esc(item.customer_nama + ' · ' + item.nomor_masked)) +
+      detailItem('Unit', esc(item.unit_deskripsi || '-')) +
+      detailItem('Jatuh tempo', esc(item.jatuh_tempo ? fmtDate(item.jatuh_tempo) : '-')) +
+      detailItem(
+        'Follow up terakhir',
+        esc(item.followup_terakhir ? fmtDateTime(item.followup_terakhir) : '-')
+      ) +
+      '</div>' +
+      (cooldownHint
+        ? '<p class="tiny muted">' + esc(cooldownHint) + '</p>'
+        : '') +
+      (consentHint ? '<p class="tiny muted">' + esc(consentHint) + '</p>' : '') +
+      '<div class="followup-actions">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="followup-wa" data-id="' +
+      item.id +
+      '"' +
+      (item.bisa_followup ? '' : ' disabled') +
+      '>Buka WhatsApp</button>' +
+      assignButton +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="customer-detail" data-id="' +
+      item.customer_id +
+      '">Lihat pelanggan</button>' +
+      (item.service_record_id
+        ? '<button type="button" class="btn btn-outline btn-sm" data-action="record-detail" data-id="' +
+          item.service_record_id +
+          '">Buka nota</button>'
+        : '') +
+      '</div>' +
+      followupRincianHtml(item) +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Pesan WhatsApp</h4>' +
+      '<p class="detail-text">' +
+      esc(detail.pesan || '-') +
+      '</p></div>' +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Ubah status</h4>' +
+      '<div class="followup-form">' +
+      '<div class="form-grid">' +
+      '<label class="field"><span>Status</span><select class="input" id="followupStatusSelect">' +
+      followupStatusOptions(item.status) +
+      '</select></label>' +
+      '<label class="field"><span>Janji bayar (untuk JANJI_BAYAR)</span>' +
+      '<input type="date" class="input" id="followupJanji" value="' +
+      esc(item.janji_bayar || '') +
+      '"></label>' +
+      '</div>' +
+      '<label class="field"><span>Catatan / alasan arsip</span>' +
+      '<input type="text" class="input" id="followupAlasan" maxlength="500" placeholder="Opsional, wajib untuk arsip"></label>' +
+      '<div class="form-actions">' +
+      '<button type="button" class="btn btn-primary btn-sm" data-action="followup-status-save" data-id="' +
+      item.id +
+      '">Simpan status</button>' +
+      '</div></div></div>' +
+      followupEventsHtml(events);
+  }
+
+  async function openFollowupDetail(id) {
+    if (!id) return;
+    try {
+      const detail = await API.followupDetail(id);
+      state.followupDetail = detail;
+      renderFollowupDetail(detail);
+      openModal('#followupModal');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  function followupWhatsapp(id) {
+    const detail = state.followupDetail;
+    if (!detail || detail.item.id !== id) return;
+    const item = detail.item;
+    if (!item.bisa_followup) {
+      toast(
+        item.wa_consent
+          ? 'Follow up belum bisa dilakukan sekarang. Periksa jeda atau status.'
+          : 'Pelanggan belum menyetujui pesan WhatsApp.',
+        'warning'
+      );
+      return;
+    }
+    openWaPreview({
+      judul: 'WhatsApp ' + item.customer_nama,
+      subtitle: 'Periksa pesan follow-up sebelum dibuka.',
+      nomor: item.nomor_hp,
+      masked: item.nomor_masked,
+      text: detail.pesan || '',
+      note: 'Membuka WhatsApp akan mencatat upaya follow-up. Kasir tetap menekan kirim di WhatsApp.',
+      onOpen: async () => {
+        await API.followupItem(id, { status: 'DIBUKA' });
+        toast('Upaya follow-up tercatat.', 'success');
+        await openFollowupDetail(id);
+        loadFollowup();
+      },
+    });
+  }
+
+  async function submitFollowupStatus(id) {
+    const detail = state.followupDetail;
+    if (!detail || detail.item.id !== id) return;
+    const statusEl = $('#followupStatusSelect');
+    const target = statusEl ? statusEl.value : '';
+    if (!target) return;
+    const reasonEl = $('#followupAlasan');
+    const reason = reasonEl ? reasonEl.value.trim() : '';
+    const janjiEl = $('#followupJanji');
+    const janji = janjiEl ? janjiEl.value : '';
+    const payload = { status: target };
+    if (target === 'JANJI_BAYAR') {
+      if (!janji) {
+        toast('Isi tanggal janji bayar.', 'warning');
+        if (janjiEl) janjiEl.focus();
+        return;
+      }
+      payload.janji_bayar = janji;
+    }
+    if (target === 'ARSIP') {
+      if (reason.length < 3) {
+        toast('Isi alasan arsip minimal 3 karakter.', 'warning');
+        if (reasonEl) reasonEl.focus();
+        return;
+      }
+      payload.alasan = reason;
+    } else if (reason) {
+      payload.alasan = reason;
+    }
+    const button = $('[data-action="followup-status-save"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.followupStatus(id, payload);
+      toast('Status follow-up diperbarui.', 'success');
+      await openFollowupDetail(id);
+      loadFollowup();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function assignFollowup(id, release) {
+    try {
+      await API.followupAssign(id, { release: Boolean(release) });
+      toast(
+        release ? 'Penanggung jawab dilepas.' : 'Tugas follow-up diambil.',
+        'success'
+      );
+      await openFollowupDetail(id);
+      loadFollowup();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  /* ------------------------------- Piutang -------------------------------- */
+  function openReceivables(customerId) {
+    state.receivablesCustomerId = customerId || null;
+    state.receivables = null;
+    const subtitle = $('#receivablesSubtitle');
+    if (subtitle) {
+      subtitle.textContent = customerId
+        ? 'Nota belum lunas pelanggan ini.'
+        : 'Nota yang belum lunas.';
+    }
+    const body = $('#receivablesBody');
+    if (body) body.innerHTML = '<div class="empty-state sm">Memuat piutang...</div>';
+    openModal('#receivablesModal');
+    loadReceivables();
+  }
+
+  async function loadReceivables() {
+    const body = $('#receivablesBody');
+    if (!body) return;
+    try {
+      const data = state.receivablesCustomerId
+        ? await API.customerReceivables(state.receivablesCustomerId)
+        : await API.receivables();
+      state.receivables = data;
+      renderReceivables();
+    } catch (err) {
+      body.innerHTML =
+        '<div class="empty-state sm">Piutang gagal dimuat. Coba lagi.</div>';
+    }
+  }
+
+  function renderReceivables() {
+    const body = $('#receivablesBody');
+    if (!body) return;
+    const data = state.receivables;
+    if (!data || !(data.items || []).length) {
+      body.innerHTML =
+        '<div class="empty-state sm">Tidak ada piutang berjalan.</div>';
+      return;
+    }
+    const summary =
+      '<p class="muted">' +
+      intValue(data.jumlah_pelanggan, 0) +
+      ' pelanggan · ' +
+      intValue(data.jumlah_nota, 0) +
+      ' nota · total sisa ' +
+      fmtRp(data.total_sisa) +
+      '</p>';
+    const groups = data.items
+      .map((customer) => {
+        const rows = (customer.records || [])
+          .map(
+            (record) =>
+              '<tr><td><button type="button" class="btn btn-ghost btn-xs" data-action="record-detail" data-id="' +
+              record.id +
+              '">' +
+              esc(record.no_nota) +
+              '</button></td><td>' +
+              esc(fmtDate(record.waktu_service)) +
+              '</td><td class="num">' +
+              fmtRp(record.sisa_bayar) +
+              '</td><td>' +
+              esc(record.jatuh_tempo ? fmtDate(record.jatuh_tempo) : '-') +
+              '</td><td>' +
+              (record.overdue
+                ? '<span class="badge red">' +
+                  esc(record.umur_bucket) +
+                  '</span>'
+                : '<span class="badge gray">' +
+                  esc(record.umur_bucket) +
+                  '</span>') +
+              '</td></tr>'
+          )
+          .join('');
+        return (
+          '<div class="receivable-group"><div class="receivable-head"><div><strong>' +
+          esc(customer.nama) +
+          '</strong><span>' +
+          esc(customer.nomor_hp) +
+          ' · ' +
+          intValue(customer.jumlah_nota, 0) +
+          ' nota' +
+          (customer.jatuh_tempo_terdekat
+            ? ' · jatuh tempo ' + esc(fmtDate(customer.jatuh_tempo_terdekat))
+            : '') +
+          '</span></div><span class="receivable-total">' +
+          fmtRp(customer.total_sisa) +
+          '</span></div>' +
+          '<div class="receivable-table-wrap"><table class="receivable-records"><thead><tr><th>Nota</th><th>Tanggal</th><th class="num">Sisa</th><th>Jatuh tempo</th><th>Umur</th></tr></thead><tbody>' +
+          rows +
+          '</tbody></table></div></div>'
+        );
+      })
+      .join('');
+    body.innerHTML = summary + '<div class="receivable-list">' + groups + '</div>';
   }
 
   function openDashboardNotas(filter) {
@@ -3870,8 +5041,62 @@
       openDayNotas(data.date);
       return;
     }
+    if (action === 'open-followup') {
+      openFollowupView(data.jenis || '');
+      return;
+    }
+    if (action === 'open-receivables') {
+      openReceivables(null);
+      return;
+    }
+    if (action === 'payment-fill-sisa') {
+      fillPaymentSisa();
+      return;
+    }
 
     if (!id) return;
+
+    if (action === 'followup-detail') {
+      openFollowupDetail(id);
+      return;
+    }
+
+    if (action === 'followup-wa') {
+      followupWhatsapp(id);
+      return;
+    }
+
+    if (action === 'followup-assign') {
+      assignFollowup(id, false);
+      return;
+    }
+
+    if (action === 'followup-release') {
+      assignFollowup(id, true);
+      return;
+    }
+
+    if (action === 'followup-status-save') {
+      await submitFollowupStatus(id);
+      return;
+    }
+
+    if (action === 'customer-receivables') {
+      openReceivables(id);
+      return;
+    }
+
+    if (action === 'payment-submit') {
+      await submitPayment(id);
+      return;
+    }
+
+    if (action === 'record-wa') {
+      if (state.detailRecord && state.detailRecord.id === id) {
+        openReceiptWhatsapp(state.detailRecord);
+      }
+      return;
+    }
 
     if (action === 'reprint') {
       try {
@@ -4032,6 +5257,13 @@
           '<td class="text-right money">' +
           fmtRp(jasa.harga_standar) +
           '</td>' +
+          '<td>' +
+          (clampInterval(jasa.interval_servis_bulan) > 0
+            ? '<span class="badge blue">' +
+              clampInterval(jasa.interval_servis_bulan) +
+              ' bulan</span>'
+            : '<span class="cell-sub">Nonaktif</span>') +
+          '</td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-jasa" data-id="' +
           jasa.id +
@@ -4111,6 +5343,9 @@
       $('#jasaHargaInput'),
       jasa ? Math.round(Number(jasa.harga_standar) || 0) : 0
     );
+    $('#jasaIntervalInput').value = jasa
+      ? clampInterval(jasa.interval_servis_bulan)
+      : 0;
     openModal('#jasaModal');
     setTimeout(() => $('#jasaNamaInput').focus(), 60);
   }
@@ -4121,6 +5356,7 @@
     const payload = {
       nama: $('#jasaNamaInput').value.trim(),
       harga_standar: String(parseMoney($('#jasaHargaInput').value)),
+      interval_servis_bulan: clampInterval($('#jasaIntervalInput').value),
     };
 
     try {
@@ -4371,6 +5607,7 @@
               '</span></td>' +
               '<td>' +
               metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
               '</td>' +
               '</tr>'
           )
@@ -4615,6 +5852,69 @@
     if (note) {
       note.textContent =
         'Perubahan langsung tampil di aplikasi dan struk.';
+    }
+  }
+
+  const OPS_INT_FIELDS = [
+    { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
+    { id: 'opsProspekHari', key: 'prospek_hari', low: 1, high: 365, label: 'Pengingat prospek' },
+    { id: 'opsCooldownHari', key: 'cooldown_hari', low: 0, high: 90, label: 'Jeda follow-up' },
+    { id: 'opsGaransiHari', key: 'garansi_akan_habis_hari', low: 1, high: 90, label: 'Pengingat garansi' },
+    { id: 'opsServisHari', key: 'servis_berkala_awal_hari', low: 1, high: 90, label: 'Pengingat servis berkala' },
+  ];
+
+  function fillOpsForm() {
+    const ops = state.config && state.config.ops;
+    if (!ops || !$('#opsForm')) return;
+    OPS_INT_FIELDS.forEach((field) => {
+      const input = $('#' + field.id);
+      if (input) input.value = String(intValue(ops[field.key], field.low));
+    });
+    const afterPrint = $('#opsWaAfterPrint');
+    if (afterPrint) afterPrint.checked = Boolean(ops.wa_after_print);
+    const template = $('#opsWaTemplate');
+    if (template) template.value = ops.wa_template || '';
+  }
+
+  async function handleOpsSubmit(event) {
+    event.preventDefault();
+    const payload = {};
+    for (const field of OPS_INT_FIELDS) {
+      const input = $('#' + field.id);
+      if (!input) continue;
+      const value = intValue(input.value, NaN);
+      if (!Number.isFinite(value) || value < field.low || value > field.high) {
+        toast(
+          field.label + ' harus antara ' + field.low + ' dan ' + field.high + ' hari.',
+          'warning'
+        );
+        input.focus();
+        return;
+      }
+      payload[field.key] = value;
+    }
+    const afterPrint = $('#opsWaAfterPrint');
+    payload.wa_after_print = afterPrint ? afterPrint.checked : false;
+    const template = $('#opsWaTemplate');
+    const text = template ? template.value.trim() : '';
+    if (text.length > 2000) {
+      toast('Template pesan maksimal 2000 karakter.', 'warning');
+      if (template) template.focus();
+      return;
+    }
+    payload.wa_template = text;
+
+    const button = $('#opsSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const ops = await API.updateOpsSettings(payload);
+      if (state.config) state.config.ops = ops;
+      fillOpsForm();
+      toast('Pengaturan follow-up disimpan.', 'success');
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
     }
   }
 
@@ -5063,6 +6363,9 @@
       if (target.id === 'diskonInput' || target.id === 'bayarInput') {
         updateSummary();
       }
+      if (target.id === 'dpInput') {
+        updateSummary();
+      }
       return;
     }
     if (target.matches('[data-kind][data-field]')) {
@@ -5072,10 +6375,17 @@
     if (target.id === 'diskonInput' || target.id === 'bayarInput') {
       updateSummary();
     }
+    if (target.id === 'dpInput') {
+      updateSummary();
+    }
   }
 
   function handleGlobalChange(event) {
     const target = event.target;
+    if (target.matches('[data-customer-consent]')) {
+      handleCustomerConsent(target);
+      return;
+    }
     if (target.matches('[data-kind][data-field="jumlah"]')) {
       renderItems();
     }
@@ -5115,6 +6425,12 @@
 
     $$('input[name="metode"]').forEach((radio) =>
       radio.addEventListener('change', handlePaymentModeChange)
+    );
+    $$('#jenisBayarSwitch button').forEach((button) =>
+      button.addEventListener('click', () => {
+        state.jenisBayar = button.dataset.jenis === 'DP' ? 'DP' : 'LUNAS';
+        updateJenisBayar();
+      })
     );
     $('#garansiAktif').addEventListener('change', updateGaransiFields);
     $('#garansiBulan').addEventListener('change', updateGaransiFields);
@@ -5165,6 +6481,36 @@
         {}
       );
     });
+    $('#btnReceiptCopyText').addEventListener('click', () => {
+      if (!state.receipt) return;
+      copyText(currentReceiptLines().join('\n'), 'Teks struk disalin.');
+    });
+    $('#btnReceiptWhatsapp').addEventListener('click', () => {
+      if (state.receipt) openReceiptWhatsapp(state.receipt);
+    });
+
+    $('#waModalOpen').addEventListener('click', handleWaOpen);
+    $('#waModalCopy').addEventListener('click', () =>
+      copyText($('#waModalText').value, 'Pesan disalin.')
+    );
+    $('#waModalClose').addEventListener('click', () => closeModal('#waModal'));
+    $('#waModalCancel').addEventListener('click', () => closeModal('#waModal'));
+
+    $('#followupFilter').addEventListener('change', loadFollowup);
+    $('#followupJenis').addEventListener('change', loadFollowup);
+    $('#btnRefreshFollowup').addEventListener('click', loadFollowup);
+    $('#followupModalClose').addEventListener('click', () =>
+      closeModal('#followupModal')
+    );
+    $('#followupModalDismiss').addEventListener('click', () =>
+      closeModal('#followupModal')
+    );
+    $('#receivablesClose').addEventListener('click', () =>
+      closeModal('#receivablesModal')
+    );
+    $('#receivablesDismiss').addEventListener('click', () =>
+      closeModal('#receivablesModal')
+    );
 
     $('#receiptClose').addEventListener('click', () => closeModal('#receiptModal'));
     $('#notaListClose').addEventListener('click', () =>
@@ -5224,6 +6570,7 @@
     $('#jasaForm').addEventListener('submit', handleJasaSubmit);
     $('#settingsForm').addEventListener('submit', handleSettingsSubmit);
     $('#settingsReset').addEventListener('click', fillSettingsForm);
+    $('#opsForm').addEventListener('submit', handleOpsSubmit);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
     $('#backupFolderChoose').addEventListener('click', chooseBackupFolder);

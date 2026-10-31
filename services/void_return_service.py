@@ -19,7 +19,7 @@ from database.models import (
     StockMovement,
 )
 from database.session import begin_immediate
-from services import audit_service
+from services import audit_service, payment_service
 from services.auth_service import Operator
 from services.errors import (
     BusinessValidationError,
@@ -120,6 +120,10 @@ def void_record(
                     created_at=moment,
                 )
             )
+
+        payment_service.refund_void(
+            db, record, user, clean_reason, moment
+        )
 
         audit_service.record_event(
             db,
@@ -350,6 +354,24 @@ def create_return(
                 retur_count=ServiceRecord.retur_count + 1,
             )
             .execution_options(synchronize_session=False)
+        )
+
+        # Retur menurunkan nilai neto nota; kelebihan bayar dikembalikan
+        # sebagai baris REFUND agar tidak ada saldo piutang negatif.
+        netto_setelah_retur = money(
+            max(
+                Decimal(record.total_servis or 0)
+                - (Decimal(record.total_retur or 0) + total_nilai),
+                Decimal("0.00"),
+            )
+        )
+        payment_service.refund_excess(
+            db,
+            record,
+            user,
+            clean_reason,
+            moment,
+            netto=netto_setelah_retur,
         )
 
         audit_service.record_event(

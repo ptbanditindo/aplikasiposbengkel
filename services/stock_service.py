@@ -22,6 +22,7 @@ _STOCK_UPDATE_LABELS = {
 _JASA_UPDATE_LABELS = {
     "nama": "Nama",
     "harga_standar": "Harga standar",
+    "interval_servis_bulan": "Interval servis",
 }
 
 
@@ -183,15 +184,35 @@ def list_movements(
     )
 
 
-def create_jasa(db: Session, nama: str, harga_standar: Decimal) -> HargaJasa:
+def _clean_interval(value) -> int:
+    try:
+        interval = int(value or 0)
+    except (TypeError, ValueError):
+        raise BusinessValidationError("Interval servis harus berupa angka bulan.")
+    if interval < 0 or interval > 120:
+        raise BusinessValidationError("Interval servis harus antara 0 dan 120 bulan.")
+    return interval
+
+
+def create_jasa(
+    db: Session,
+    nama: str,
+    harga_standar: Decimal,
+    interval_servis_bulan: int = 0,
+) -> HargaJasa:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
         raise BusinessValidationError("Nama jasa minimal 2 karakter.")
     harga = money(harga_standar)
     if harga < 0:
         raise BusinessValidationError("Tarif jasa tidak boleh negatif.")
+    interval = _clean_interval(interval_servis_bulan)
 
-    jasa = HargaJasa(nama=clean_nama, harga_standar=harga)
+    jasa = HargaJasa(
+        nama=clean_nama,
+        harga_standar=harga,
+        interval_servis_bulan=interval,
+    )
     db.add(jasa)
     db.commit()
     db.refresh(jasa)
@@ -213,9 +234,13 @@ def update_jasa(db: Session, jasa_id: int, **values) -> HargaJasa:
     harga = money(values.get("harga_standar", jasa.harga_standar))
     if harga < 0:
         raise BusinessValidationError("Tarif jasa tidak boleh negatif.")
+    interval = _clean_interval(
+        values.get("interval_servis_bulan", jasa.interval_servis_bulan)
+    )
 
     jasa.nama = clean_nama
     jasa.harga_standar = harga
+    jasa.interval_servis_bulan = interval
     db.commit()
     db.refresh(jasa)
     return jasa
