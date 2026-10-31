@@ -18,7 +18,13 @@ build step) di `http://127.0.0.1:8000`.
   pembayaran CASH/TRANSFER, kembalian, validasi stok, serta opsi izinkan stok
   minus. Zona input jasa dan sparepart dibedakan warna agar kasir tidak salah
   memasukkan item, dan kolom uang otomatis memakai pemisah ribuan
-  (`1.000.000`) saat diketik.
+  (`1.000.000`) saat diketik. Setelah nota tersimpan, strip label barang ikut
+  tercetak di bawah garis potong.
+- **Label barang** — strip label memuat pelanggan, nomor HP, unit, jenis barang,
+  dan kode `RAD-YYYYMMDD-NNN` yang berurutan per hari mulai `001`. Kode dibuat
+  sekali saat transaksi pertama, lalu dipakai ulang pada cetak ulang, void, dan
+  retur. Unit lama yang sudah berlabel tetap memakai kodenya; unit tanpa label
+  mendapat kode saat transaksi pertamanya tercatat.
 - **Pembatalan dan retur** — nota bisa dibatalkan (VOID) atau diretur sebagian
   maupun seluruhnya. Stok dikembalikan secara atomik lewat ledger pergerakan
   stok, bukan dengan menyunting angka stok manual.
@@ -26,6 +32,8 @@ build step) di `http://127.0.0.1:8000`.
   catatan klaim, dan klaim yang hanya bisa dilakukan sekali.
 - **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, snapshot modal
   saat part dipakai, dan proteksi hapus item yang sudah dipakai transaksi.
+  Daftar stok memakai baris lebih rapat agar lebih banyak item terlihat; tabel
+  jasa, riwayat, dan laporan tidak ikut dirapatkan.
 - **Laporan** — kas harian, rekap periode, penjualan sparepart, laba kotor,
   rincian per metode bayar, dan laporan semua waktu.
 - **Printer universal** — kelola beberapa printer dari Pengaturan: Bluetooth
@@ -41,7 +49,8 @@ build step) di `http://127.0.0.1:8000`.
   warna pada angka dan status penting; pilihan Terang atau Gelap tersimpan per
   perangkat di Pengaturan dan langsung berlaku tanpa memuat ulang halaman.
 - **APK Android** — gerbang PIN 6 angka native (PBKDF2 + salt, lockout
-  bertingkat), shell WebView, backend berjalan di dalam aplikasi. Layar utama
+  bertingkat), shell WebView, backend berjalan di dalam aplikasi. Saat server
+  disiapkan, layar menampilkan indikator loading lingkaran. Layar utama
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
   tidak tertutup sistem, dan warna status bar ikut tema terang/gelap.
@@ -135,7 +144,8 @@ cd android
 
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
-alur reset ada di [`android/README_PIN.md`](android/README_PIN.md).
+alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
+terakhir adalah versi **2.2.2** (versionCode 5).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
@@ -175,13 +185,13 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-226 test mencakup transaksi, void/retur, stok, garansi, laporan, pengaturan,
-printer, backup/restore, Telegram, serta pemeriksaan keamanan akses (PIN, sesi,
-token instalasi, loopback, host/origin). Suite yang sama lulus di dua jalur
-dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 + FastAPI 0.115 (kombinasi
-yang dipakai APK).
+239 test mencakup transaksi, void/retur, stok, garansi, laporan, pengaturan,
+label barang, printer, backup/restore, Telegram, serta pemeriksaan keamanan
+akses (PIN, sesi, token instalasi, loopback, host/origin). Suite yang sama
+lulus di dua jalur dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 +
+FastAPI 0.115 (kombinasi yang dipakai APK).
 
-Unit test Kotlin untuk PIN, backup, dan printer juga tersedia:
+Unit test Kotlin untuk PIN, backup, dan printer juga tersedia (150 test):
 
 ```bash
 cd android
