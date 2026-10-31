@@ -340,6 +340,46 @@ dibuka saat alur cetak otomatis diuji.
 - Nota DP tetap tercatat sebagai piutang dan muncul di ringkasan.
 - Pelunasan bisa dicatat kapan saja, tidak menunggu tanggal.
 - Aksi pelunasan mudah ditemukan dari ringkasan piutang dan detail nota.
+- Setelah perbaikan selesai, kasir dapat memberi tahu pelanggan bahwa
+  **kendaraannya sudah selesai dikerjakan dan siap diambil**, bukan menagih
+  dengan kata "hutang".
+
+**Aturan kata-kata untuk pelanggan (wajib)**
+
+- Pesan yang dibaca pelanggan tidak boleh memakai kata **"hutang"**,
+  **"piutang"**, **"tagihan"**, **"kekurangan pembayaran"**, atau
+  **"penunggak"**.
+- Gunakan kalimat netral dan berorientasi pada kendaraan, misalnya:
+  - "Kendaraan <unit> sudah selesai dikerjakan dan siap diambil."
+  - "DP sudah kami terima."
+  - "Sisa pembayaran dapat diselesaikan saat pengambilan."
+  - "Silakan datang ke <bengkel> untuk pengambilan kendaraan."
+- Jangan menampilkan nominal sisa sebagai ancaman. Nominal boleh disebut
+  sebagai informasi pelunasan, bukan sebagai utang.
+- Label **"Piutang" di dashboard internal pemilik tetap dipertahankan** karena
+  itu istilah laporan, bukan pesan pelanggan. Larangan kata di atas hanya
+  berlaku untuk pesan/notifikasi yang dikirim atau disalin ke pelanggan.
+- Pesan tetap dibuka sebagai draf WhatsApp; tidak ada pengiriman otomatis.
+
+**Perubahan backend (teks pesan)**
+
+1. Ubah `services/followup_service.py` pada bagian `_message()` untuk
+   `JENIS_PIUTANG`:
+   - Awali pesan dengan informasi kendaraan selesai.
+   - Ganti frasa "Kekurangan pembayaran" menjadi "Sisa pembayaran".
+   - Jangan memakai kata "hutang", "piutang", "tagihan", atau
+     "kekurangan pembayaran" di teks yang dikirim ke pelanggan.
+   - Contoh hasil yang diinginkan:
+     "Halo Bapak/Ibu <nama>, kendaraan <unit> dengan nota <no_nota> sudah
+     selesai dikerjakan dan siap diambil di <bengkel>. DP sudah kami terima.
+     Sisa pembayaran <nominal> dapat diselesaikan saat pengambilan. Terima
+     kasih."
+2. Buat **satu** fungsi penyusun teks "kendaraan selesai" di backend,
+   misalnya `whatsapp_service.completion_wa_text(record, bengkel)`, lalu pakai
+   fungsi itu untuk follow-up piutang dan aksi "Kendaraan selesai" di UI.
+   Jangan menduplikasi kalimat di JavaScript.
+3. Untuk nota yang sudah LUNAS, teks cukup berisi "Kendaraan ... sudah selesai
+   dikerjakan dan siap diambil" tanpa menyebut pembayaran.
 
 **Perubahan frontend**
 
@@ -367,6 +407,14 @@ dibuka saat alur cetak otomatis diuji.
 5. Opsional tetapi disarankan: setelah nota DP disimpan, tampilkan tombol
    "Catat pelunasan" pada modal struk/detail agar kasir tidak perlu mencari
    menu lain.
+6. Aksi "Kendaraan selesai":
+   - Tampilkan tombol "Kendaraan selesai" pada detail nota dan daftar piutang
+     untuk nota yang belum lunas.
+   - Tombol membuka draf WhatsApp berisi teks dari
+     `whatsapp_service.completion_wa_text(...)`.
+   - Jangan mengirim otomatis; kasir tetap menekan kirim di WhatsApp.
+   - Hormati izin WhatsApp dan nomor valid seperti alur WA lain.
+   - Jangan memakai kata "hutang" atau "piutang" pada draf tersebut.
 
 **Test backend**
 
@@ -375,6 +423,11 @@ dibuka saat alur cetak otomatis diuji.
 - Catat pelunasan sebagian dan penuh tanpa tanggal jatuh tempo; status berubah
   dan sisa benar.
 - Struk dengan jatuh tempo kosong tidak memuat baris "Jatuh Tempo".
+- Teks `completion_wa_text()` untuk nota DP memuat "sudah selesai dikerjakan"
+  dan "siap diambil", serta **tidak** memuat kata "hutang", "piutang",
+  "tagihan", atau "kekurangan".
+- Teks follow-up piutang memakai kata "Sisa pembayaran", bukan "Kekurangan
+  pembayaran", dan tetap menyebut kendaraan sudah selesai.
 - Test uang memakai `Decimal`; tidak ada float.
 
 **Kriteria penerimaan**
@@ -382,6 +435,9 @@ dibuka saat alur cetak otomatis diuji.
 - DP bisa disimpan tanpa tanggal.
 - Pelunasan bisa dicatat kapan saja setelah pekerjaan selesai.
 - Piutang dan struk menampilkan informasi yang benar.
+- Pelanggan menerima informasi "kendaraan sudah selesai", bukan pesan
+  berisi kata "hutang".
+- Dashboard internal tetap memakai label "Piutang" sesuai permintaan pemilik.
 
 **Commit**: `P-05: izinkan DP tanpa jatuh tempo dan mudahkan pelunasan`
 
@@ -817,6 +873,8 @@ Kerjakan setelah P-01 sampai P-10 selesai.
    - Cetak struk radiator copotan tetap dengan label.
    - Cetak memicu WhatsApp berisi struk lengkap.
    - DP tanpa jatuh tempo, catat pelunasan, piutang hilang setelah lunas.
+   - Aksi "Kendaraan selesai": draf WhatsApp menyebut kendaraan sudah selesai
+     dan siap diambil, tanpa kata "hutang"/"piutang"/"tagihan".
    - Follow-up servis berkala dari jasa dan sparepart.
    - Ringkasan tanpa halaman Follow-up.
 5. Uji manual di APK (jika perangkat tersedia):
