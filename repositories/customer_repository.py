@@ -63,7 +63,10 @@ def create_customer(
 def list_units(db: Session, customer_id: int) -> List[VehicleOrUnit]:
     statement = (
         select(VehicleOrUnit)
-        .where(VehicleOrUnit.customer_id == customer_id)
+        .where(
+            VehicleOrUnit.customer_id == customer_id,
+            VehicleOrUnit.archived_at.is_(None),
+        )
         .order_by(VehicleOrUnit.created_at.desc(), VehicleOrUnit.id.desc())
     )
     return list(db.scalars(statement).all())

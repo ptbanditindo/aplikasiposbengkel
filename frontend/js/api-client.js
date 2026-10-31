@@ -198,6 +198,7 @@
     customerUnits: (customerId) =>
       request('/api/customers/' + customerId + '/units'),
     createUnit: (data) => request('/api/units', { method: 'POST', body: data }),
+    deleteUnit: (id) => request('/api/units/' + id, { method: 'DELETE' }),
 
     stock: () => request('/api/stock'),
     createStock: (data) => request('/api/stock', { method: 'POST', body: data }),

@@ -1,7 +1,7 @@
 """Logika bisnis pelanggan & unit servis (mobil / radiator copotan)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -61,6 +61,35 @@ def set_wa_consent(
         db.flush()
     db.refresh(customer)
     return customer
+
+
+def archive_unit(
+    db: Session,
+    unit_id: int,
+    operator: Optional[Operator] = None,
+) -> VehicleOrUnit:
+    """Soft delete unit: sembunyikan dari pilihan tanpa memutus riwayat nota."""
+    with db.begin():
+        begin_immediate(db)
+        unit = repo.get_unit(db, unit_id)
+        if unit is None:
+            raise NotFoundError("Unit servis tidak ditemukan.")
+        if unit.archived_at is not None:
+            db.flush()
+        else:
+            unit.archived_at = datetime.now()
+            if operator is not None:
+                audit_service.record_event(
+                    db,
+                    operator,
+                    audit_service.ACTION_UNIT,
+                    audit_service.REFERENCE_UNIT,
+                    reference_id=str(unit.id),
+                    reason="Unit dihapus dari daftar",
+                )
+            db.flush()
+    db.refresh(unit)
+    return unit
 
 
 def search_customers(db: Session, query: str = "", limit: int = 20) -> List[Customer]:

@@ -104,6 +104,10 @@ def _create_transaction_locked(
         unit = db.get(VehicleOrUnit, payload.unit_id)
         if unit is None:
             raise NotFoundError("Unit servis tidak ditemukan.")
+        if unit.archived_at is not None:
+            raise BusinessValidationError(
+                "Unit ini sudah dihapus dari daftar pelanggan."
+            )
 
         now = datetime.now()
         # Nomor barang hanya untuk radiator copotan; mobil utuh tidak berlabel.

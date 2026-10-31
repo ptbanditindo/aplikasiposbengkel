@@ -67,6 +67,10 @@ class VehicleOrUnit(Base):
     )
     tipe_radiator: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     keterangan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Soft delete: unit disembunyikan dari pilihan, riwayat nota tetap ada.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False

@@ -697,6 +697,7 @@
           ? ''
           : '<span class="unit-label">Tanpa nopol</span>';
         return (
+          '<div class="unit-card-wrap">' +
           '<button type="button" class="unit-card' +
           (selected ? ' selected' : '') +
           '" data-unit-id="' +
@@ -714,10 +715,55 @@
           '</span>' +
           tag +
           '</span>' +
-          '</button>'
+          '</button>' +
+          '<button type="button" class="unit-delete" data-delete-unit="' +
+          unit.id +
+          '" aria-label="Hapus unit ' +
+          esc(title) +
+          '">Hapus</button>' +
+          '</div>'
         );
       })
       .join('');
+  }
+
+  async function deleteUnit(unitId) {
+    const unit = state.units.find((item) => item.id === unitId);
+    if (!unit) return;
+    const title =
+      unit.unit_type === 'MOBIL'
+        ? unit.nopol || 'unit mobil'
+        : unit.tipe_radiator || unit.label_radiator || 'unit radiator';
+    if (
+      !window.confirm(
+        'Hapus unit ' +
+          title +
+          '? Riwayat servis yang sudah ada tetap tersimpan.'
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await API.deleteUnit(unitId);
+      const wasSelected =
+        state.selectedUnit && state.selectedUnit.id === unitId;
+      state.units = state.units.filter((item) => item.id !== unitId);
+      if (wasSelected) {
+        state.selectedUnit = null;
+        state.jobs = [];
+        state.parts = [];
+        $('#complaintCard').classList.add('hidden');
+        $('#itemsCard').classList.add('hidden');
+        renderItems();
+        updateSummary();
+      }
+      renderUnits();
+      updateSummaryCustomer();
+      toast('Unit dihapus dari daftar. Riwayat servis tetap tersimpan.', 'success');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
   }
 
   function selectUnit(unitId) {
@@ -6317,6 +6363,12 @@
       const id = intValue(customerButton.dataset.customerId, 0);
       const customer = state.customerResults.find((item) => item.id === id);
       if (customer) chooseCustomer(customer);
+      return;
+    }
+
+    const deleteUnitButton = target.closest('[data-delete-unit]');
+    if (deleteUnitButton) {
+      deleteUnit(intValue(deleteUnitButton.dataset.deleteUnit, 0));
       return;
     }
 

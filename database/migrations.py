@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 def get_user_version(conn) -> int:
@@ -483,6 +483,11 @@ def _migrate_010_followup(cursor) -> None:
     )
 
 
+def _migrate_011_unit_archive(cursor) -> None:
+    """P-03: arsip unit (soft delete) agar riwayat nota tetap utuh."""
+    _add_column(cursor, "vehicle_or_units", "archived_at", "archived_at DATETIME")
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -494,6 +499,7 @@ MIGRATIONS: List[Migration] = [
     (8, _migrate_008_payments),
     (9, _migrate_009_whatsapp),
     (10, _migrate_010_followup),
+    (11, _migrate_011_unit_archive),
 ]
 
 
