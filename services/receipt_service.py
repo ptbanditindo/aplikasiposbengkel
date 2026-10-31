@@ -115,6 +115,7 @@ def _build(
     width: int,
     bengkel: Dict[str, str],
     payment=None,
+    include_labels: bool = True,
 ) -> ReceiptBuilder:
     unit = record.unit
     customer = unit.customer
@@ -236,17 +237,23 @@ def _build(
     b.center("")
     b.center("Terima kasih!")
     b.divider("=")
-    labels = _labels(record)
-    if labels:
-        _append_label_strips(b, labels)
+    if include_labels:
+        labels = _labels(record)
+        if labels:
+            _append_label_strips(b, labels)
     return b
+
+
+def receipt_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
+    """Teks nota lengkap untuk WhatsApp, tanpa strip label potong."""
+    builder = _build(record, 32, bengkel, include_labels=False)
+    return "\n".join(line.rstrip() for line in builder.lines()).strip()
 
 
 def build_receipt_payload(
     record: ServiceRecord,
     bengkel: Dict[str, str] | None = None,
     payment=None,
-    wa_template: str = "",
 ) -> Dict[str, Any]:
     """Data lengkap struk (58mm & 80mm) untuk reprint / cetak Bluetooth."""
     unit = record.unit
@@ -334,7 +341,7 @@ def build_receipt_payload(
         "jobs": jobs,
         "parts": parts,
         "payments": payments,
-        "wa_text": whatsapp_service.record_wa_text(record, info, wa_template),
+        "wa_text": receipt_wa_text(record, info),
         "completion_wa_text": whatsapp_service.completion_wa_text(record, info),
         "customer_wa": normalize_whatsapp(customer.nomor_hp),
         "wa_consent": bool(getattr(customer, "wa_consent", True)),
@@ -418,4 +425,4 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
     }
 
 
-__all__ = ["build_receipt_payload", "record_summary", "Decimal"]
+__all__ = ["build_receipt_payload", "receipt_wa_text", "record_summary", "Decimal"]

@@ -62,7 +62,6 @@ def create_payment(
             record,
             settings_service.get_bengkel_info(db),
             payment=payment,
-            wa_template=settings_service.get_ops_settings(db)["wa_template"],
         )
     )
     return PaymentResultOut(

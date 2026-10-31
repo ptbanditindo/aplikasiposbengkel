@@ -108,8 +108,6 @@ OPS_INT_KEYS = {
     "garansi_akan_habis_hari": (1, 90, 7),
     "servis_berkala_awal_hari": (1, 90, 14),
 }
-OPS_BOOL_KEYS = {"wa_after_print": False}
-OPS_TEXT_KEYS = {"wa_template": ""}
 
 
 def get_ops_settings(db: Session) -> Dict[str, Any]:
@@ -127,10 +125,6 @@ def get_ops_settings(db: Session) -> Dict[str, Any]:
             result[key] = int(raw) if raw != "" else default
         except (TypeError, ValueError):
             result[key] = default
-    for key, default in OPS_BOOL_KEYS.items():
-        result[key] = _stored_bool(stored.get(key), default)
-    for key, default in OPS_TEXT_KEYS.items():
-        result[key] = stored.get(key) or default
     return result
 
 
@@ -148,13 +142,6 @@ def update_ops_settings(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
                 f"Nilai {key} harus antara {low} dan {high}."
             )
         cleaned[f"{OPS_PREFIX}{key}"] = str(value)
-    for key in OPS_BOOL_KEYS:
-        value = payload.get(key, current[key])
-        cleaned[f"{OPS_PREFIX}{key}"] = "1" if bool(value) else "0"
-    template = clean_text(
-        payload.get("wa_template", current["wa_template"]), max_length=2000
-    )
-    cleaned[f"{OPS_PREFIX}wa_template"] = template
     for key, value in cleaned.items():
         set_setting(db, key, value)
     db.commit()

@@ -1,6 +1,8 @@
 """Tahap 12: pesan WhatsApp, izin pelanggan, template, dan log upaya."""
 from __future__ import annotations
 
+from urllib.parse import parse_qs, urlsplit
+
 import pytest
 
 from database.models import WhatsAppLog
@@ -31,8 +33,8 @@ def test_config_menyertakan_pengaturan_ops_default(client):
     assert ops["cooldown_hari"] == 7
     assert ops["garansi_akan_habis_hari"] == 7
     assert ops["servis_berkala_awal_hari"] == 14
-    assert ops["wa_after_print"] is False
-    assert ops["wa_template"] == ""
+    assert "wa_after_print" not in ops
+    assert "wa_template" not in ops
 
 
 def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
@@ -42,25 +44,20 @@ def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
         "cooldown_hari": 3,
         "garansi_akan_habis_hari": 5,
         "servis_berkala_awal_hari": 20,
-        "wa_after_print": True,
-        "wa_template": "Halo {nama}, nota {no_nota} total {total}.",
     }
     updated = client.put("/api/settings/ops", json=payload)
     assert updated.status_code == 200, updated.text
     body = updated.json()
     assert body["tempo_hari"] == 14
-    assert body["wa_after_print"] is True
-    assert body["wa_template"] == payload["wa_template"]
 
     config = client.get("/api/config").json()["ops"]
     assert config["tempo_hari"] == 14
-    assert config["wa_template"] == payload["wa_template"]
 
     invalid = client.put("/api/settings/ops", json={**payload, "tempo_hari": 0})
     assert invalid.status_code == 422, invalid.text
 
 
-def test_struk_memuat_teks_wa_default_dan_nomor_ternormalisasi(
+def test_struk_memuat_teks_wa_lengkap_dan_nomor_ternormalisasi(
     client, create_customer, create_unit
 ):
     customer = create_customer(nama="Siti WA", nomor_hp="0812-1111-2222")
@@ -73,32 +70,42 @@ def test_struk_memuat_teks_wa_default_dan_nomor_ternormalisasi(
     assert receipt["wa_consent"] is True
     assert receipt["customer_wa"] == "6281211112222"
     text = receipt["wa_text"]
-    assert "Siti WA" in text
+    assert "No. Nota" in text
     assert receipt["no_nota"] in text
+    assert "Siti WA" in text
+    assert "081211112222" in text
+    assert "Korok Radiator" in text
     assert "Rp 150.000" in text
-    assert "Sisa bayar: Rp 0" in text
-    # Nomor lengkap tidak dicetak ke teks pesan.
-    assert "0812-1111-2222" not in text
+    assert "Status Bayar" in text
+    assert "LUNAS" in text
+    assert "REKENING BENGKEL" in text
+    assert "POTONG DI SINI" not in text
 
 
-def test_template_wa_kustom_dipakai_untuk_teks_pesan(
+def test_struk_radiator_saja_tetap_berlabel_tapi_wa_tanpa_potongan(
     client, create_customer, create_unit
 ):
-    template = "Halo {nama}, nota {no_nota} total {total} sisa {sisa}."
-    saved = client.put(
-        "/api/settings/ops",
-        json={"wa_template": template},
+    customer = create_customer(nama="Agus Label", nomor_hp="0812-3333-4444")
+    unit = create_unit(
+        customer["id"],
+        unit_type="RADIATOR_ONLY",
+        nopol=None,
+        jenis_mobil=None,
+        tahun_mobil=None,
+        tipe_radiator="Radiator Fortuner",
     )
-    assert saved.status_code == 200, saved.text
-
-    customer = create_customer(nama="Agus Template", nomor_hp="0812-3333-4444")
-    unit = create_unit(customer["id"])
     receipt = _make(client, unit["id"]).json()["receipt"]
 
-    assert receipt["wa_text"] == (
-        f"Halo Agus Template, nota {receipt['no_nota']} total Rp 150.000 "
-        "sisa Rp 0."
-    )
+    assert receipt["labels"]
+    kode = receipt["labels"][0]["kode"]
+    struk = "\n".join(receipt["struk_58"])
+    assert "POTONG DI SINI" in struk
+    assert kode in struk
+
+    text = receipt["wa_text"]
+    assert "POTONG DI SINI" not in text
+    # Label hanya untuk instruksi potong; bagian unit tetap seperti nota.
+    assert "Fortuner" in text
 
 
 def test_whatsapp_dibuka_membuat_link_dan_log_tanpa_nomor_penuh(
@@ -117,6 +124,10 @@ def test_whatsapp_dibuka_membuat_link_dan_log_tanpa_nomor_penuh(
     assert body["nomor_masked"] == mask_phone("081255556666")
     assert body["link"].startswith("https://wa.me/6281255556666?text=")
     assert "Rina WA" in body["wa_text"]
+    assert "No. Nota" in body["wa_text"]
+    assert "POTONG DI SINI" not in body["wa_text"]
+    query = parse_qs(urlsplit(body["link"]).query, keep_blank_values=True)
+    assert query["text"] == [body["wa_text"]]
     assert body["log"]["status"] == "DIBUKA"
 
     logs = client.get(f"/api/service-records/{record_id}/whatsapp-logs").json()
@@ -127,7 +138,7 @@ def test_whatsapp_dibuka_membuat_link_dan_log_tanpa_nomor_penuh(
     with SessionLocal() as db:
         rows = db.query(WhatsAppLog).all()
         assert len(rows) == 1
-        assert rows[0].pesan
+        assert rows[0].pesan == body["wa_text"]
         assert rows[0].operator
 
 

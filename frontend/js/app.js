@@ -241,7 +241,6 @@
     receivables: null,
     receivablesCustomerId: null,
     waPreview: null,
-    waOffered: new Set(),
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -1944,6 +1943,7 @@
     renderReceiptPreview();
     refreshReceiptPrinterUI();
     setReceiptPrintStatus('', '');
+    showWhatsappFallback(false);
     openModal('#receiptModal');
   }
 
@@ -2190,15 +2190,77 @@
     }
   }
 
-  function maybeOfferWhatsapp(receipt) {
-    if (!receipt) return;
-    const ops = state.config && state.config.ops;
-    if (!ops || !ops.wa_after_print) return;
-    if (state.waOffered.has(receipt.id)) return;
-    if (!receipt.wa_consent) return;
-    if (!waDigits(receiptWaNumber(receipt))) return;
-    state.waOffered.add(receipt.id);
-    openReceiptWhatsapp(receipt);
+  function showWhatsappFallback(visible) {
+    const button = $('#btnReceiptWhatsappFallback');
+    if (button) button.classList.toggle('hidden', !visible);
+  }
+
+  async function sendReceiptToWhatsapp(receipt) {
+    if (!receipt) return false;
+    if (!receipt.wa_consent) return false;
+    if (!waDigits(receiptWaNumber(receipt))) return false;
+    const text = String(receipt.wa_text || '').trim();
+    if (!text) return false;
+    const link = waLink(receiptWaNumber(receipt), text);
+    if (!link) return false;
+
+    showWhatsappFallback(false);
+    if (
+      hasNativeBridge() &&
+      window.BengkelBridge &&
+      typeof window.BengkelBridge.call === 'function'
+    ) {
+      try {
+        await window.BengkelBridge.call('openExternal', { url: link }, 15000);
+      } catch (err) {
+        try {
+          await API.recordWhatsapp(receipt.id, {
+            status: 'TIDAK_TERSEDIA',
+            jenis: 'struk',
+          });
+        } catch (logErr) {
+          /* Kegagalan mencatat tidak boleh menyembunyikan pesan utama. */
+        }
+        toast(
+          (err && err.message) ||
+            'WhatsApp tidak tersedia di perangkat ini. Gunakan Salin teks.',
+          'error',
+          8000
+        );
+        return false;
+      }
+    } else {
+      const opened = window.open(link, '_blank');
+      if (!opened) {
+        showWhatsappFallback(true);
+        toast(
+          'WhatsApp tidak dapat dibuka otomatis karena pop-up diblokir. ' +
+            'Tekan "Buka WhatsApp" atau salin teks struk.',
+          'warning',
+          9000
+        );
+        return false;
+      }
+      opened.opener = null;
+    }
+
+    try {
+      await API.recordWhatsapp(receipt.id, {
+        status: 'DIBUKA',
+        jenis: 'struk',
+      });
+      toast(
+        'WhatsApp nota ' + receipt.no_nota + ' dibuka. Tekan kirim di WhatsApp.',
+        'success',
+        6000
+      );
+      if (state.detailRecord && state.detailRecord.id === receipt.id) {
+        await loadRecordExtras(receipt.id);
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+    return true;
   }
 
   function hasNativeBridge() {
@@ -2330,7 +2392,7 @@
     return 'Status belum tersedia';
   }
 
-  function monitorSystemPrintJob(printer, jobId) {
+  function monitorSystemPrintJob(printer, jobId, receipt) {
     const manager = window.printerManager;
     const adapter = manager && manager.adapterFor('SYSTEM');
     if (!adapter || typeof adapter.jobStatus !== 'function') return;
@@ -2365,6 +2427,7 @@
       }
       if (stateName === 'COMPLETED') {
         toast('Layanan cetak melaporkan pekerjaan selesai.', 'success');
+        if (receipt) await sendReceiptToWhatsapp(receipt);
         return;
       }
       if (stateName === 'FAILED' || stateName === 'UNAVAILABLE') {
@@ -2405,7 +2468,7 @@
         'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
         {}
       );
-      maybeOfferWhatsapp(receipt);
+      await sendReceiptToWhatsapp(receipt);
       return true;
     }
 
@@ -2451,6 +2514,7 @@
 
     state.printing = true;
     state.printFailure = null;
+    showWhatsappFallback(false);
     refreshReceiptPrinterUI();
     const button = $('#btnReceiptPrint');
     setBusy(button, true, 'Mengirim...');
@@ -2465,11 +2529,11 @@
         printerId: target.id,
       });
       const adapterResult = result && result.adapter_result;
-      if (
+      const systemJob =
         target.connection_type === 'SYSTEM' &&
         adapterResult &&
-        adapterResult.job_id != null
-      ) {
+        adapterResult.job_id != null;
+      if (systemJob) {
         setReceiptPrintStatus(
           'info',
           'Dialog Android dibuka. ' +
@@ -2480,7 +2544,7 @@
             '.',
           {}
         );
-        monitorSystemPrintJob(target, adapterResult.job_id);
+        monitorSystemPrintJob(target, adapterResult.job_id, receipt);
       } else if (target.connection_type === 'WEB') {
         setReceiptPrintStatus(
           'info',
@@ -2501,7 +2565,7 @@
         );
       }
       toast('Perintah cetak dikirim ke ' + target.name + '.', 'success');
-      maybeOfferWhatsapp(receipt);
+      if (!systemJob) await sendReceiptToWhatsapp(receipt);
       return true;
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
@@ -6194,10 +6258,6 @@
       const input = $('#' + field.id);
       if (input) input.value = String(intValue(ops[field.key], field.low));
     });
-    const afterPrint = $('#opsWaAfterPrint');
-    if (afterPrint) afterPrint.checked = Boolean(ops.wa_after_print);
-    const template = $('#opsWaTemplate');
-    if (template) template.value = ops.wa_template || '';
   }
 
   async function handleOpsSubmit(event) {
@@ -6217,17 +6277,6 @@
       }
       payload[field.key] = value;
     }
-    const afterPrint = $('#opsWaAfterPrint');
-    payload.wa_after_print = afterPrint ? afterPrint.checked : false;
-    const template = $('#opsWaTemplate');
-    const text = template ? template.value.trim() : '';
-    if (text.length > 2000) {
-      toast('Template pesan maksimal 2000 karakter.', 'warning');
-      if (template) template.focus();
-      return;
-    }
-    payload.wa_template = text;
-
     const button = $('#opsSave');
     setBusy(button, true, 'Menyimpan...');
     try {
@@ -6830,14 +6879,18 @@
         'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
         {}
       );
+      sendReceiptToWhatsapp(state.receipt);
     });
     $('#btnReceiptCopyText').addEventListener('click', () => {
       if (!state.receipt) return;
       copyText(currentReceiptLines().join('\n'), 'Teks struk disalin.');
     });
-    $('#btnReceiptWhatsapp').addEventListener('click', () => {
-      if (state.receipt) openReceiptWhatsapp(state.receipt);
-    });
+    const waFallback = $('#btnReceiptWhatsappFallback');
+    if (waFallback) {
+      waFallback.addEventListener('click', () => {
+        if (state.receipt) sendReceiptToWhatsapp(state.receipt);
+      });
+    }
 
     $('#waModalOpen').addEventListener('click', handleWaOpen);
     $('#waModalCopy').addEventListener('click', () =>

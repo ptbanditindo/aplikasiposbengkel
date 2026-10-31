@@ -772,8 +772,6 @@ class OpsSettingsIn(CompatBase):
     cooldown_hari: int = Field(default=7, ge=0, le=90)
     garansi_akan_habis_hari: int = Field(default=7, ge=1, le=90)
     servis_berkala_awal_hari: int = Field(default=14, ge=1, le=90)
-    wa_after_print: bool = False
-    wa_template: str = Field(default="", max_length=2000)
 
 
 class OpsSettingsOut(OpsSettingsIn):

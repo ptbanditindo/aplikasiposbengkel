@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
 from sqlalchemy import select
@@ -35,62 +35,6 @@ JENIS_FOLLOWUP = "followup"
 JENIS_GARANSI = "garansi"
 JENIS_PIUTANG = "piutang"
 VALID_JENIS = {JENIS_STRUK, JENIS_FOLLOWUP, JENIS_GARANSI, JENIS_PIUTANG}
-
-DEFAULT_TEMPLATE = (
-    "Halo {nama}, terima kasih telah servis di {bengkel}.\n"
-    "Nota {no_nota} tanggal {tanggal}\n"
-    "Unit: {unit}\n"
-    "Total: {total}\n"
-    "Status bayar: {status_bayar}\n"
-    "Sisa bayar: {sisa}\n"
-    "Garansi sampai: {garansi}\n\n"
-    "Pesan dari {bengkel}."
-)
-
-
-class _SafeDict(dict):
-    def __missing__(self, key):  # pragma: no cover - placeholder tak dikenal
-        return "{" + key + "}"
-
-
-def render_template(template: str, values: Dict[str, Any]) -> str:
-    base = (template or "").strip() or DEFAULT_TEMPLATE
-    return base.format_map(_SafeDict(values)).strip()
-
-
-def record_values(record: ServiceRecord, bengkel: Dict[str, str]) -> Dict[str, str]:
-    customer = record.unit.customer
-    sisa = payment_service.record_sisa(record)
-    lunas = (record.status or "NORMAL") == "VOID" or sisa <= 0
-    garansi = (
-        record.garansi_sampai.strftime("%d/%m/%Y")
-        if record.bergaransi and record.garansi_sampai
-        else "-"
-    )
-    return {
-        "nama": customer.nama,
-        "nomor_hp": customer.nomor_hp,
-        "unit": describe_unit(record.unit),
-        "no_nota": record.no_nota,
-        "tanggal": record.waktu_service.strftime("%d/%m/%Y"),
-        "total": format_rupiah(record.total_servis),
-        "total_neto": format_rupiah(payment_service.record_netto(record)),
-        "status_bayar": "LUNAS" if lunas else "BELUM LUNAS",
-        "sisa": format_rupiah(sisa),
-        "garansi": garansi,
-        "keluhan": record.keluhan_awal or "-",
-        "bengkel": bengkel.get("nama", ""),
-        "alamat": bengkel.get("alamat", ""),
-        "telepon": bengkel.get("telepon", ""),
-        "wa_bengkel": bengkel.get("wa", ""),
-    }
-
-
-def record_wa_text(
-    record: ServiceRecord, bengkel: Dict[str, str], template: str = ""
-) -> str:
-    return render_template(template, record_values(record, bengkel))
-
 
 def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
     """Satu-satunya sumber kalimat "kendaraan selesai" untuk pelanggan.
@@ -216,8 +160,10 @@ def log_attempt(
             raise NotFoundError("Nota servis tidak ditemukan.")
         info = settings_service.get_bengkel_info(db)
         if normalized_jenis == JENIS_STRUK:
-            template = settings_service.get_ops_settings(db)["wa_template"]
-            message = record_wa_text(record, info, template)
+            # Impor lokal agar tidak melingkar: receipt_service memakai layanan ini.
+            from services.receipt_service import receipt_wa_text
+
+            message = receipt_wa_text(record, info)
         else:
             message = completion_wa_text(record, info)
         log, link = append_attempt(

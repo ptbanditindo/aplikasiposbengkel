@@ -830,22 +830,6 @@
             </label>
           </div>
 
-          <label class="switch-row">
-            <span>Tawarkan WhatsApp setelah struk dicetak</span>
-            <input type="checkbox" id="opsWaAfterPrint">
-            <span class="switch-ui" aria-hidden="true"></span>
-          </label>
-
-          <label class="field">
-            <span>Template pesan struk</span>
-            <textarea class="input textarea" id="opsWaTemplate" rows="7" maxlength="2000" placeholder="Kosongkan untuk memakai template bawaan."></textarea>
-            <small class="tiny muted">
-              Placeholder: {nama}, {nomor_hp}, {unit}, {no_nota}, {tanggal}, {total},
-              {status_bayar}, {sisa}, {garansi}, {keluhan}, {bengkel}, {alamat},
-              {telepon}, {wa_bengkel}.
-            </small>
-          </label>
-
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="opsSave">Simpan pengaturan follow-up</button>
           </div>
@@ -1301,6 +1285,7 @@
           <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptRetry">Coba lagi</button>
           <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptChooseOther">Pilih printer lain</button>
           <button type="button" class="btn btn-ghost btn-sm hidden" id="btnReceiptOpenSettings">Buka pengaturan printer</button>
+          <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptWhatsappFallback">Buka WhatsApp</button>
         </div>
       </div>
 
@@ -1309,7 +1294,6 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="btnReceiptCopyText">Salin teks</button>
-        <button type="button" class="btn btn-outline" id="btnReceiptWhatsapp">WhatsApp</button>
         <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
         <button type="button" class="btn btn-primary" id="btnReceiptPrint">Cetak</button>
       </div>
