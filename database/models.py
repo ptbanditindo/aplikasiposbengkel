@@ -93,6 +93,10 @@ class StockItem(Base):
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
     jumlah: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 0 = Nonaktif; bulan interval servis berkala (P-10).
+    interval_servis_bulan: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -410,6 +414,10 @@ class ServicePart(Base):
         Boolean, default=False, nullable=False
     )
     jumlah_retur: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Snapshot interval servis berkala part saat nota disimpan (P-10).
+    interval_servis_bulan: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="parts")
     stock_item: Mapped[Optional["StockItem"]] = relationship()

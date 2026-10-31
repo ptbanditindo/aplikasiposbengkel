@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config import settings
+from database import migrations
 from database.base import Base
 from database.models import AuditEvent, Customer, VehicleOrUnit
 from database.session import build_engine, init_db
@@ -144,7 +145,10 @@ def test_migrasi_10_ke_11_menambah_kolom_arsip_tanpa_kehilangan_data(
         assert conn.exec_driver_sql(
             "SELECT nopol FROM vehicle_or_units"
         ).scalar() == "B 8484 LMA"
-        assert conn.exec_driver_sql("PRAGMA user_version").scalar() == 11
+        assert (
+            conn.exec_driver_sql("PRAGMA user_version").scalar()
+            == migrations.SCHEMA_VERSION
+        )
 
     # Idempoten: startup ulang tidak membuat backup baru.
     init_db(legacy)

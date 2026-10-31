@@ -1123,19 +1123,35 @@
     const id = intValue($('#partPicker').value, 0);
     const stock = state.stock.find((item) => item.id === id);
     const hint = $('#partStockHint');
+    const intervalHint = $('#partIntervalHint');
     if (!stock) {
       if (hint) hint.textContent = 'Stok gudang otomatis dipotong.';
+      $('#partInterval').value = '0';
+      if (intervalHint) intervalHint.classList.add('hidden');
       return;
     }
     $('#partNama').value = stock.nama;
     setMoneyValue($('#partHarga'), Math.round(Number(stock.harga_jual) || 0));
     $('#partQty').value = '1';
+    $('#partInterval').value = String(
+      clampInterval(stock.interval_servis_bulan)
+    );
     if (hint) {
       hint.textContent =
         'Stok tersedia ' +
         stock.jumlah +
         '. Harga patokan ' +
         fmtRp(stock.harga_jual);
+    }
+    if (intervalHint) {
+      const interval = clampInterval(stock.interval_servis_bulan);
+      intervalHint.textContent =
+        interval > 0
+          ? 'Servis berkala: ' +
+            interval +
+            ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
+          : 'Sparepart ini tanpa interval servis berkala.';
+      intervalHint.classList.remove('hidden');
     }
   }
 
@@ -1198,6 +1214,7 @@
       jumlah: quantity,
       harga_satuan: String(price),
       harga_modal: stock ? null : modal,
+      interval_servis_bulan: clampInterval($('#partInterval').value),
     });
 
     $('#partPicker').value = '';
@@ -1205,7 +1222,9 @@
     $('#partQty').value = '1';
     $('#partHarga').value = '';
     $('#partModal').value = '';
+    $('#partInterval').value = '0';
     $('#partStockHint').textContent = 'Stok gudang otomatis dipotong.';
+    $('#partIntervalHint').classList.add('hidden');
     renderItems();
   }
 
@@ -1290,6 +1309,11 @@
           '<td>' +
           modalCell +
           '</td>' +
+          '<td><input type="number" min="0" max="120" class="table-input interval" data-kind="part" data-index="' +
+          index +
+          '" data-field="interval_servis_bulan" value="' +
+          esc(clampInterval(part.interval_servis_bulan)) +
+          '" title="Interval servis berkala (bulan). 0 = nonaktif."></td>' +
           '<td class="text-right item-subtotal" data-subtotal-kind="part" data-subtotal-index="' +
           index +
           '">&mdash;</td>' +
@@ -1581,6 +1605,8 @@
     $('#metodeTransfer').checked = false;
     state.jenisBayar = 'LUNAS';
     $('#garansiAktif').checked = true;
+    $('#partInterval').value = '0';
+    $('#partIntervalHint').classList.add('hidden');
 
     if (state.config) {
       setGaransiBulan(state.config.default_garansi_bulan || 1);
@@ -1641,6 +1667,7 @@
           part.stock_item_id || part.harga_modal === '' || part.harga_modal == null
             ? null
             : String(parseMoney(part.harga_modal)),
+        interval_servis_bulan: clampInterval(part.interval_servis_bulan),
       })),
     };
   }
@@ -5601,6 +5628,13 @@
           '">' +
           item.jumlah +
           '</span></td>' +
+          '<td>' +
+          (clampInterval(item.interval_servis_bulan) > 0
+            ? '<span class="badge blue">' +
+              clampInterval(item.interval_servis_bulan) +
+              ' bulan</span>'
+            : '<span class="cell-sub">Nonaktif</span>') +
+          '</td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-stock" data-id="' +
           item.id +
@@ -5670,6 +5704,9 @@
       item ? Math.round(Number(item.harga_jual) || 0) : 0
     );
     $('#stockJumlah').value = item ? item.jumlah : '0';
+    $('#stockIntervalInput').value = item
+      ? clampInterval(item.interval_servis_bulan)
+      : '0';
     openModal('#stockModal');
     setTimeout(() => $('#stockNama').focus(), 60);
   }
@@ -5683,6 +5720,7 @@
       harga_modal: String(parseMoney($('#stockModalHarga').value)),
       harga_jual: String(parseMoney($('#stockJualHarga').value)),
       jumlah: Math.max(0, intValue($('#stockJumlah').value, 0)),
+      interval_servis_bulan: clampInterval($('#stockIntervalInput').value),
     };
 
     try {

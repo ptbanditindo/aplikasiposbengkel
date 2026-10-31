@@ -103,6 +103,7 @@ def _load_records(db: Session) -> List[ServiceRecord]:
         .options(
             joinedload(ServiceRecord.unit).joinedload(VehicleOrUnit.customer),
             selectinload(ServiceRecord.jobs),
+            selectinload(ServiceRecord.parts),
         )
         .order_by(ServiceRecord.waktu_service.desc(), ServiceRecord.id.desc())
     )
@@ -204,8 +205,8 @@ def _collect_sources(
                 ],
             )
 
-        # --- Servis berkala dari baris jasa nota ---
-        seen_jobs: set = set()
+        # --- Servis berkala dari baris jasa dan sparepart nota ---
+        seen_rows: set = set()
         servis_rows: List[Dict[str, Any]] = []
         for record in customer_records:
             for job in record.jobs:
@@ -213,22 +214,51 @@ def _collect_sources(
                 if interval <= 0:
                     continue
                 key = (
+                    "jasa",
                     job.harga_jasa_id
                     if job.harga_jasa_id is not None
-                    else (job.deskripsi or "").strip().lower()
+                    else (job.deskripsi or "").strip().lower(),
                 )
-                if key in seen_jobs:
+                if key in seen_rows:
                     continue
-                seen_jobs.add(key)
+                seen_rows.add(key)
                 servis_day = record.waktu_service.date()
-                due = add_months(servis_day, interval)
                 servis_rows.append(
                     {
                         "no_nota": record.no_nota,
+                        "jenis_item": "jasa",
+                        "nama": job.deskripsi,
                         "pekerjaan": job.deskripsi,
                         "tanggal_servis": servis_day,
                         "interval_bulan": interval,
-                        "jatuh_tempo": due,
+                        "jatuh_tempo": add_months(servis_day, interval),
+                        "record": record,
+                    }
+                )
+            for part in record.parts:
+                interval = int(getattr(part, "interval_servis_bulan", 0) or 0)
+                if interval <= 0:
+                    continue
+                key = (
+                    "part",
+                    part.stock_item_id
+                    if part.stock_item_id is not None
+                    else (part.nama_part or "").strip().lower(),
+                )
+                if key in seen_rows:
+                    continue
+                seen_rows.add(key)
+                servis_day = record.waktu_service.date()
+                label = f"Sparepart {part.nama_part}"
+                servis_rows.append(
+                    {
+                        "no_nota": record.no_nota,
+                        "jenis_item": "sparepart",
+                        "nama": part.nama_part,
+                        "pekerjaan": label,
+                        "tanggal_servis": servis_day,
+                        "interval_bulan": interval,
+                        "jatuh_tempo": add_months(servis_day, interval),
                         "record": record,
                     }
                 )
@@ -248,6 +278,8 @@ def _collect_sources(
                 [
                     {
                         "no_nota": row["no_nota"],
+                        "jenis_item": row["jenis_item"],
+                        "nama": row["nama"],
                         "pekerjaan": row["pekerjaan"],
                         "tanggal_servis": row["tanggal_servis"],
                         "interval_bulan": row["interval_bulan"],
@@ -722,7 +754,7 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
 
     if item.jenis == JENIS_SERVIS and record is not None:
         interval = 0
-        for row in item.service_record.jobs:
+        for row in list(record.jobs) + list(record.parts):
             interval = max(interval, int(getattr(row, "interval_servis_bulan", 0) or 0))
         jadwal = _format_date(item.jatuh_tempo)
         return (

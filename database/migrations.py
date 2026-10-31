@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 def get_user_version(conn) -> int:
@@ -488,6 +488,22 @@ def _migrate_011_unit_archive(cursor) -> None:
     _add_column(cursor, "vehicle_or_units", "archived_at", "archived_at DATETIME")
 
 
+def _migrate_012_part_interval(cursor) -> None:
+    """P-10: interval servis berkala untuk sparepart (master + snapshot nota)."""
+    _add_column(
+        cursor,
+        "stock_items",
+        "interval_servis_bulan",
+        "interval_servis_bulan INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_parts",
+        "interval_servis_bulan",
+        "interval_servis_bulan INTEGER NOT NULL DEFAULT 0",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -500,6 +516,7 @@ MIGRATIONS: List[Migration] = [
     (9, _migrate_009_whatsapp),
     (10, _migrate_010_followup),
     (11, _migrate_011_unit_archive),
+    (12, _migrate_012_part_interval),
 ]
 
 

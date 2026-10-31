@@ -1115,6 +1115,11 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
 }
 .line-grid .qty-input { text-align: center; }
 .line-grid .btn { padding-left: 12px; padding-right: 12px; }
+.line-form--part .line-grid {
+  grid-template-columns:
+    minmax(150px, 1.1fr) minmax(140px, 1.1fr) 74px
+    minmax(110px, .8fr) minmax(100px, .7fr) 92px auto;
+}
 
 .table-input {
   width: 100%;

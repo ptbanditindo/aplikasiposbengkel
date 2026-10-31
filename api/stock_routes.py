@@ -56,6 +56,7 @@ def create_stock(payload: StockItemCreate, db: Session = Depends(get_db)):
         harga_jual=payload.harga_jual,
         jumlah=payload.jumlah,
         kode=payload.kode,
+        interval_servis_bulan=payload.interval_servis_bulan,
     )
     return StockItemOut.model_validate(item)
 

@@ -192,6 +192,15 @@ def _create_transaction_locked(
                         "tidak dihitung."
                     )
 
+            interval = getattr(part, "interval_servis_bulan", None)
+            if interval is None:
+                interval = int(getattr(stock, "interval_servis_bulan", 0) or 0)
+            interval = int(interval)
+            if interval < 0 or interval > 120:
+                raise BusinessValidationError(
+                    "Interval servis berkala sparepart harus antara 0 dan 120 bulan."
+                )
+
             part_lines.append(
                 {
                     "stock_item_id": stock.id if stock is not None else None,
@@ -199,6 +208,7 @@ def _create_transaction_locked(
                     "jumlah": qty,
                     "harga_satuan": price,
                     "harga_modal": harga_modal,
+                    "interval_servis_bulan": interval,
                 }
             )
 
@@ -335,6 +345,7 @@ def _create_transaction_locked(
                     subtotal=money(Decimal(line["jumlah"]) * line["harga_satuan"]),
                     harga_modal=line["harga_modal"],
                     harga_modal_estimasi=False,
+                    interval_servis_bulan=line["interval_servis_bulan"],
                 )
             )
 

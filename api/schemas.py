@@ -149,6 +149,7 @@ class StockItemCreate(CompatBase):
     harga_modal: Decimal = Field(default=Decimal("0.00"), ge=0)
     harga_jual: Decimal = Field(default=Decimal("0.00"), ge=0)
     jumlah: int = Field(default=0, ge=0)
+    interval_servis_bulan: int = Field(default=0, ge=0, le=120)
 
 
 class StockItemUpdate(CompatBase):
@@ -157,6 +158,7 @@ class StockItemUpdate(CompatBase):
     harga_modal: Optional[Decimal] = Field(default=None, ge=0)
     harga_jual: Optional[Decimal] = Field(default=None, ge=0)
     jumlah: Optional[int] = Field(default=None, ge=0)
+    interval_servis_bulan: Optional[int] = Field(default=None, ge=0, le=120)
     alasan: Optional[str] = Field(default=None, max_length=255)
 
 
@@ -167,6 +169,7 @@ class StockItemOut(ORMModel):
     harga_modal: Money
     harga_jual: Money
     jumlah: int
+    interval_servis_bulan: int = 0
 
 
 class HargaJasaCreate(CompatBase):
@@ -203,6 +206,7 @@ class ServicePartInput(CompatBase):
     jumlah: int = Field(default=1, ge=1)
     harga_satuan: Decimal = Field(..., ge=0)
     harga_modal: Optional[Decimal] = Field(default=None, ge=0)
+    interval_servis_bulan: Optional[int] = Field(default=None, ge=0, le=120)
 
 
 class CreateServiceTransactionRequest(CompatBase):
@@ -275,6 +279,7 @@ class ServicePartOut(ORMModel):
     jumlah_retur: int = 0
     harga_satuan: Money
     subtotal: Money
+    interval_servis_bulan: int = 0
 
 
 class VoidRequest(StrictBase):
@@ -450,6 +455,8 @@ class FollowupRincianOut(CompatBase):
     no_nota: Optional[str] = None
     tanggal_servis: Optional[date] = None
     umur_hari: Optional[int] = None
+    jenis_item: Optional[str] = None
+    nama: Optional[str] = None
     pekerjaan: Optional[str] = None
     garansi_sampai: Optional[date] = None
     sisa_hari: Optional[int] = None

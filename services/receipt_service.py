@@ -299,6 +299,7 @@ def build_receipt_payload(
             "jumlah_retur": int(part.jumlah_retur or 0),
             "harga_satuan": part.harga_satuan,
             "subtotal": part.subtotal,
+            "interval_servis_bulan": int(part.interval_servis_bulan or 0),
         }
         for part in record.parts
     ]

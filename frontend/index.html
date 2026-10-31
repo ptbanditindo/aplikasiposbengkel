@@ -389,13 +389,15 @@
                   <input type="number" class="input qty-input" id="partQty" value="1" min="1" placeholder="Qty">
                   <input type="text" class="input money-input" id="partHarga" inputmode="numeric" placeholder="Harga deal">
                   <input type="text" class="input money-input" id="partModal" inputmode="numeric" placeholder="Modal (sparepart manual)">
+                  <input type="number" class="input interval-input" id="partInterval" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="Servis (bln)" title="Interval servis berkala dalam bulan. 0 = nonaktif.">
                   <button type="button" class="btn btn-outline" id="btnAddPart">+ Tambah sparepart</button>
                 </div>
+                <p class="tiny muted line-hint hidden" id="partIntervalHint"></p>
               </div>
               <div class="table-wrap items-block items-block--part">
                 <table class="table items-table">
                   <thead>
-                    <tr><th>Sparepart</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="col-price">Modal</th><th class="text-right">Subtotal</th><th></th></tr>
+                    <tr><th>Sparepart</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="col-price">Modal</th><th class="col-interval">Servis berkala</th><th class="text-right">Subtotal</th><th></th></tr>
                   </thead>
                   <tbody id="partsBody"></tbody>
                 </table>
@@ -577,7 +579,7 @@
           <div class="table-wrap">
             <table class="table table-stock">
               <thead>
-                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th></th></tr>
+                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th class="col-interval">Servis berkala</th><th></th></tr>
               </thead>
               <tbody id="stockBody"></tbody>
             </table>
@@ -1375,6 +1377,11 @@
             <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0">
           </label>
         </div>
+        <label class="field">
+          <span>Servis berkala</span>
+          <input type="number" class="input" id="stockIntervalInput" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="0">
+          <small class="tiny muted">Interval bulan untuk pengingat servis. 0 berarti nonaktif.</small>
+        </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="stockCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan sparepart</button>

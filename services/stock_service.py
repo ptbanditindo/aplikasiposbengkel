@@ -18,6 +18,7 @@ _STOCK_UPDATE_LABELS = {
     "harga_modal": "Harga modal",
     "harga_jual": "Harga jual",
     "jumlah": "Jumlah",
+    "interval_servis_bulan": "Interval servis",
 }
 _JASA_UPDATE_LABELS = {
     "nama": "Nama",
@@ -45,7 +46,8 @@ def _validate_stock_fields(
     harga_modal: Decimal,
     harga_jual: Decimal,
     jumlah: int,
-) -> tuple[str, Decimal, Decimal, int]:
+    interval_servis_bulan: int = 0,
+) -> tuple[str, Decimal, Decimal, int, int]:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
         raise BusinessValidationError("Nama sparepart minimal 2 karakter.")
@@ -56,7 +58,8 @@ def _validate_stock_fields(
     qty = int(jumlah)
     if qty < 0:
         raise BusinessValidationError("Jumlah stok tidak boleh negatif.")
-    return clean_nama, modal, jual, qty
+    interval = _clean_interval(interval_servis_bulan)
+    return clean_nama, modal, jual, qty, interval
 
 
 def create_stock(
@@ -66,9 +69,10 @@ def create_stock(
     harga_jual: Decimal = Decimal("0.00"),
     jumlah: int = 0,
     kode: Optional[str] = None,
+    interval_servis_bulan: int = 0,
 ) -> StockItem:
-    clean_nama, modal, jual, qty = _validate_stock_fields(
-        nama, harga_modal, harga_jual, jumlah
+    clean_nama, modal, jual, qty, interval = _validate_stock_fields(
+        nama, harga_modal, harga_jual, jumlah, interval_servis_bulan
     )
     clean_kode = clean_text(kode, max_length=64, allow_newlines=False) or None
     if clean_kode and repo.get_stock_by_kode(db, clean_kode):
@@ -80,6 +84,7 @@ def create_stock(
         harga_modal=modal,
         harga_jual=jual,
         jumlah=qty,
+        interval_servis_bulan=interval,
     )
     db.add(item)
     db.flush()
@@ -119,16 +124,18 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
                 raise ConflictError(f"Kode sparepart '{new_kode}' sudah terdaftar.")
         item.kode = new_kode
 
-    clean_nama, modal, jual, qty = _validate_stock_fields(
+    clean_nama, modal, jual, qty, interval = _validate_stock_fields(
         values.get("nama", item.nama),
         values.get("harga_modal", item.harga_modal),
         values.get("harga_jual", item.harga_jual),
         values.get("jumlah", item.jumlah),
+        values.get("interval_servis_bulan", item.interval_servis_bulan),
     )
     item.nama = clean_nama
     item.harga_modal = modal
     item.harga_jual = jual
     item.jumlah = qty
+    item.interval_servis_bulan = interval
 
     # S-06: koreksi manual tidak boleh menghapus jejak audit.
     if qty != old_qty:
