@@ -111,6 +111,64 @@
 
   const qs = (value) => encodeURIComponent(value == null ? '' : String(value));
 
+  async function downloadBackupBlob(path, method) {
+    const headers = {};
+    const token = installToken();
+    if (token) headers['X-Install-Token'] = token;
+
+    let response;
+    try {
+      response = await fetch(path, {
+        method: method,
+        headers: headers,
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+    } catch (err) {
+      throw new ApiError(
+        'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
+        0,
+        null
+      );
+    }
+
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
+    }
+
+    if (!response.ok) {
+      let detail = null;
+      try {
+        const data = await response.json();
+        detail = data ? data.detail : null;
+      } catch (err) {
+        detail = null;
+      }
+      throw new ApiError(
+        messageFor(response.status, detail),
+        response.status,
+        detail
+      );
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename =
+      (match && match[1]) ||
+      'bengkel_radiator_backup_' + new Date().toISOString().slice(0, 10) + '.db';
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return { filename: filename };
+  }
+
   window.API = {
     ApiError: ApiError,
 
@@ -182,8 +240,7 @@
     updateTelegram: (data) =>
       request('/api/settings/telegram', { method: 'PUT', body: data }),
 
-    sendTelegramBackup: () =>
-      request('/api/admin/telegram-backup', { method: 'POST' }),
+    backupNow: () => request('/api/admin/backup-now', { method: 'POST' }),
 
     restoreDatabase: async (file) => {
       const form = new FormData();
@@ -244,7 +301,7 @@
       ),
 
     downloadBackup: async () => {
-      // APK: file ditulis native ke folder Unduhan dan ukurannya diverifikasi.
+      // APK: file ditulis native ke folder pilihan (atau Unduhan) dan ukurannya diverifikasi.
       if (window.BengkelBridge && window.BengkelBridge.available()) {
         const result = await window.BengkelBridge.call('saveBackup', {}, 180000);
         return {
@@ -252,62 +309,13 @@
           location: result.location || 'folder Unduhan',
         };
       }
-
-      const headers = {};
-      const token = installToken();
-      if (token) headers['X-Install-Token'] = token;
-
-      let response;
-      try {
-        response = await fetch('/api/admin/backup', {
-          method: 'POST',
-          headers: headers,
-          credentials: 'same-origin',
-          cache: 'no-store',
-        });
-      } catch (err) {
-        throw new ApiError(
-          'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
-          0,
-          null
-        );
-      }
-
-      if (response.status === 401) {
-        window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
-      }
-
-      if (!response.ok) {
-        let detail = null;
-        try {
-          const data = await response.json();
-          detail = data ? data.detail : null;
-        } catch (err) {
-          detail = null;
-        }
-        throw new ApiError(
-          messageFor(response.status, detail),
-          response.status,
-          detail
-        );
-      }
-
-      const blob = await response.blob();
-      const disposition = response.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename="?([^";]+)"?/i);
-      const filename =
-        (match && match[1]) ||
-        'bengkel_radiator_backup_' + new Date().toISOString().slice(0, 10) + '.db';
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-      return { filename: filename };
+      return downloadBackupBlob('/api/admin/backup', 'POST');
     },
+
+    downloadBackupFile: (filename) =>
+      downloadBackupBlob(
+        '/api/admin/backup/file/' + encodeURIComponent(filename),
+        'GET'
+      ),
   };
 })();

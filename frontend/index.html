@@ -754,26 +754,45 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Backup dan pemulihan</h2>
+              <h2>Backup, pemulihan dan berbagi database</h2>
               <p class="muted">Satu file berisi data pelanggan, unit, riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel.</p>
             </div>
           </div>
+
+          <div class="folder-row">
+            <div class="folder-text">
+              <span class="folder-label">Folder backup</span>
+              <span class="folder-value" id="backupFolderName">Belum dipilih</span>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="backupFolderChoose">Pilih folder</button>
+          </div>
+
           <p class="tiny muted">
             Gunakan file backup dari perangkat lain saat memasang aplikasi baru. Data saat ini
             akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan.
           </p>
-          <div class="form-actions">
-            <button type="button" class="btn btn-outline" id="settingsBackup">Unduh backup</button>
-            <button type="button" class="btn btn-outline hidden" id="settingsShareBackup">Bagikan backup</button>
-            <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan data</button>
-            <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
+
+          <div class="backup-actions">
+            <div class="backup-action">
+              <button type="button" class="btn btn-outline" id="settingsRestore">Pulihkan data</button>
+              <span class="tiny muted">Mengganti data sekarang dengan file backup.</span>
+            </div>
+            <div class="backup-action">
+              <button type="button" class="btn btn-outline" id="settingsBackup">Backup manual</button>
+              <span class="tiny muted" id="settingsBackupHint">Menyimpan ke folder terpilih.</span>
+            </div>
+            <div class="backup-action hidden" id="shareBackupWrap">
+              <button type="button" class="btn btn-outline" id="settingsShareBackup">Bagikan database</button>
+              <span class="tiny muted">Database real sampai detik ini.</span>
+            </div>
           </div>
+          <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
         </section>
 
         <form class="card" id="telegramForm">
           <div class="card-head">
             <div>
-              <h2>Backup otomatis Telegram</h2>
+              <h2>Backup otomatis Telegram &amp; lokal</h2>
               <p class="muted" id="telegramStatus">Belum diatur.</p>
             </div>
           </div>
@@ -816,9 +835,22 @@
             jadwal terlewat, backup dikirim begitu internet tersedia.
           </p>
 
-          <div class="form-actions">
-            <button type="button" class="btn btn-outline" id="telegramSendNow">Kirim backup sekarang</button>
-            <button type="submit" class="btn btn-primary" id="telegramSave">Simpan pengaturan Telegram</button>
+          <div class="folder-row">
+            <div class="folder-text">
+              <span class="folder-label">Pilih folder tempat penyimpanan</span>
+              <span class="folder-value" id="autoBackupFolderName">Belum dipilih</span>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="autoBackupFolderChoose">Pilih folder</button>
+          </div>
+
+          <div class="form-actions backup-actions">
+            <div class="backup-action">
+              <button type="submit" class="btn btn-primary" id="telegramSave">Simpan pengaturan</button>
+            </div>
+            <div class="backup-action">
+              <button type="button" class="btn btn-outline" id="telegramSendNow">Kirim backup sekarang</button>
+              <span class="tiny muted">Langsung kirim ke Telegram dan folder pilihan.</span>
+            </div>
           </div>
         </form>
 

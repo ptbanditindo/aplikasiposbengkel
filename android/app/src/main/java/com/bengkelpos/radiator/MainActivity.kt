@@ -7,6 +7,7 @@ import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -24,6 +25,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -35,6 +37,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.bengkelpos.radiator.backend.BackendManager
+import com.bengkelpos.radiator.backup.BackupFolder
+import com.bengkelpos.radiator.backup.BackupFolderStore
 import com.bengkelpos.radiator.nativebridge.NativeBridge
 import com.bengkelpos.radiator.pin.PinActivity
 import com.bengkelpos.radiator.pin.PinSession
@@ -57,6 +61,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var offlinePanel: View
     private lateinit var offlineText: TextView
+    private lateinit var offlineSpinner: ProgressBar
+    private lateinit var retryButton: Button
     private lateinit var privacyCover: View
     private lateinit var pinSettings: PinSettings
     private lateinit var adminToken: String
@@ -75,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private val nativeExecutor: ExecutorService = Executors.newFixedThreadPool(2)
     private var pendingStorageCallback: ((Boolean) -> Unit)? = null
     private var pendingBluetoothCallback: ((Boolean) -> Unit)? = null
+    private var pendingBackupFolderCallback: ((BackupFolder?) -> Unit)? = null
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -111,6 +118,34 @@ class MainActivity : AppCompatActivity() {
         callback.onReceiveValue(uris)
     }
 
+    private val backupFolderLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val callback = pendingBackupFolderCallback ?: return@registerForActivityResult
+        pendingBackupFolderCallback = null
+        val uri = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            callback(null)
+            return@registerForActivityResult
+        }
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val persisted = runCatching {
+            contentResolver.takePersistableUriPermission(uri, flags)
+        }.isSuccess
+        if (!persisted) {
+            Toast.makeText(
+                this@MainActivity,
+                "Folder tidak dapat diakses. Pilih folder lain.",
+                Toast.LENGTH_LONG,
+            ).show()
+            callback(null)
+            return@registerForActivityResult
+        }
+        val name = BackupFolderStore.displayName(this@MainActivity, uri) ?: "Folder backup"
+        callback(BackupFolder(uri.toString(), name))
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,6 +154,8 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         offlinePanel = findViewById(R.id.offlinePanel)
         offlineText = findViewById(R.id.offlineText)
+        offlineSpinner = findViewById(R.id.offlineSpinner)
+        retryButton = findViewById(R.id.retryButton)
         privacyCover = findViewById(R.id.privacyCover)
         configureWindowInsets()
         applyAppTheme(dark = false)
@@ -142,9 +179,10 @@ class MainActivity : AppCompatActivity() {
             usbPrinterController = usbPrinter,
             systemPrintController = systemPrinter,
             requestBluetoothPermissions = ::requestBluetoothPermissions,
+            requestBackupFolder = ::requestBackupFolder,
         )
 
-        findViewById<Button>(R.id.retryButton).setOnClickListener { startBackend() }
+        retryButton.setOnClickListener { startBackend() }
 
         configureWebView()
         startBackend()
@@ -167,7 +205,7 @@ class MainActivity : AppCompatActivity() {
             privacyCover.visibility = View.VISIBLE
             startActivity(Intent(this, PinActivity::class.java))
         } else {
-            PinSession.markResumed()
+            PinSession.markResumed(pinSettings)
             val contentReady = pageLoaded || offlinePanel.visibility == View.VISIBLE
             privacyCover.visibility = if (contentReady) View.GONE else View.VISIBLE
         }
@@ -221,6 +259,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.privacyCover).setBackgroundColor(ground)
         findViewById<View>(R.id.offlinePanel).setBackgroundColor(surface)
         findViewById<TextView>(R.id.offlineText).setTextColor(textColor)
+        findViewById<ProgressBar>(R.id.offlineSpinner).indeterminateTintList =
+            ColorStateList.valueOf(accent)
         findViewById<Button>(R.id.retryButton).setTextColor(accent)
 
         val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -275,6 +315,7 @@ class MainActivity : AppCompatActivity() {
                 injectAdminToken()
                 pageLoaded = true
                 privacyCover.visibility = View.GONE
+                offlineSpinner.visibility = View.GONE
                 offlinePanel.visibility = View.GONE
             }
 
@@ -284,10 +325,7 @@ class MainActivity : AppCompatActivity() {
                 error: WebResourceError,
             ) {
                 if (request.isForMainFrame) {
-                    pageLoaded = false
-                    privacyCover.visibility = View.GONE
-                    offlineText.setText(R.string.offline_hint)
-                    offlinePanel.visibility = View.VISIBLE
+                    showOfflineMessage(R.string.offline_hint)
                 }
             }
         }
@@ -317,10 +355,7 @@ class MainActivity : AppCompatActivity() {
     private fun startBackend() {
         if (startingBackend) return
         startingBackend = true
-        pageLoaded = false
-        privacyCover.visibility = View.GONE
-        offlineText.setText(R.string.preparing_hint)
-        offlinePanel.visibility = View.VISIBLE
+        showPreparing()
         val token = adminToken
         Thread {
             val ready = runCatching {
@@ -339,11 +374,27 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun showBackendError() {
+    private fun showPreparing() {
         pageLoaded = false
         privacyCover.visibility = View.GONE
-        offlineText.setText(R.string.backend_error_hint)
+        offlineText.visibility = View.GONE
+        retryButton.visibility = View.GONE
+        offlineSpinner.visibility = View.VISIBLE
         offlinePanel.visibility = View.VISIBLE
+    }
+
+    private fun showOfflineMessage(messageRes: Int) {
+        pageLoaded = false
+        privacyCover.visibility = View.GONE
+        offlineSpinner.visibility = View.GONE
+        offlineText.setText(messageRes)
+        offlineText.visibility = View.VISIBLE
+        retryButton.visibility = View.VISIBLE
+        offlinePanel.visibility = View.VISIBLE
+    }
+
+    private fun showBackendError() {
+        showOfflineMessage(R.string.backend_error_hint)
     }
 
     private fun restartBackendAfterRestore() {
@@ -365,6 +416,34 @@ class MainActivity : AppCompatActivity() {
             storagePermissionLauncher.launch(
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
+        }
+    }
+
+    private fun requestBackupFolder(callback: (BackupFolder?) -> Unit) {
+        val previous = pendingBackupFolderCallback
+        pendingBackupFolderCallback = null
+        previous?.invoke(null)
+        pendingBackupFolderCallback = callback
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+            )
+        }
+        runOnUiThread {
+            if (isFinishing || isDestroyed) {
+                pendingBackupFolderCallback = null
+                callback(null)
+                return@runOnUiThread
+            }
+            try {
+                backupFolderLauncher.launch(intent)
+            } catch (error: ActivityNotFoundException) {
+                pendingBackupFolderCallback = null
+                callback(null)
+            }
         }
     }
 
@@ -454,6 +533,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadApp() {
         pageLoaded = false
         privacyCover.visibility = View.GONE
+        offlineSpinner.visibility = View.GONE
         offlinePanel.visibility = View.GONE
         registerAdminTokenScript()
         webView.loadUrl(appUrl())
@@ -495,7 +575,8 @@ class MainActivity : AppCompatActivity() {
         fun lockNow() {
             runOnUiThread {
                 if (storeHasPin()) {
-                    PinSession.markBackground(SystemLockoutClock)
+                    PinSession.markBackground(SystemLockoutClock, pinSettings)
+                    PinSession.forceLock(pinSettings)
                     privacyCover.visibility = View.VISIBLE
                     startActivity(Intent(this@MainActivity, PinActivity::class.java))
                 }

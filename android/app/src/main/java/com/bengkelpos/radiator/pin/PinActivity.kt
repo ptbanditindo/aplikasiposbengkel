@@ -41,6 +41,7 @@ class PinActivity : AppCompatActivity() {
     private lateinit var pinForgot: Button
 
     private var store: PinStore? = null
+    private lateinit var settings: PinSettings
     private var mode = Mode.UNLOCK
     private val entered = StringBuilder(PIN_LENGTH)
     private var firstPin: CharArray? = null
@@ -100,6 +101,7 @@ class PinActivity : AppCompatActivity() {
             showStorageError()
             return
         }
+        settings = PinSettings(this)
         startGate()
     }
 
@@ -136,6 +138,11 @@ class PinActivity : AppCompatActivity() {
         val current = store ?: return
         if (!current.hasPin()) {
             beginCreate()
+            return
+        }
+        if (!PinSession.requiresPin(clock, settings.idleTimeoutMs(), hasPin = true)) {
+            // Masih di dalam batas "Kunci otomatis": lanjut tanpa PIN.
+            proceedAfterUnlock(clearStack = false)
             return
         }
         mode = Mode.UNLOCK
@@ -407,7 +414,7 @@ class PinActivity : AppCompatActivity() {
     }
 
     private fun proceedAfterUnlock(clearStack: Boolean) {
-        PinSession.markUnlocked(clock)
+        PinSession.markUnlocked(clock, settings)
         entered.setLength(0)
         firstPin?.fill('\u0000')
         firstPin = null

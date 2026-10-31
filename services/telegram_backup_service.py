@@ -17,7 +17,18 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config import settings
-from database.models import ServiceRecord
+from database.models import (
+    AuditEvent,
+    Customer,
+    HargaJasa,
+    ServiceJob,
+    ServicePart,
+    ServiceRecord,
+    ServiceReturn,
+    StockItem,
+    StockMovement,
+    VehicleOrUnit,
+)
 from database.session import SessionLocal
 from services import backup_service, settings_service
 from services.errors import BusinessValidationError
@@ -30,6 +41,29 @@ RETRY_MINUTES = 10
 MAX_DOCUMENT_BYTES = 50 * 1024 * 1024  # batas kirim dokumen Bot API Telegram
 PENDING_BACKUP_KEY = "telegram.pending_backup_path"
 PENDING_BACKUP_DATE_KEY = "telegram.pending_backup_date"
+PENDING_BACKUP_STAMP_KEY = "telegram.pending_backup_stamp"
+
+# Tabel berisi data yang harus ikut snapshot. Jumlah baris mendeteksi data
+# baru; `updated_at` mendeteksi perubahan pada baris yang sudah ada.
+_STAMP_COUNT_MODELS = (
+    Customer,
+    VehicleOrUnit,
+    StockItem,
+    HargaJasa,
+    ServiceRecord,
+    ServiceJob,
+    ServicePart,
+    ServiceReturn,
+    StockMovement,
+    AuditEvent,
+)
+_STAMP_UPDATED_MODELS = (
+    Customer,
+    VehicleOrUnit,
+    StockItem,
+    HargaJasa,
+    ServiceRecord,
+)
 
 # Satu backup pada satu waktu: endpoint terjadwal, pengiriman manual, dan
 # penjadwal Python tidak boleh saling menimpa file atau mengirim dua kali.
@@ -50,25 +84,62 @@ def _safe_backup_path(raw: str) -> Optional[Path]:
 def _clear_pending_backup(db: Session) -> None:
     settings_service.set_setting(db, PENDING_BACKUP_KEY, "")
     settings_service.set_setting(db, PENDING_BACKUP_DATE_KEY, "")
+    settings_service.set_setting(db, PENDING_BACKUP_STAMP_KEY, "")
+
+
+def _data_stamp(db: Session) -> str:
+    """Ringkasan isi data untuk mendeteksi snapshot yang sudah basi."""
+    parts = []
+    for model in _STAMP_COUNT_MODELS:
+        count = db.scalar(select(func.count()).select_from(model)) or 0
+        parts.append(f"{model.__tablename__}={count}")
+    for model in _STAMP_UPDATED_MODELS:
+        latest = db.scalar(select(func.max(model.updated_at)))
+        parts.append(
+            f"{model.__tablename__}@{latest.isoformat() if latest else ''}"
+        )
+    # Identitas bengkel ikut ke dalam snapshot, jadi perubahan nama/tagline
+    # juga harus membuat snapshot baru.
+    info = settings_service.get_bengkel_info(db)
+    parts.append("bengkel=" + "|".join(f"{k}:{info[k]}" for k in sorted(info)))
+    return "|".join(parts)
 
 
 def _pending_backup(db: Session) -> Optional[Path]:
-    """Pakai ulang file backup yang sudah dibuat untuk percobaan ulang hari ini."""
+    """Pakai ulang snapshot hari ini hanya bila isinya masih sama dengan data.
+
+    Snapshot lama tetap tersimpan di folder backup; yang dibatalkan hanya
+    pemakaian ulang untuk pengiriman agar nota baru tidak tertinggal.
+    """
     raw = settings_service.get_setting(db, PENDING_BACKUP_KEY)
     if not raw:
         return None
 
     path = _safe_backup_path(raw)
     stored_date = settings_service.get_setting(db, PENDING_BACKUP_DATE_KEY)
+    stored_stamp = settings_service.get_setting(db, PENDING_BACKUP_STAMP_KEY)
     if (
         path is None
         or stored_date != date.today().isoformat()
         or not path.exists()
+        or stored_stamp != _data_stamp(db)
     ):
-        # File lama tetap disimpan sebagai backup lokal; retensi yang mengurus.
         _clear_pending_backup(db)
         db.commit()
         return None
+    return path
+
+
+def _create_snapshot(db: Session) -> Path:
+    """Buat snapshot baru dan catat stempel data saat snapshot diambil."""
+    stamp = _data_stamp(db)
+    path = backup_service.create_backup()
+    settings_service.set_setting(db, PENDING_BACKUP_KEY, str(path))
+    settings_service.set_setting(
+        db, PENDING_BACKUP_DATE_KEY, date.today().isoformat()
+    )
+    settings_service.set_setting(db, PENDING_BACKUP_STAMP_KEY, stamp)
+    db.commit()
     return path
 
 
@@ -139,12 +210,88 @@ def _record_failure(db: Session, message: str, now: datetime) -> None:
 
 
 def send_backup(db: Session) -> Dict[str, Any]:
-    """Kirim snapshot database lengkap ke Telegram milik owner."""
+    """Kirim snapshot database lengkap ke Telegram milik owner.
+
+    Tombol "Backup sekarang" selalu mengirim data sampai detik itu: snapshot
+    lama hanya dipakai bila isinya masih identik, termasuk identitas bengkel.
+    """
     with BACKUP_LOCK:
-        return _send_backup(db)
+        config = settings_service.get_telegram_config(db)
+        if not config["bot_token"] or not config["chat_id"]:
+            raise BusinessValidationError(
+                "Bot token dan chat ID Telegram belum diatur di menu Pengaturan."
+            )
+        return _send_snapshot(db, _pending_backup(db) or _create_snapshot(db))
 
 
-def _send_backup(db: Session) -> Dict[str, Any]:
+def run_manual_backup(db: Session) -> Dict[str, Any]:
+    """Simpan snapshot terkini, lalu kirim ke Telegram bila sudah diatur.
+
+    Tombol "Kirim backup sekarang" selalu menyimpan salinan lokal terlebih
+    dahulu. Kegagalan Telegram dilaporkan pada hasil, tetapi file lokal tetap
+    ada dan bisa disalin ke folder pilihan pengguna.
+    """
+    with BACKUP_LOCK:
+        config = settings_service.get_telegram_config(db)
+        ready = bool(config["bot_token"] and config["chat_id"])
+        now = datetime.now()
+        try:
+            path = _pending_backup(db) or _create_snapshot(db)
+        except (BusinessValidationError, OSError) as exc:
+            message = str(exc)
+            _record_backup_status(db, now, "failed", error=message, touch_local=False)
+            raise
+
+        jumlah_nota = db.scalar(select(func.count()).select_from(ServiceRecord)) or 0
+        if not ready:
+            _record_backup_status(db, now, "ok", filename=path.name)
+            return {
+                "status": "ok",
+                "local_saved": True,
+                "filename": path.name,
+                "size_bytes": path.stat().st_size,
+                "created_at": now.isoformat(timespec="seconds"),
+                "telegram_ready": False,
+                "telegram_sent": False,
+                "telegram_error": None,
+                "jumlah_nota": jumlah_nota,
+                "message": "Backup lokal tersimpan. Telegram belum diatur.",
+            }
+
+        try:
+            _send_snapshot(db, path)
+        except BusinessValidationError as exc:
+            message = str(exc)
+            _record_backup_status(db, now, "failed", error=message, filename=path.name)
+            return {
+                "status": "failed",
+                "local_saved": True,
+                "filename": path.name,
+                "size_bytes": path.stat().st_size,
+                "created_at": now.isoformat(timespec="seconds"),
+                "telegram_ready": True,
+                "telegram_sent": False,
+                "telegram_error": message,
+                "jumlah_nota": jumlah_nota,
+                "message": "Backup lokal tersimpan; pengiriman Telegram gagal.",
+            }
+
+        _record_backup_status(db, now, "ok", filename=path.name, telegram_sent=True)
+        return {
+            "status": "ok",
+            "local_saved": True,
+            "filename": path.name,
+            "size_bytes": path.stat().st_size,
+            "created_at": now.isoformat(timespec="seconds"),
+            "telegram_ready": True,
+            "telegram_sent": True,
+            "telegram_error": None,
+            "jumlah_nota": jumlah_nota,
+            "message": "Backup tersimpan dan terkirim ke Telegram.",
+        }
+
+
+def _send_snapshot(db: Session, backup_path: Path) -> Dict[str, Any]:
     config = settings_service.get_telegram_config(db)
     if not config["bot_token"] or not config["chat_id"]:
         raise BusinessValidationError(
@@ -152,15 +299,6 @@ def _send_backup(db: Session) -> Dict[str, Any]:
         )
 
     start, end = data_range(db)
-    backup_path = _pending_backup(db)
-    if backup_path is None:
-        backup_path = backup_service.create_backup()
-        settings_service.set_setting(db, PENDING_BACKUP_KEY, str(backup_path))
-        settings_service.set_setting(
-            db, PENDING_BACKUP_DATE_KEY, date.today().isoformat()
-        )
-        db.commit()
-
     if backup_path.stat().st_size > MAX_DOCUMENT_BYTES:
         # Snapshot lokal tetap disimpan; hanya pengiriman Telegram yang batal.
         _clear_pending_backup(db)
@@ -206,15 +344,8 @@ def _send_backup(db: Session) -> Dict[str, Any]:
         "end": end,
         "sent_at": now,
         "jumlah_nota": db.scalar(select(func.count()).select_from(ServiceRecord)) or 0,
+        "backup_path": backup_path,
     }
-
-
-def _remember_pending_backup(db: Session, path: Path) -> None:
-    settings_service.set_setting(db, PENDING_BACKUP_KEY, str(path))
-    settings_service.set_setting(
-        db, PENDING_BACKUP_DATE_KEY, date.today().isoformat()
-    )
-    db.commit()
 
 
 def _same_day_backup(db: Session, moment: datetime) -> Optional[Path]:
@@ -304,8 +435,9 @@ def run_scheduled_backup_now(
     """Satu putaran backup terjadwal yang aman dipanggil WorkManager.
 
     Urutan wajib: simpan snapshot lokal dulu, baru coba kirim ke Telegram.
-    Kegagalan Telegram tidak menghapus snapshot; percobaan ulang di hari yang
-    sama memakai file yang sama sehingga tidak ada berkas ganda.
+    Kegagalan Telegram tidak menghapus snapshot; percobaan ulang memakai file
+    yang sama hanya selama belum ada data baru, sehingga tidak ada berkas
+    ganda sekaligus tidak ada nota yang tertinggal.
     """
     moment = now or datetime.now()
     if not BACKUP_LOCK.acquire(blocking=False):
@@ -323,11 +455,51 @@ def run_scheduled_backup_now(
         )
 
         last_sent = _parse_datetime(config.get("last_sent_at"))
+        sent_today = bool(
+            telegram_ready
+            and last_sent is not None
+            and last_sent.date() == moment.date()
+        )
 
-        path = _same_day_backup(db, moment)
-        if path is None:
+        if sent_today or not telegram_ready:
+            path = _same_day_backup(db, moment)
+            if path is None:
+                try:
+                    path = _create_snapshot(db)
+                except (BusinessValidationError, OSError) as exc:
+                    message = str(exc)
+                    _record_backup_status(
+                        db, moment, "failed", error=message, touch_local=False
+                    )
+                    return _scheduled_response(
+                        "failed",
+                        moment,
+                        telegram_enabled=telegram_enabled,
+                        telegram_error=message if telegram_ready else None,
+                        message=message,
+                    )
+            _record_backup_status(
+                db, moment, "ok", filename=path.name, telegram_sent=sent_today
+            )
+            return _scheduled_response(
+                "ok",
+                moment,
+                path=path,
+                local_saved=True,
+                telegram_enabled=telegram_enabled,
+                telegram_sent=sent_today,
+                message=(
+                    "Backup lokal tersimpan; hari ini sudah dikirim ke Telegram."
+                    if sent_today
+                    else "Backup lokal tersimpan."
+                ),
+            )
+
+        # Perlu kirim sekarang: snapshot wajib memuat seluruh data terkini.
+        snapshot = _pending_backup(db)
+        if snapshot is None:
             try:
-                path = backup_service.create_backup()
+                snapshot = _create_snapshot(db)
             except (BusinessValidationError, OSError) as exc:
                 message = str(exc)
                 _record_backup_status(
@@ -337,70 +509,21 @@ def run_scheduled_backup_now(
                     "failed",
                     moment,
                     telegram_enabled=telegram_enabled,
-                    telegram_error=message if telegram_ready else None,
+                    telegram_error=message,
                     message=message,
                 )
-            _remember_pending_backup(db, path)
-
-        if (
-            telegram_ready
-            and last_sent is not None
-            and last_sent.date() == moment.date()
-        ):
-            _record_backup_status(
-                db, moment, "ok", filename=path.name, telegram_sent=True
-            )
-            return _scheduled_response(
-                "ok",
-                moment,
-                path=path,
-                local_saved=True,
-                telegram_enabled=True,
-                telegram_sent=True,
-                message="Backup lokal tersimpan; hari ini sudah dikirim ke Telegram.",
-            )
-
-        if not telegram_ready:
-            _record_backup_status(
-                db, moment, "ok", filename=path.name
-            )
-            return _scheduled_response(
-                "ok",
-                moment,
-                path=path,
-                local_saved=True,
-                message="Backup lokal tersimpan.",
-            )
-
-        if path.stat().st_size > MAX_DOCUMENT_BYTES:
-            message = (
-                "Backup lokal tersimpan, tetapi melebihi 50 MB (batas kirim "
-                "bot Telegram). Unduh backup manual dari menu Pengaturan."
-            )
-            _record_backup_status(
-                db, moment, "failed", error=message, filename=path.name
-            )
-            return _scheduled_response(
-                "failed",
-                moment,
-                path=path,
-                local_saved=True,
-                telegram_enabled=True,
-                telegram_error=message,
-                message=message,
-            )
 
         try:
-            _send_backup(db)
+            _send_snapshot(db, snapshot)
         except BusinessValidationError as exc:
             message = str(exc)
             _record_backup_status(
-                db, moment, "failed", error=message, filename=path.name
+                db, moment, "failed", error=message, filename=snapshot.name
             )
             return _scheduled_response(
                 "failed",
                 moment,
-                path=path,
+                path=snapshot,
                 local_saved=True,
                 telegram_enabled=True,
                 telegram_error=message,
@@ -408,12 +531,12 @@ def run_scheduled_backup_now(
             )
 
         _record_backup_status(
-            db, moment, "ok", filename=path.name, telegram_sent=True
+            db, moment, "ok", filename=snapshot.name, telegram_sent=True
         )
         return _scheduled_response(
             "ok",
             moment,
-            path=path,
+            path=snapshot,
             local_saved=True,
             telegram_enabled=True,
             telegram_sent=True,

@@ -19,7 +19,8 @@ PinActivity (gerbang PIN)
 
 WorkManager (ScheduledBackupWorker)
   └─ menyalakan backend bila perlu → POST /api/admin/scheduled-backup
-     → snapshot lokal harian → kirim Telegram bila diaktifkan
+     → snapshot lokal harian → salin ke folder pilihan (SAF)
+     → kirim Telegram bila diaktifkan
 ```
 
 - **Kode Python tidak disalin manual.** Gradle task `packageBackend`
@@ -32,7 +33,9 @@ WorkManager (ScheduledBackupWorker)
   setiap kali backend berubah agar ZIP diekstrak ulang.
 - **Data pengguna** disimpan di `filesDir/`: database SQLite di
   `files/data/bengkel_radiator.db`, backup di `files/backups/`, dan konfigurasi
-  printer di `files/data/printer_config.json`.
+  printer di `files/data/printer_config.json`. Salinan backup tambahan ditulis
+  ke folder yang dipilih pengguna lewat Storage Access Framework; tanpa
+  pilihan folder, salinan jatuh ke Unduhan.
 - **Server** hanya mendengarkan `127.0.0.1` pada port bebas pertama di
   8000-8010. `BackendManager` baru menandai server siap setelah `/api/health`
   menjawab, sehingga tombol "Coba lagi" benar-benar memulai ulang bila port
@@ -127,27 +130,27 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.018.304 byte
-- SHA-256: `64fbd0aa3591778751d45d9e3c4c85be2fc0dc451d5c89f54e575f2f6c0a6cac`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.0`, versionCode `3`,
+- Ukuran: 45.034.812 byte
+- SHA-256: `64d45743dc97f929f0b60c2c2ba90a1455fd7bb8ec11813f2c1ebcde5251123f`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.2`, versionCode `5`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 207.282 byte, SHA-256
-  `392754855f46a0ec7bc42b39de63c9c412a5a2024849fa241366972b44024c84`.
-  `frontend/index.html` di dalam ZIP dicocokkan hash-nya dengan working tree
-  saat build dan memuat footer v2.2, riwayat servis di detail pelanggan, zona
-  warna input kasir, kontrol Terang/Gelap, serta format ribuan pada kolom uang.
-  `style.css`, `app.js`, `api-client.js`, dan `printer-manager.js` juga ikut
-  dalam ZIP yang sama dan hash-nya sama dengan working tree.
-- Unit test JVM: **143 test per varian** (Debug dan Release, total 286 run)
-  lulus. Pytest backend: **226 test lulus** di masing-masing stack (Pydantic v2
-  dan Pydantic 1.10).
+- Asset `assets/bengkel_backend.zip`: 210.531 byte, SHA-256
+  `d4dd12198fec978466292a54d371967f91540a6cb9a8015e28247a6264f214f7`.
+  `services/pos_service.py`, `services/customer_service.py`,
+  `services/receipt_service.py`, `frontend/js/app.js`, dan
+  `frontend/css/style.css` di dalam ZIP dicocokkan hash-nya dengan working tree
+  saat build. ZIP ini memuat label barang yang dicetak di bawah nota, daftar
+  stok yang lebih rapat, serta indikator loading berbentuk lingkaran di APK.
+- Unit test JVM: **150 test** (Debug) lulus. Pytest backend: **239 test lulus**
+  di masing-masing stack (Pydantic v2 dan Pydantic 1.10).
 - APK belum dipasang/diuji di perangkat Android fisik.
 
 ## Pemeriksaan di perangkat
 
-1. Instal APK, buat PIN, tunggu teks "Menyiapkan server lokal". Bila memasang
-   menimpa APK 2.1, versi yang naik memaksa backend diekstrak ulang sehingga
-   tampilan terbaru ikut terpakai.
+1. Instal APK, buat PIN. Saat server disiapkan, layar menampilkan lingkaran
+   loading tanpa teks "Menyiapkan aplikasi". Bila memasang menimpa APK 2.1,
+   versi yang naik memaksa backend diekstrak ulang sehingga tampilan terbaru
+   ikut terpakai.
 2. Pastikan halaman kasir muncul dan transaksi bisa disimpan.
 3. Buka detail pelanggan yang punya nota: bagian Riwayat servis terisi dan
    baris riwayat bisa diketuk untuk membuka detail nota.

@@ -44,6 +44,29 @@ class ScheduledBackupWorker(
         try {
             val body = requestScheduledBackup(token)
             val status = body.optString("status", "failed")
+            val filename = body.optString("filename", "")
+            val folderError = if (body.optBoolean("local_saved", false) &&
+                filename.isNotBlank()
+            ) {
+                copyToSelectedFolder(token, filename)
+            } else {
+                null
+            }
+
+            if (folderError != null) {
+                BackupScheduler.recordResult(
+                    applicationContext,
+                    "failed",
+                    "Backup lokal tersimpan, tetapi gagal disalin ke folder " +
+                        "pilihan: $folderError",
+                )
+                return@withContext if (runAttemptCount >= BackupPolicy.MAX_ATTEMPTS) {
+                    Result.success()
+                } else {
+                    Result.retry()
+                }
+            }
+
             val message = body.optString("message", "")
             BackupScheduler.recordResult(applicationContext, status, message)
             if (!BackupPolicy.shouldRetry(status)) return@withContext Result.success()
@@ -96,6 +119,45 @@ class ScheduledBackupWorker(
             Result.retry()
         } else {
             Result.success()
+        }
+    }
+
+    private fun copyToSelectedFolder(token: String, filename: String): String? {
+        if (BackupFolderStore.current(applicationContext) == null) return null
+        if (!BackupFolderStore.isValidBackupName(filename)) {
+            return "nama file backup tidak valid."
+        }
+        if (BackupFolderStore.wasCopied(applicationContext, filename)) return null
+        return try {
+            val bytes = downloadBackupFile(token, filename)
+            BackupFolderStore.save(applicationContext, bytes, filename)
+            BackupFolderStore.markCopied(applicationContext, filename)
+            null
+        } catch (error: Exception) {
+            "folder tidak dapat ditulis. Pilih folder lagi di Pengaturan."
+        }
+    }
+
+    private fun downloadBackupFile(token: String, filename: String): ByteArray {
+        val connection =
+            URL("${BackendManager.baseUrl}/api/admin/backup/file/$filename")
+                .openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 30_000
+        connection.readTimeout = 120_000
+        connection.setRequestProperty("X-Install-Token", token)
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                throw IllegalStateException("File backup tidak dapat diambil.")
+            }
+            val bytes = connection.inputStream.use { it.readBytes() }
+            if (bytes.isEmpty()) {
+                throw IllegalStateException("File backup kosong.")
+            }
+            return bytes
+        } finally {
+            connection.disconnect()
         }
     }
 

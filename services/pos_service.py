@@ -25,7 +25,7 @@ from database.models import (
 )
 from database.session import begin_immediate
 from repositories import service_record_repository as record_repo
-from services import pricing_service, warranty_service
+from services import customer_service, pricing_service, warranty_service
 from services.errors import (
     BusinessValidationError,
     InsufficientStockError,
@@ -92,6 +92,10 @@ def _create_transaction_locked(
         unit = db.get(VehicleOrUnit, payload.unit_id)
         if unit is None:
             raise NotFoundError("Unit servis tidak ditemukan.")
+
+        now = datetime.now()
+        # Nomor barang baru dibuat saat transaksi pertama unit ini tercatat.
+        customer_service.ensure_unit_label(db, unit, now.date())
 
         keluhan = clean_text(payload.keluhan_awal, max_length=2000)
         if not keluhan:
@@ -215,7 +219,6 @@ def _create_transaction_locked(
                 max_length=1000,
             )
 
-        now = datetime.now()
         record = ServiceRecord(
             unit_id=unit.id,
             no_nota=record_repo.allocate_nota(db, now.date()),

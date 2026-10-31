@@ -33,7 +33,7 @@
 
     <string name="delete_digit">Hapus angka</string>
     <string name="offline_hint">Aplikasi belum merespons.\nCoba lagi.</string>
-    <string name="preparing_hint">Menyiapkan aplikasi.\nMohon tunggu…</string>
+    <string name="loading_label">Memuat aplikasi</string>
     <string name="backend_error_hint">Aplikasi gagal dijalankan. Tutup aplikasi lain yang sedang berjalan, lalu tekan Coba lagi.</string>
     <string name="retry">Coba lagi</string>
     <string name="external_link_blocked">Tautan eksternal diblokir di dalam aplikasi.</string>

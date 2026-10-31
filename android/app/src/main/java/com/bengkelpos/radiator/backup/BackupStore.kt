@@ -15,7 +15,6 @@ import java.io.IOException
 data class SavedBackup(
     val displayName: String,
     val location: String,
-    val shareUri: Uri,
 )
 
 /**
@@ -38,11 +37,9 @@ object BackupStore {
         } else {
             saveToLegacyDownloads(context, bytes, displayName)
         }
-        val shareUri = cacheForSharing(context, bytes, displayName)
         return SavedBackup(
             displayName = displayName,
             location = "folder Unduhan",
-            shareUri = shareUri,
         )
     }
 
@@ -112,7 +109,7 @@ object BackupStore {
         return candidate
     }
 
-    private fun cacheForSharing(context: Context, bytes: ByteArray, displayName: String): Uri {
+    fun cacheForSharing(context: Context, bytes: ByteArray, displayName: String): Uri {
         val directory = File(context.cacheDir, SHARE_DIR)
         if (!directory.exists() && !directory.mkdirs()) {
             throw IOException("Folder sementara untuk berbagi tidak dapat dibuat.")

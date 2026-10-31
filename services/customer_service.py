@@ -4,13 +4,12 @@ from __future__ import annotations
 from datetime import date
 from typing import List, Optional
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database.models import Customer, VehicleOrUnit
 from database.session import begin_immediate
 from repositories import customer_repository as repo
-from services.errors import BusinessValidationError, ConflictError, NotFoundError
+from services.errors import BusinessValidationError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
 VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY"}
@@ -61,6 +60,19 @@ def _next_radiator_label(db: Session, today: date) -> str:
     return f"{prefix}{highest + 1:03d}"
 
 
+def ensure_unit_label(db: Session, unit: VehicleOrUnit, today: date) -> str:
+    """Buat label barang saat transaksi pertama, lalu pakai ulang selamanya.
+
+    Label lama tidak pernah diganti. Pemanggil harus sudah memegang kunci tulis
+    (BEGIN IMMEDIATE) agar urutan harian tidak bertabrakan.
+    """
+    if unit.label_radiator:
+        return unit.label_radiator
+    unit.label_radiator = _next_radiator_label(db, today)
+    db.flush()
+    return unit.label_radiator
+
+
 def create_unit(
     db: Session,
     customer_id: int,
@@ -107,34 +119,26 @@ def create_unit(
         db.refresh(unit)
         return unit
 
-    # Ref: PRD FR-UNIT-04 - radiator copotan tanpa nopol, dibuatkan label fisik.
-    for _attempt in range(5):
-        try:
-            with db.begin():
-                begin_immediate(db)
-                if repo.get_customer(db, customer_id) is None:
-                    raise NotFoundError("Pelanggan tidak ditemukan.")
-                label = _next_radiator_label(db, date.today())
-                unit = VehicleOrUnit(
-                    customer_id=customer_id,
-                    unit_type="RADIATOR_ONLY",
-                    nopol=None,
-                    jenis_mobil=None,
-                    tahun_mobil=None,
-                    label_radiator=label,
-                    tipe_radiator=clean_tipe,
-                    keterangan=clean_ket,
-                )
-                db.add(unit)
-                db.flush()
-            db.refresh(unit)
-            return unit
-        except IntegrityError:
-            continue
-
-    raise ConflictError(
-        "Gagal membuat label radiator unik setelah beberapa percobaan."
-    )
+    # Ref: PRD FR-UNIT-04 - radiator copotan tanpa nopol. Label fisik baru
+    # dibuat saat transaksi pertama agar nomor barang mengikuti nota.
+    with db.begin():
+        begin_immediate(db)
+        if repo.get_customer(db, customer_id) is None:
+            raise NotFoundError("Pelanggan tidak ditemukan.")
+        unit = VehicleOrUnit(
+            customer_id=customer_id,
+            unit_type="RADIATOR_ONLY",
+            nopol=None,
+            jenis_mobil=None,
+            tahun_mobil=None,
+            label_radiator=None,
+            tipe_radiator=clean_tipe,
+            keterangan=clean_ket,
+        )
+        db.add(unit)
+        db.flush()
+    db.refresh(unit)
+    return unit
 
 
 def describe_unit(unit: VehicleOrUnit) -> str:
@@ -144,7 +148,9 @@ def describe_unit(unit: VehicleOrUnit) -> str:
         if unit.jenis_mobil:
             text += f" ({unit.jenis_mobil})"
         return text
-    text = f"[BAWA RADIATOR SAJA] {unit.label_radiator or '-'}"
+    text = "[BAWA RADIATOR SAJA]"
+    if unit.label_radiator:
+        text += f" {unit.label_radiator}"
     if unit.tipe_radiator:
         text += f" ({unit.tipe_radiator})"
     return text

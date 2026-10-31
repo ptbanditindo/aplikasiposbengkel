@@ -345,6 +345,14 @@ class ServiceRecordOut(ORMModel):
     total_neto: Money = ZERO_MONEY
 
 
+class ReceiptLabelOut(CompatBase):
+    kode: str
+    nama: str
+    unit: str
+    customer_nama: str
+    customer_hp: str
+
+
 class ReceiptOut(ORMModel):
     id: int
     no_nota: str
@@ -375,6 +383,7 @@ class ReceiptOut(ORMModel):
     total_retur: Money = ZERO_MONEY
     retur_count: int = 0
     total_neto: Money = ZERO_MONEY
+    labels: List[ReceiptLabelOut] = Field(default_factory=list)
     jobs: List[ServiceJobOut] = Field(default_factory=list)
     parts: List[ServicePartOut] = Field(default_factory=list)
     bengkel_nama: str

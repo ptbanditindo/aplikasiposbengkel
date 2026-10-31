@@ -34,6 +34,60 @@ def _duration_label(record: ServiceRecord) -> str:
     return f" ({months} Bulan)"
 
 
+def _label_item_name(unit) -> str:
+    base = (unit.tipe_radiator or unit.jenis_mobil or "").strip()
+    if not base:
+        return "Radiator"
+    if "radiator" in base.lower():
+        return base
+    return f"Radiator {base}"
+
+
+def _label_unit_text(unit) -> str:
+    if unit.unit_type == "MOBIL":
+        text = unit.nopol or "-"
+        if unit.jenis_mobil:
+            text += f" ({unit.jenis_mobil})"
+        return text
+    return "[BAWA RADIATOR SAJA]"
+
+
+def _labels(record: ServiceRecord) -> List[Dict[str, Any]]:
+    """Satu strip label untuk setiap barang berlabel pada nota.
+
+    Skema transaksi saat ini hanya memiliki satu unit per nota; daftar tetap
+    dipakai agar beberapa strip dapat dicetak bila unit bertambah.
+    """
+    unit = record.unit
+    if not unit or not unit.label_radiator:
+        return []
+    customer = unit.customer
+    return [
+        {
+            "kode": unit.label_radiator,
+            "nama": _label_item_name(unit),
+            "unit": _label_unit_text(unit),
+            "customer_nama": customer.nama,
+            "customer_hp": customer.nomor_hp,
+        }
+    ]
+
+
+def _append_label_strips(b: ReceiptBuilder, labels: List[Dict[str, Any]]) -> None:
+    cut = "- " * (b.width // 2)
+    b.add(cut)
+    b.center("POTONG DI SINI", bold=True)
+    for index, label in enumerate(labels):
+        if index:
+            b.add(cut)
+        b.field("Pelanggan", label["customer_nama"])
+        b.field("No. HP", label["customer_hp"])
+        b.field("Unit", label["unit"])
+        b.add(label["kode"], bold=True)
+        b.add(f"({label['nama']})")
+    b.divider("=")
+
+
 def _build(
     record: ServiceRecord, width: int, bengkel: Dict[str, str]
 ) -> ReceiptBuilder:
@@ -129,6 +183,9 @@ def _build(
     b.center("")
     b.center("Terima kasih!")
     b.divider("=")
+    labels = _labels(record)
+    if labels:
+        _append_label_strips(b, labels)
     return b
 
 
@@ -142,6 +199,7 @@ def build_receipt_payload(
 
     builder_58 = _build(record, 32, info)
     builder_80 = _build(record, 48, info)
+    labels = _labels(record)
 
     jobs: List[Dict[str, Any]] = [
         {
@@ -196,6 +254,7 @@ def build_receipt_payload(
         "total_retur": record.total_retur or Decimal("0.00"),
         "retur_count": int(record.retur_count or 0),
         "total_neto": _total_neto(record),
+        "labels": labels,
         "jobs": jobs,
         "parts": parts,
         "bengkel_nama": info["nama"],

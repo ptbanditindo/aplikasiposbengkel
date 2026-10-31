@@ -234,6 +234,51 @@ def test_telegram_sukses_mencatat_status_dan_tidak_menduplikasi(
     assert backup_files() - before == {path}
 
 
+def test_telegram_terjadwal_mengirim_nota_baru_setelah_snapshot_lokal(
+    client, create_customer, create_unit, make_transaction, monkeypatch
+):
+    """Jadwal Telegram tidak boleh mengirim snapshot lokal yang sudah basi."""
+    customer = create_customer()
+    unit = create_unit(customer["id"])
+    assert make_transaction(unit["id"]).status_code == 201
+
+    early = client.post("/api/admin/scheduled-backup")
+    assert early.status_code == 200, early.text
+    assert early.json()["telegram_sent"] is False
+    assert early.json()["local_saved"] is True
+
+    assert make_transaction(unit["id"]).status_code == 201
+    assert make_transaction(unit["id"]).status_code == 201
+
+    configure_telegram(client)
+    captured = {}
+
+    def fake_send(token, chat_id, path, filename, caption):
+        captured.update(filename=filename, caption=caption, path=path)
+
+    monkeypatch.setattr(telegram_backup_service, "_send_document", fake_send)
+
+    response = client.post("/api/admin/scheduled-backup")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["status"] == "ok"
+    assert body["telegram_sent"] is True
+    assert body["filename"] != early.json()["filename"]
+    assert captured["filename"].startswith("bengkel_radiator_")
+    assert captured["path"] == settings.backup_dir / body["filename"]
+    assert "3 nota" in captured["caption"]
+
+    connection = sqlite3.connect(str(captured["path"]))
+    try:
+        assert (
+            connection.execute("SELECT COUNT(*) FROM service_records").fetchone()[0]
+            == 3
+        )
+    finally:
+        connection.close()
+
+
 def test_ruang_penyimpanan_penuh_gagal_dengan_aman(client, db_session, monkeypatch):
     def no_space():
         raise BusinessValidationError(

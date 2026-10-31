@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 UPLOAD_PREFIX = "upload_restore_"
+BACKUP_DOWNLOAD_NAME = re.compile(r"bengkel_radiator_[0-9_]+\.db")
 
 router = APIRouter(
     tags=["Laporan & Administrasi"], dependencies=[Depends(require_auth)]
@@ -96,6 +98,25 @@ def backup_database():
         path=str(path),
         media_type="application/x-sqlite3",
         filename=path.name,
+    )
+
+
+@router.get(
+    "/admin/backup/file/{filename}",
+    response_class=FileResponse,
+    dependencies=[Depends(require_owner)],
+)
+def download_backup_file(filename: str):
+    """Ambil salinan snapshot yang sudah dibuat, mis. untuk disalin ke folder pilihan."""
+    if not BACKUP_DOWNLOAD_NAME.fullmatch(filename):
+        raise HTTPException(status_code=400, detail="Nama file backup tidak valid.")
+    path = settings.backup_dir / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File backup tidak ditemukan.")
+    return FileResponse(
+        path=str(path),
+        media_type="application/x-sqlite3",
+        filename=filename,
     )
 
 

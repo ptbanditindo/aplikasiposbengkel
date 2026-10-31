@@ -5,6 +5,7 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import date
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -19,19 +20,43 @@ from services import backup_service
 PARALLEL = 20
 
 
-def test_r02_dua_puluh_unit_radiator_paralel_label_unik(client, create_customer):
+def test_r02_dua_puluh_transaksi_paralel_label_unik(client, create_customer):
     customer = create_customer(nama="Pelanggan Label", nomor_hp="081200000060")
+    unit_ids = []
+    for index in range(PARALLEL):
+        response = client.post(
+            "/api/units",
+            json={
+                "customer_id": customer["id"],
+                "unit_type": "RADIATOR_ONLY",
+                "tipe_radiator": f"Radiator Uji {index}",
+            },
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["label_radiator"] is None
+        unit_ids.append(response.json()["id"])
+
     barrier = threading.Barrier(PARALLEL)
 
-    def submit(index: int):
+    def submit(unit_id: int):
         barrier.wait(timeout=30)
         try:
             response = client.post(
-                "/api/units",
+                "/api/pos/transaction",
                 json={
-                    "customer_id": customer["id"],
-                    "unit_type": "RADIATOR_ONLY",
-                    "tipe_radiator": f"Radiator Uji {index}",
+                    "unit_id": unit_id,
+                    "keluhan_awal": "Uji label paralel",
+                    "metode_bayar": "CASH",
+                    "bayar": "150000",
+                    "bergaransi": False,
+                    "jobs": [
+                        {
+                            "deskripsi": "Korok / Kuras Kerak Radiator",
+                            "jumlah": 1,
+                            "harga": "150000",
+                        }
+                    ],
+                    "parts": [],
                 },
             )
         except Exception:  # noqa: BLE001
@@ -39,17 +64,16 @@ def test_r02_dua_puluh_unit_radiator_paralel_label_unik(client, create_customer)
         return response
 
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        responses = list(pool.map(submit, range(PARALLEL)))
+        responses = list(pool.map(submit, unit_ids))
 
     assert all(response is not None for response in responses)
     assert [response.status_code for response in responses].count(201) == PARALLEL
-    labels = [
-        response.json()["label_radiator"]
-        for response in responses
-        if response.status_code == 201
-    ]
-    assert len(labels) == PARALLEL
-    assert len(set(labels)) == PARALLEL, labels
+
+    listed = client.get(f"/api/customers/{customer['id']}/units").json()
+    labels = [unit["label_radiator"] for unit in listed]
+    prefix = f"RAD-{date.today():%Y%m%d}-"
+    assert all(label for label in labels)
+    assert set(labels) == {f"{prefix}{index:03d}" for index in range(1, PARALLEL + 1)}
 
 
 def test_r02_indeks_unik_menolak_label_duplikat(db_session, create_customer):

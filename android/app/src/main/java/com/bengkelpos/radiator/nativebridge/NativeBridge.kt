@@ -5,15 +5,18 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import androidx.core.content.FileProvider
 import com.bengkelpos.radiator.backend.BackendManager
+import com.bengkelpos.radiator.backup.BackupFolder
+import com.bengkelpos.radiator.backup.BackupFolderStore
 import com.bengkelpos.radiator.backup.BackupScheduler
 import com.bengkelpos.radiator.backup.BackupStore
+import com.bengkelpos.radiator.backup.SavedBackup
 import com.bengkelpos.radiator.printer.BluetoothPermissionPolicy
 import com.bengkelpos.radiator.printer.BluetoothPrinterController
 import com.bengkelpos.radiator.printer.EscPosTextRenderer
@@ -24,7 +27,6 @@ import com.bengkelpos.radiator.printer.SystemPrintController
 import com.bengkelpos.radiator.printer.UsbPrinterController
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -35,6 +37,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Jembatan async antara halaman WebView dan kode native.
@@ -58,6 +61,7 @@ class NativeBridge(
         permissions: List<String>,
         callback: (Boolean) -> Unit,
     ) -> Unit,
+    private val requestBackupFolder: (callback: (BackupFolder?) -> Unit) -> Unit,
 ) {
 
     @JavascriptInterface
@@ -68,7 +72,10 @@ class NativeBridge(
             try {
                 when (method) {
                     "saveBackup" -> saveBackup(requestId)
-                    "shareBackup" -> shareBackup(requestId, args)
+                    "saveBackupFile" -> saveBackupFile(requestId, args)
+                    "shareBackupNow" -> shareBackupNow(requestId)
+                    "backupFolderState" -> backupFolderState(requestId)
+                    "chooseBackupFolder" -> chooseBackupFolder(requestId)
                     "restartBackend" -> restartBackend(requestId)
                     "syncScheduledBackup" -> syncScheduledBackup(requestId, args)
                     "scheduledBackupStatus" -> scheduledBackupStatus(requestId)
@@ -141,9 +148,29 @@ class NativeBridge(
 
     private fun runSave(requestId: String) {
         val bytes = fetchBackup()
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val displayName = "bengkel_radiator_$stamp.db"
-        val saved = BackupStore.save(activity, bytes, displayName)
+        val saved = saveBytes(bytes, backupDisplayName())
+        replySaved(requestId, saved)
+    }
+
+    private fun saveBackupFile(requestId: String, args: JSONObject) {
+        val filename = args.optString("filename", "").trim()
+        if (!BackupFolderStore.isValidBackupName(filename)) {
+            throw BridgeError("INVALID", "Nama file backup tidak valid.")
+        }
+        val bytes = fetchBackupFile(filename)
+        val saved = saveBytes(bytes, filename)
+        replySaved(requestId, saved)
+    }
+
+    private fun saveBytes(bytes: ByteArray, displayName: String): SavedBackup {
+        return if (BackupFolderStore.current(activity) != null) {
+            BackupFolderStore.save(activity, bytes, displayName)
+        } else {
+            BackupStore.save(activity, bytes, displayName)
+        }
+    }
+
+    private fun replySaved(requestId: String, saved: SavedBackup) {
         reply(
             requestId,
             JSONObject()
@@ -151,6 +178,11 @@ class NativeBridge(
                 .put("filename", saved.displayName)
                 .put("location", saved.location),
         )
+    }
+
+    private fun backupDisplayName(): String {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        return "bengkel_radiator_$stamp.db"
     }
 
     private fun fetchBackup(): ByteArray {
@@ -190,23 +222,48 @@ class NativeBridge(
         }
     }
 
-    private fun shareBackup(requestId: String, args: JSONObject) {
-        val displayName = args.optString("filename", "")
-        if (!BACKUP_NAME.matches(displayName)) {
-            throw BridgeError("INVALID", "Nama file backup tidak valid.")
-        }
-        val file = File(File(activity.cacheDir, SHARE_DIR), displayName)
-        if (!file.isFile || file.length() <= 0L) {
+    private fun fetchBackupFile(filename: String): ByteArray {
+        val connection = URL("${BackendManager.baseUrl}/api/admin/backup/file/$filename")
+            .openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 60_000
+        connection.setRequestProperty("X-Install-Token", adminToken)
+        try {
+            val status = connection.responseCode
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                throw BridgeError(
+                    "AUTH",
+                    "Sesi aplikasi tidak valid. Tutup lalu buka kembali aplikasi.",
+                )
+            }
+            if (status == HttpURLConnection.HTTP_NOT_FOUND) {
+                throw BridgeError(
+                    "MISSING",
+                    "File backup tidak ditemukan. Buat backup baru lalu coba lagi.",
+                )
+            }
+            if (status != HttpURLConnection.HTTP_OK) {
+                throw BridgeError("HTTP", "Backup gagal diambil. Coba lagi.")
+            }
+            val data = connection.inputStream.use { it.readBytes() }
+            if (data.isEmpty()) {
+                throw BridgeError("EMPTY", "File backup kosong. Coba lagi.")
+            }
+            return data
+        } catch (error: IOException) {
             throw BridgeError(
-                "MISSING",
-                "File backup belum tersedia. Unduh backup terlebih dahulu.",
+                "NETWORK",
+                "Tidak dapat menghubungi aplikasi. Coba lagi.",
             )
+        } finally {
+            connection.disconnect()
         }
-        val uri = FileProvider.getUriForFile(
-            activity,
-            "${activity.packageName}.fileprovider",
-            file,
-        )
+    }
+
+    private fun shareBackupNow(requestId: String) {
+        val bytes = fetchBackup()
+        val uri = BackupStore.cacheForSharing(activity, bytes, backupDisplayName())
         activity.runOnUiThread {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/octet-stream"
@@ -230,6 +287,42 @@ class NativeBridge(
             }
         }
     }
+
+    private fun backupFolderState(requestId: String) {
+        reply(requestId, folderJson(BackupFolderStore.current(activity)))
+    }
+
+    private fun chooseBackupFolder(requestId: String) {
+        val picked = AtomicReference<BackupFolder?>(null)
+        val answered = CountDownLatch(1)
+        requestBackupFolder { folder ->
+            picked.set(folder)
+            answered.countDown()
+        }
+        val completed = try {
+            answered.await(PERMISSION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+        if (!completed) {
+            throw BridgeError("TIMEOUT", "Pemilihan folder tidak merespons. Coba lagi.")
+        }
+
+        val folder = picked.get()
+        if (folder == null) {
+            reply(requestId, folderJson(null).put("canceled", true))
+            return
+        }
+        BackupFolderStore.save(activity, Uri.parse(folder.uri), folder.name)
+        reply(requestId, folderJson(BackupFolderStore.current(activity)))
+    }
+
+    private fun folderJson(folder: BackupFolder?): JSONObject =
+        JSONObject()
+            .put("ok", true)
+            .put("configured", folder != null)
+            .put("name", folder?.name ?: JSONObject.NULL)
 
     private fun restartBackend(requestId: String) {
         val ready = runCatching {
@@ -659,9 +752,7 @@ class NativeBridge(
 
     companion object {
         private const val TAG = "BengkelNative"
-        private const val SHARE_DIR = "backup-share"
         private const val MAX_ERROR_CHARS = 200
         private const val PERMISSION_TIMEOUT_MS = 60_000L
-        private val BACKUP_NAME = Regex("bengkel_radiator_[0-9_]+\\.db")
     }
 }

@@ -514,6 +514,45 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   flex-wrap: wrap;
 }
 
+.folder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  margin-bottom: 12px;
+}
+.folder-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.folder-label { font-size: 12px; color: var(--muted); }
+.folder-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.backup-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+}
+.backup-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .hint-box {
   border: 1px dashed var(--control);
   background: var(--raised);
@@ -688,6 +727,10 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
 
 .table-jasa { min-width: 0; }
 .table-stock { min-width: 560px; }
+/* Daftar stok lebih rapat; tabel jasa/riwayat/laporan tidak ikut berubah. */
+.table-stock th { padding-bottom: 8px; }
+.table-stock td { height: 40px; padding: 6px 12px; }
+.table-stock .cell-sub { margin-top: 1px; }
 
 .items-table { min-width: 560px; }
 .items-table td { height: 46px; padding: 6px 8px; }
@@ -1925,8 +1968,8 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 16px;
-    row-gap: 4px;
-    padding: 14px 0;
+    row-gap: 2px;
+    padding: 10px 0;
     border-bottom: 1px solid var(--rule);
   }
   .table-stock tr:last-child { border-bottom: 0; }

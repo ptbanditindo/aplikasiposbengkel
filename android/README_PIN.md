@@ -11,9 +11,10 @@ Python 3.12.10 sebagai build Python).
   3.10). Lihat `README_APK.md` untuk arsitektur, build, dan batasannya.
 - Reset PIN **hanya menghapus hash PIN**; database, transaksi, stok, backup,
   dan token instalasi tetap utuh. Server lokal tidak perlu dihentikan.
-- Unit test JVM sudah dijalankan (143 test lulus, termasuk PIN, backup, dan
-  printer). APK Debug sudah di-build, tetapi alur PIN belum diuji di perangkat
-  fisik.
+- Unit test JVM sudah dijalankan (150 test lulus, termasuk PIN, backup, dan
+  printer). APK Debug v2.2.2 sudah di-build ulang dan memuat perubahan kunci
+  otomatis, pemilihan folder backup, serta lingkaran loading saat server
+  disiapkan, tetapi perilakunya belum diuji di perangkat fisik.
 
 ## Alur yang diimplementasikan
 
@@ -26,7 +27,10 @@ Python 3.12.10 sebagai build Python).
 3. **Kembali dari latar belakang** — `PinActivity` diminta lagi bila durasi di
    latar belakang melewati batas. Bawaannya 1 menit dan dapat diubah di
    Pengaturan → "Keamanan aplikasi (APK)" (1/2/5/10/30 menit).
-   Ada juga tombol "Kunci sekarang".
+   Waktu masuk latar belakang disimpan ke disk, jadi batas ini tetap berlaku
+   ketika sistem mematikan proses aplikasi: membuka kembali sebelum batas tidak
+   meminta PIN, melewati batas meminta PIN. Reboot perangkat selalu meminta PIN.
+   Tombol "Kunci sekarang" selalu meminta PIN pada pembukaan berikutnya.
 4. **PIN salah** — jumlah percobaan disimpan permanen di penyimpanan terenkripsi
    (`commit()`), jadi menutup aplikasi tidak mereset hitungan. Hitungan hanya
    kembali nol setelah PIN benar. Pesan hanya "PIN salah" tanpa petunjuk digit,
@@ -65,8 +69,13 @@ dinding); sisa waktu diambil yang **terbesar**. Elapsed yang kembali ke nol
   Android Auto Backup / transfer perangkat.
 - WebView hanya mengizinkan navigasi ke `127.0.0.1` / `localhost`; tautan
   eksternal diblokir. File dan content access dimatikan, mixed content ditolak.
-- `BengkelApp` mencatat waktu aplikasi masuk latar belakang; status sesi hanya
-  di memori proses, sehingga proses yang mati selalu meminta PIN lagi.
+- `BengkelApp` mencatat waktu aplikasi masuk latar belakang ke `pin_settings`
+  (SharedPreferences biasa, bukan rahasia) beserta penanda "Kunci sekarang".
+  Status sesi sendiri tetap di memori proses. Karena penanda latar belakang
+  tersimpan, batas kunci otomatis tidak hilang saat proses dimatikan sistem.
+  Reboot dikenali dari `elapsedRealtime()` yang kembali lebih kecil dan memaksa
+  PIN. Proses yang mati saat aplikasi di depan (crash atau force stop) juga
+  meminta PIN karena tidak ada penanda latar belakang yang tersimpan.
 - Reset PIN adalah jalur darurat bagi pemilik perangkat, **bukan** pengaman
   terhadap orang yang memegang perangkat. Siapa pun yang bisa mengetik `RESET`
   dapat membuat PIN baru dan membuka data yang sudah ada di perangkat itu.
@@ -109,8 +118,9 @@ android/app/src/main/java/com/bengkelpos/radiator/
   pin/PinResetKeyword.kt     konfirmasi kata kunci RESET
   pin/LockoutPolicy.kt       tabel durasi kunci
   pin/LockoutState.kt        perhitungan sisa kunci dua jam
-  pin/PinSession.kt          status sesi di memori
-  pin/PinSettings.kt         batas kunci otomatis (menit)
+  pin/PinSession.kt          status sesi di memori + pemulihan setelah proses mati
+  pin/SessionStore.kt        kontrak penyimpanan waktu latar belakang
+  pin/PinSettings.kt         batas kunci otomatis (menit) + SessionStore
   pin/LocalDataResetter.kt   pembersih data total (tidak dipakai alur reset PIN)
 android/app/src/main/python/bootstrap.py   uvicorn di dalam proses APK
 android/app/src/test/java/com/bengkelpos/radiator/pin/

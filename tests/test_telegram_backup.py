@@ -182,6 +182,76 @@ def test_kirim_manual_mengirim_database_lengkap(
     assert pending is None or pending.value == ""
 
 
+def test_kirim_manual_mengirim_nota_baru_setelah_snapshot_lokal(
+    client,
+    create_customer,
+    create_unit,
+    make_transaction,
+    reauth,
+    monkeypatch,
+):
+    """Snapshot lama tidak boleh dikirim ulang setelah ada nota baru."""
+    identity = {
+        "nama": "BENGKEL RADIATOR SUKRON",
+        "tagline": "Spesialis Pendingin",
+        "alamat": "Jl. Contoh No. 10",
+        "telepon": "081211112222",
+        "wa": "081211112222",
+        "bank_nama": "BNI",
+        "no_rekening": "1234567890",
+        "atas_nama": "SUKRON",
+    }
+    saved = client.put("/api/settings/bengkel", json=identity)
+    assert saved.status_code == 200, saved.text
+
+    customer = create_customer()
+    unit = create_unit(customer["id"])
+    assert make_transaction(unit["id"]).status_code == 201
+
+    # Backup lokal terjadwal (Telegram belum aktif) menyimpan snapshot 1 nota
+    # dan menyisakan penanda snapshot yang sama untuk hari itu.
+    early = client.post("/api/admin/scheduled-backup")
+    assert early.status_code == 200, early.text
+    assert early.json()["local_saved"] is True
+
+    assert make_transaction(unit["id"]).status_code == 201
+    assert make_transaction(unit["id"]).status_code == 201
+
+    configure_telegram(client)
+    captured = {}
+
+    def fake_send(token, chat_id, path, filename, caption):
+        captured.update(
+            filename=filename,
+            caption=caption,
+            content=path.read_bytes(),
+        )
+
+    monkeypatch.setattr(telegram_backup_service, "_send_document", fake_send)
+
+    response = client.post("/api/admin/telegram-backup")
+    assert response.status_code == 200, response.text
+    assert response.json()["jumlah_nota"] == 3
+    assert "3 nota" in captured["caption"]
+    assert captured["content"].startswith(b"SQLite format 3\x00")
+
+    restore = client.post(
+        "/api/admin/restore",
+        files={
+            "file": ("telegram.db", captured["content"], "application/x-sqlite3")
+        },
+    )
+    assert restore.status_code == 200, restore.text
+    reauth()
+    records = client.get("/api/service-records")
+    assert records.status_code == 200
+    assert len(records.json()) == 3
+
+    # Identitas bengkel ikut tersimpan di backup dan kembali setelah restore.
+    restored_identity = client.get("/api/config").json()["bengkel"]
+    assert restored_identity == identity
+
+
 def test_kegagalan_kirim_dicatat_di_status(client, monkeypatch, db_session):
     configure_telegram(client)
 

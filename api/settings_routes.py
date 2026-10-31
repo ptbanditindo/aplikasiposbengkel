@@ -48,6 +48,14 @@ def scheduled_backup(db: Session = Depends(get_db)):
 
 
 @router.post(
+    "/admin/backup-now",
+)
+def backup_now(db: Session = Depends(get_db)):
+    """Snapshot terkini + kirim Telegram bila dikonfigurasi; lokal selalu dibuat."""
+    return telegram_backup_service.run_manual_backup(db)
+
+
+@router.post(
     "/admin/telegram-backup",
 )
 def send_telegram_backup(db: Session = Depends(get_db)):

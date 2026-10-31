@@ -177,7 +177,7 @@
       if (unit.jenis_mobil) text += ' (' + unit.jenis_mobil + ')';
       return text;
     }
-    let text = 'Radiator saja · ' + (unit.label_radiator || '-');
+    let text = 'Radiator saja · ' + (unit.label_radiator || 'belum berlabel');
     if (unit.tipe_radiator) text += ' (' + unit.tipe_radiator + ')';
     return text;
   }
@@ -216,8 +216,7 @@
     searchTimer: null,
     saving: false,
     pendingRequest: null,
-    lastBackup: null,
-    preview: null,
+    backupFolder: { configured: false, name: '' },    preview: null,
     previewSeq: 0,
     previewTimer: null,
     previewError: null,
@@ -644,7 +643,9 @@
         const selected =
           state.selectedUnit && state.selectedUnit.id === unit.id;
         const isCar = unit.unit_type === 'MOBIL';
-        const title = isCar ? unit.nopol || '-' : unit.label_radiator || '-';
+        const title = isCar
+          ? unit.nopol || '-'
+          : unit.label_radiator || 'Belum berlabel';
         const subtitle = isCar
           ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
             'Mobil lengkap'
@@ -748,7 +749,7 @@
       resetUnitForm();
       toast(
         unit.unit_type === 'RADIATOR_ONLY'
-          ? 'Unit radiator ' + unit.label_radiator + ' tersimpan.'
+          ? 'Unit radiator tersimpan. Label dibuat saat transaksi pertama.'
           : 'Unit mobil ' + unit.nopol + ' tersimpan.',
         'success',
         5000
@@ -813,7 +814,9 @@
 
   function customerUnitHtml(unit) {
     const isCar = unit.unit_type === 'MOBIL';
-    const title = isCar ? unit.nopol || '-' : unit.label_radiator || '-';
+    const title = isCar
+      ? unit.nopol || '-'
+      : unit.label_radiator || 'Belum berlabel';
     const subtitle = isCar
       ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
         'Mobil lengkap'
@@ -4692,7 +4695,78 @@
     $('#telegramChatId').value = telegram.chat_id || '';
     renderTelegramStatus(telegram);
     renderBackupStatus();
+    syncBackupPlatformUi();
+    refreshBackupFolder();
     syncNativeBackupSchedule();
+  }
+
+  function syncBackupPlatformUi() {
+    const native = hasNativeBridge();
+    ['#backupFolderChoose', '#autoBackupFolderChoose'].forEach((selector) => {
+      const button = $(selector);
+      if (button) button.classList.toggle('hidden', !native);
+    });
+    const share = $('#shareBackupWrap');
+    if (share) share.classList.toggle('hidden', !native);
+  }
+
+  function renderBackupFolder() {
+    const folder = state.backupFolder || { configured: false, name: '' };
+    const label =
+      folder.configured && folder.name
+        ? folder.name
+        : 'Belum dipilih (memakai folder Unduhan)';
+    ['#backupFolderName', '#autoBackupFolderName'].forEach((selector) => {
+      const element = $(selector);
+      if (element) element.textContent = label;
+    });
+    const hint = $('#settingsBackupHint');
+    if (hint) {
+      hint.textContent = folder.configured
+        ? 'Menyimpan ke folder terpilih.'
+        : 'Menyimpan ke folder Unduhan.';
+    }
+  }
+
+  function refreshBackupFolder() {
+    if (!hasNativeBridge()) {
+      state.backupFolder = { configured: false, name: '' };
+      renderBackupFolder();
+      return;
+    }
+    window.BengkelBridge.call('backupFolderState', {}, 5000)
+      .then(function (info) {
+        state.backupFolder = {
+          configured: Boolean(info && info.ok && info.configured),
+          name: (info && info.name) || '',
+        };
+        renderBackupFolder();
+      })
+      .catch(function () {
+        // Status folder opsional; backup tetap jatuh ke folder Unduhan.
+      });
+  }
+
+  function chooseBackupFolder() {
+    if (!hasNativeBridge()) {
+      toast('Pemilihan folder hanya tersedia di aplikasi Android.', 'warning');
+      return;
+    }
+    window.BengkelBridge.call('chooseBackupFolder', {}, 180000)
+      .then(function (info) {
+        if (!info || info.canceled) return;
+        state.backupFolder = {
+          configured: Boolean(info.configured),
+          name: info.name || '',
+        };
+        renderBackupFolder();
+        if (state.backupFolder.configured) {
+          toast('Folder backup: ' + state.backupFolder.name + '.', 'success');
+        }
+      })
+      .catch(function () {
+        toast('Folder backup gagal dipilih. Coba lagi.', 'error', 7000);
+      });
   }
 
   function renderBackupStatus() {
@@ -4714,7 +4788,8 @@
 
     const banner = $('#backupStaleBanner');
     if (!banner) return;
-    banner.classList.toggle('hidden', !backup.stale);
+    // Peringatan basi hanya bermakna setelah ada backup pertama.
+    banner.classList.toggle('hidden', !backup.last_local_at || !backup.stale);
     if (backup.stale) {
       banner.textContent =
         'Backup terakhir lebih dari ' +
@@ -4783,26 +4858,72 @@
 
   async function handleTelegramSendNow() {
     const button = $('#telegramSendNow');
-    if (!state.config || !state.config.telegram.configured) {
-      toast('Simpan bot token dan chat ID terlebih dahulu.', 'warning');
-      return;
-    }
+    const configured = Boolean(
+      state.config && state.config.telegram && state.config.telegram.configured
+    );
 
-    setBusy(button, true, 'Mengirim...');
+    setBusy(button, true, configured ? 'Mengirim...' : 'Menyiapkan...');
     try {
-      const result = await API.sendTelegramBackup();
-      toast(
-        'Backup terkirim: ' + result.filename + ' (' + result.jumlah_nota + ' nota).',
-        'success',
-        7000
-      );
+      const result = (await API.backupNow()) || {};
+      const native = hasNativeBridge();
+      const target = !native
+        ? 'unduhan'
+        : state.backupFolder.configured
+          ? 'folder pilihan'
+          : 'folder Unduhan';
+      let local = null;
+      let localError = '';
+      if (result.filename) {
+        try {
+          local = await saveBackupCopy(result.filename);
+        } catch (err) {
+          localError = 'Backup tersimpan, tetapi gagal disalin ke folder.';
+        }
+      }
+      const notes = result.jumlah_nota != null ? result.jumlah_nota + ' nota' : '';
+      if (result.telegram_sent) {
+        toast(
+          'Backup terkirim ke Telegram' +
+            (local ? ' dan ' + target : '') +
+            (notes ? ' (' + notes + ')' : '') +
+            '.',
+          'success',
+          7000
+        );
+      } else if (local) {
+        toast(
+          'Backup tersimpan di ' +
+            target +
+            '. Telegram belum dikirim: ' +
+            (result.telegram_error || 'token dan chat ID belum lengkap.'),
+          'warning',
+          9000
+        );
+      } else {
+        toast(localError || 'Backup gagal disimpan. Coba lagi.', 'error', 7000);
+      }
       state.config = await API.getConfig();
       applyConfig();
     } catch (err) {
-      toast('Backup gagal dikirim. Periksa token, Chat ID, dan koneksi internet.', 'error', 7000);
+      toast(
+        'Backup gagal dibuat. Periksa ruang penyimpanan lalu coba lagi.',
+        'error',
+        7000
+      );
     } finally {
       setBusy(button, false);
     }
+  }
+
+  async function saveBackupCopy(filename) {
+    if (hasNativeBridge()) {
+      return window.BengkelBridge.call(
+        'saveBackupFile',
+        { filename: filename },
+        180000
+      );
+    }
+    return API.downloadBackupFile(filename);
   }
 
   /* ------------------------------ Restore --------------------------------- */
@@ -4854,24 +4975,17 @@
     const button = $('#settingsBackup');
     setBusy(button, true, 'Membuat backup...');
     try {
-      const result = await API.downloadBackup();
-      state.lastBackup = result || null;
-      const shareButton = $('#settingsShareBackup');
-      if (shareButton) {
-        const canShare =
-          state.lastBackup &&
-          window.BengkelBridge &&
-          window.BengkelBridge.available();
-        shareButton.classList.toggle('hidden', !canShare);
-      }
-      const locationText = state.lastBackup.location
-        ? ' ke ' + state.lastBackup.location
-        : '';
+      const result = (await API.downloadBackup()) || {};
+      const locationText = result.location ? ' ke ' + result.location : '';
       toast(
-        'Backup tersimpan' + locationText + ': ' + state.lastBackup.filename,
+        'Backup tersimpan' +
+          locationText +
+          ': ' +
+          (result.filename || 'file backup'),
         'success',
         6000
       );
+      refreshBackupFolder();
     } catch (err) {
       toast('Backup gagal dibuat. Periksa ruang penyimpanan lalu coba lagi.', 'error', 7000);
     } finally {
@@ -4880,13 +4994,19 @@
   }
 
   async function handleShareBackup() {
-    if (!state.lastBackup || !window.BengkelBridge) return;
+    if (!hasNativeBridge()) return;
+    const button = $('#settingsShareBackup');
+    setBusy(button, true, 'Menyiapkan...');
     try {
-      await window.BengkelBridge.call('shareBackup', {
-        filename: state.lastBackup.filename,
-      });
+      await window.BengkelBridge.call('shareBackupNow', {}, 180000);
     } catch (err) {
-      toast('Backup gagal dibagikan. Coba lagi.', 'error', 7000);
+      toast(
+        (err && err.message) || 'Backup gagal dibagikan. Coba lagi.',
+        'error',
+        7000
+      );
+    } finally {
+      setBusy(button, false);
     }
   }
 
@@ -5106,6 +5226,8 @@
     $('#settingsReset').addEventListener('click', fillSettingsForm);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
+    $('#backupFolderChoose').addEventListener('click', chooseBackupFolder);
+    $('#autoBackupFolderChoose').addEventListener('click', chooseBackupFolder);
     $('#settingsShareBackup').addEventListener('click', handleShareBackup);
     $('#settingsRestore').addEventListener('click', requestRestore);
     $('#settingsRestoreFile').addEventListener('change', handleRestoreFile);

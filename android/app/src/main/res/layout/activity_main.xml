@@ -20,6 +20,15 @@
         android:padding="32dp"
         android:visibility="gone">
 
+        <ProgressBar
+            android:id="@+id/offlineSpinner"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:contentDescription="@string/loading_label"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/accent"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/offlineText"
             android:layout_width="match_parent"

@@ -1,9 +1,6 @@
 """TC-01 s/d TC-05: pelanggan, normalisasi, multi-unit, radiator copotan."""
 from __future__ import annotations
 
-import re
-from datetime import date
-
 import pytest
 
 
@@ -113,7 +110,6 @@ def test_tc04_nopol_wajib_untuk_unit_mobil(client, create_customer):
 
 def test_tc05_unit_radiator_copotan_tanpa_nopol(client, create_customer, create_unit):
     customer = create_customer()
-    prefix = f"RAD-{date.today():%Y%m%d}-"
 
     first = create_unit(
         customer["id"],
@@ -134,11 +130,11 @@ def test_tc05_unit_radiator_copotan_tanpa_nopol(client, create_customer, create_
 
     assert first["nopol"] is None
     assert second["nopol"] is None
-    assert first["label_radiator"] == f"{prefix}001"
-    assert second["label_radiator"] == f"{prefix}002"
-    assert re.fullmatch(r"RAD-\d{8}-\d{3}", first["label_radiator"])
+    # Label fisik baru dibuat saat transaksi pertama, bukan saat unit disimpan.
+    assert first["label_radiator"] is None
+    assert second["label_radiator"] is None
     assert "[BAWA RADIATOR SAJA]" in first["deskripsi"]
-    assert first["label_radiator"] != second["label_radiator"]
+    assert first["deskripsi"] != second["deskripsi"]
 
 
 def test_customer_overview_lists_units_and_counts(
