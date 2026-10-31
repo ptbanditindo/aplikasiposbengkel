@@ -70,8 +70,9 @@ WorkManager (ScheduledBackupWorker)
 ## Versi Python dan dependensi
 
 Chaquopy **16.0.0** dipakai karena mendukung AGP 8.6.x (Chaquopy 17
-mensyaratkan AGP 9). Target runtime Python 3.10; Python 3.12.10 dipakai sebagai
-build Python untuk pip.
+mensyaratkan AGP 9). Target runtime Python 3.10; build Python 3.14.7 dipakai
+sebagai interpreter host untuk pip pada build terakhir. Interpreter host tidak
+perlu sama dengan target, tetapi harus Python 3.10+ lengkap dengan modul `venv`.
 
 Pydantic v2 tidak bisa dipakai di Chaquopy karena `pydantic-core` ditulis dalam
 Rust. Karena itu APK memakai pin pure-Python berikut di
@@ -95,7 +96,7 @@ Rust. Karena itu APK memakai pin pure-Python berikut di
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
 Versi desktop di `requirements.txt` memakai pydantic v2 dan FastAPI terbaru
-yang diverifikasi. Seluruh **226 test** lulus di kedua jalur (v2 dan v1 +
+yang diverifikasi. Seluruh **288 test** lulus di kedua jalur (v2 dan v1 +
 FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
@@ -106,8 +107,8 @@ Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
 ## Prasyarat build
 
 - JDK 17 dan Android SDK 35.
-- Python 3.10+ di mesin build. Chaquopy memakai interpreter host untuk
-  menjalankan pip; tidak perlu sama dengan target.
+- Python 3.10+ lengkap dengan modul `venv` di mesin build. Chaquopy memakai
+  interpreter host untuk menjalankan pip; tidak perlu sama dengan target.
 - Koneksi internet saat build pertama (unduh runtime Python Chaquopy + wheel).
 - `gradle/wrapper/gradle-wrapper.jar` sudah ada di repo, jadi `./gradlew`
   langsung bisa dipakai.
@@ -115,6 +116,9 @@ Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
   `android/local.properties` (`sdk.dir=...`). Berkas itu bersifat lokal dan
   tidak di-commit. Toolchain portabel yang dipakai saat pengembangan ada di
   `android/.toolchain/` (diabaikan Git).
+- Di Windows, bila `py` atau `python` tidak ada di PATH, tunjuk interpreter
+  host lewat `-Pchaquopy.buildPython="C:/path/python/python.exe"`. Distribusi
+  Python embedded tanpa modul `venv` tidak bisa dipakai.
 
 ```bash
 cd android
@@ -130,20 +134,22 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.034.812 byte
-- SHA-256: `64d45743dc97f929f0b60c2c2ba90a1455fd7bb8ec11813f2c1ebcde5251123f`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.2`, versionCode `5`,
+- Ukuran: 45.330.716 byte
+- SHA-256: `f0855f5535aeddc1e980fe02614a584ddf8c6faa0768a0472232ae45a9c31be6`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.3`, versionCode `6`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 210.531 byte, SHA-256
-  `d4dd12198fec978466292a54d371967f91540a6cb9a8015e28247a6264f214f7`.
-  `services/pos_service.py`, `services/customer_service.py`,
-  `services/receipt_service.py`, `frontend/js/app.js`, dan
-  `frontend/css/style.css` di dalam ZIP dicocokkan hash-nya dengan working tree
-  saat build. ZIP ini memuat label barang yang dicetak di bawah nota, daftar
-  stok yang lebih rapat, serta indikator loading berbentuk lingkaran di APK.
-- Unit test JVM: **150 test** (Debug) lulus. Pytest backend: **239 test lulus**
+- Asset `assets/bengkel_backend.zip`: 250.580 byte, SHA-256
+  `8b1de520ca23147254c3a9230ebc97be2fd5ceab62d8d95c9e41c3c0140fd259`.
+  `frontend/js/app.js`, `frontend/index.html`, `frontend/css/style.css`,
+  `services/pos_service.py`, `services/followup_service.py`, dan
+  `database/migrations.py` di dalam ZIP dicocokkan hash-nya dengan working tree
+  saat build. ZIP ini memuat arsip unit, keluhan awal bertombol simpan, pratinjau
+  nota, DP tanpa jatuh tempo, cetak lalu WhatsApp, pengingat di Ringkasan, dan
+  interval servis berkala untuk jasa dan sparepart.
+- Unit test JVM: **308 test** (Debug) lulus. Pytest backend: **288 test lulus**
   di masing-masing stack (Pydantic v2 dan Pydantic 1.10).
-- APK belum dipasang/diuji di perangkat Android fisik.
+- APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
+  di bagian berikut dan dicatat sebagai belum diverifikasi.
 
 ## Pemeriksaan di perangkat
 
@@ -181,6 +187,32 @@ adb logcat -s python:* AndroidRuntime:E
 
 Penyebab umum: interpreter Python build tidak ditemukan, wheel gagal diunduh
 saat build, atau ABI perangkat tidak termasuk dalam `abiFilters`.
+
+## Verifikasi browser P-11
+
+Aplikasi dijalankan di PC dengan `DATABASE_URL`, `BACKUP_DIR`, dan
+`PRINTER_CONFIG_PATH` yang menunjuk ke folder sementara, sehingga database
+asli tidak tersentuh. Yang sudah diperiksa dan sesuai:
+
+1. Form Pelanggan baru hanya meminta nama, nomor HP, dan alamat; tidak ada
+   pertanyaan izin WhatsApp. Pelanggan tersimpan.
+2. Unit mobil ditambahkan, keluhan disimpan, lalu Rincian pengerjaan muncul.
+   Tombol Hapus unit menghilangkan unit dari pilihan tanpa menghapus nota lama.
+3. Jasa dan sparepart ditambahkan. Sparepart diberi interval servis 6 bulan dan
+   popup Periksa nota menampilkan "servis tiap 6 bulan".
+4. DP Rp 50.000 disimpan tanpa jatuh tempo. Popup menampilkan sisa Rp 80.000
+   dan jatuh tempo "Tidak ditentukan". Pelunasan Rp 80.000 mengubah status
+   menjadi Lunas.
+5. Nota mobil tidak memuat label atau teks "POTONG DI SINI". Teks WhatsApp
+   struk lengkap memuat item dan total. Draf "Kendaraan selesai" memakai
+   "siap diambil" tanpa kata hutang.
+6. Ringkasan menampilkan bagian Follow up dan panel Perlu ditindaklanjuti,
+   sedangkan navigasi tidak lagi memuat halaman Follow-up. Daftar Stok dan
+   Jasa menampilkan kolom Servis berkala.
+
+Belum diverifikasi karena butuh perangkat/printer nyata: pemasangan APK,
+cetak Bluetooth/Wi-Fi/USB, pembukaan `wa.me` dari APK, popup cetak browser,
+dan alur cetak lalu otomatis membuka WhatsApp.
 
 ## Batasan yang masih ada
 
