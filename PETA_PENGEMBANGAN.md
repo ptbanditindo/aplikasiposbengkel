@@ -89,51 +89,6 @@ Pemetaan ini usulan awal dan dapat berubah saat tahap dimulai.
 Setiap rilis wajib menaikkan `versionCode`, membangun APK Debug, menjalankan
 pytest pada kedua stack, dan menjalankan unit test Kotlin sebelum di-commit.
 
-Tahap 2 (kerapatan daftar stok) dan Tahap 6 (label barang di bawah nota) sudah
-selesai pada rilis **2.2.2** dan tidak lagi dicantumkan sebagai rencana.
-
-## Urutan pelaksanaan dan ketergantungan
-
-Urutan ini bukan nomor tahap, melainkan urutan pengerjaan yang disarankan agar
-setiap tahap dapat dirilis dan diuji sendiri tanpa menunggu tahap besar lain.
-
-| Urutan | Tahap | Bergantung pada | Alasan urutan |
-| --- | --- | --- | --- |
-| 1 | Tahap 1 — Verifikasi nota | Tidak ada | Perubahan terisolasi di layar kasir; menyentuh alur simpan harian sehingga paling cepat memberi manfaat dan paling mudah diuji ulang |
-| 2 | Tahap 3 — Onboarding dan profil bengkel | Tahap 1 | Mengubah layar awal dan pengelompokan master data; alur kasir sebaiknya stabil lebih dulu |
-| 3 | Tahap 5 — Peran owner dan admin | Tahap 3 | Profil bengkel dan PIN pertama menjadi dasar penetapan owner serta hak akses |
-| 4 | Tahap 4 — Akun, langganan, dan database daring | Tahap 3, Tahap 5 | Akun dan langganan melekat pada owner; onboarding sudah punya tempat untuk layar akun |
-| 5 | Tahap 7 — Pemindai barcode | Tahap 3, Tahap 5 | Kategori barang mengikuti profil; hak ubah stok hanya milik owner |
-| Berjalan | Tahap 8 — Uji perangkat dan printer | Build APK terbaru | Pengujian fisik dapat berjalan paralel dengan tahap kode lain |
-| Sebelum rilis publik | Tahap 9 — Token Telegram | Tidak ada | Gate keamanan; harus selesai sebelum aplikasi dipakai pihak lain |
-| Berkelanjutan | Tahap 10 — Regresi dan dokumentasi | Semua tahap | Dijalankan setiap kali tahap lain selesai |
-
-Catatan ketergantungan:
-
-- Tahap 4 tidak boleh dimulai sebelum peran owner jelas, agar akun tidak
-  otomatis dianggap owner.
-- Tahap 7 boleh dikerjakan sebelum Tahap 4; pemindai barcode tidak memerlukan
-  akun atau langganan.
-- Tahap 8 dan Tahap 9 adalah gerbang rilis, bukan fitur. Keduanya dapat
-  diselesaikan kapan saja sebelum rilis publik, tetapi tidak boleh dilewati.
-- Tahap 10 berjalan di setiap tahap: setiap perubahan UI diuji pada Terang/Gelap
-  dan lebar ponsel, dokumentasi diperbarui, lalu build APK diverifikasi.
-
-### Usulan pemetaan rilis
-
-Pemetaan ini usulan awal dan dapat berubah saat tahap dimulai.
-
-| Rilis | Isi |
-| --- | --- |
-| 2.3.0 | Tahap 1 — verifikasi nota sebelum simpan/cetak |
-| 2.4.0 | Tahap 3 — informasi aplikasi dan profil bengkel |
-| 2.5.0 | Tahap 5 — peran owner dan admin |
-| 3.0.0 | Tahap 4 — akun, langganan, database daring, dan backup otomatis |
-| 3.1.0 | Tahap 7 — penambahan stok dengan pemindai barcode |
-
-Setiap rilis wajib menaikkan `versionCode`, membangun APK Debug, menjalankan
-pytest pada kedua stack, dan menjalankan unit test Kotlin sebelum di-commit.
-
 ## Tahap 1 — Verifikasi nota sebelum disimpan
 
 **Masalah.** Tombol **Simpan & cetak struk** dan **Simpan tanpa cetak** saat ini
