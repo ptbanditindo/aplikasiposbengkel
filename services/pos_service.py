@@ -106,8 +106,9 @@ def _create_transaction_locked(
             raise NotFoundError("Unit servis tidak ditemukan.")
 
         now = datetime.now()
-        # Nomor barang baru dibuat saat transaksi pertama unit ini tercatat.
-        customer_service.ensure_unit_label(db, unit, now.date())
+        # Nomor barang hanya untuk radiator copotan; mobil utuh tidak berlabel.
+        if unit.unit_type == "RADIATOR_ONLY":
+            customer_service.ensure_unit_label(db, unit, now.date())
 
         keluhan = clean_text(payload.keluhan_awal, max_length=2000)
         if not keluhan:

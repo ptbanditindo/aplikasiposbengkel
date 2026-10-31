@@ -80,7 +80,8 @@ def _labels(record: ServiceRecord) -> List[Dict[str, Any]]:
     dipakai agar beberapa strip dapat dicetak bila unit bertambah.
     """
     unit = record.unit
-    if not unit or not unit.label_radiator:
+    # Mobil utuh tidak memakai strip label, walau data label lama masih ada.
+    if not unit or unit.unit_type != "RADIATOR_ONLY" or not unit.label_radiator:
         return []
     customer = unit.customer
     return [

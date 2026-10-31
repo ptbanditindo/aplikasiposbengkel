@@ -100,19 +100,45 @@ def test_transaksi_kedua_unit_yang_sama_tidak_menambah_urutan(
     assert other_code == f"{prefix}-002"
 
 
-def test_label_mobil_memakai_nopol_dan_model(
-    client, create_customer, create_unit, make_transaction
+def test_mobil_utuh_tidak_mendapat_strip_label(
+    client, db_session, create_customer, create_unit, make_transaction
 ):
     customer = create_customer(nama="Pemilik Mobil", nomor_hp="081200000071")
     unit = create_unit(customer["id"], nopol="B 1234 ABC", jenis_mobil="Avanza")
 
-    body = make_transaction(unit["id"]).json()
-    label = body["receipt"]["labels"][0]
+    response = make_transaction(unit["id"])
+    assert response.status_code == 201, response.text
+    body = response.json()
 
-    assert re.fullmatch(r"RAD-\d{8}-001", label["kode"])
-    assert label["unit"] == "B 1234 ABC (Avanza)"
-    assert label["nama"] == "Radiator Avanza"
-    assert "Unit: B 1234 ABC (Avanza)" in _text(body["receipt"])
+    assert body["receipt"]["labels"] == []
+    assert "POTONG DI SINI" not in _text(body["receipt"])
+    assert db_session.get(VehicleOrUnit, unit["id"]).label_radiator is None
+
+    reprint = client.get(
+        f"/api/service-records/{body['record']['id']}/receipt"
+    ).json()
+    assert reprint["labels"] == []
+    assert "POTONG DI SINI" not in "\n".join(reprint["struk_58"])
+
+
+def test_label_lama_pada_mobil_tidak_ikut_tercetak(
+    client, db_session, create_customer, create_unit, make_transaction
+):
+    customer = create_customer(nama="Pemilik Mobil Lama", nomor_hp="081200000074")
+    unit = create_unit(customer["id"], nopol="B 5678 DEF", jenis_mobil="Fortuner")
+    old_code = "RAD-20261031-002"
+    row = db_session.get(VehicleOrUnit, unit["id"])
+    row.label_radiator = old_code
+    db_session.commit()
+
+    body = make_transaction(unit["id"]).json()
+
+    assert body["receipt"]["labels"] == []
+    text = _text(body["receipt"])
+    assert "POTONG DI SINI" not in text
+    assert old_code not in text
+    # Data lama tidak dihapus dari database.
+    assert db_session.get(VehicleOrUnit, unit["id"]).label_radiator == old_code
 
 
 def test_label_lama_tidak_diganti_saat_transaksi(
