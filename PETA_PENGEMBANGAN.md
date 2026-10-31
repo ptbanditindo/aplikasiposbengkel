@@ -27,6 +27,51 @@ Status terpasang saat dokumen dibuat:
 | 9 | Ganti token bot Telegram hasil uji backup | Keamanan | Tinggi | Tertunda |
 | 10 | Regresi UI dan sinkronisasi dokumentasi | Kualitas | Sedang | Berkelanjutan |
 
+Tahap 2 (kerapatan daftar stok) dan Tahap 6 (label barang di bawah nota) sudah
+selesai pada rilis **2.2.2** dan tidak lagi dicantumkan sebagai rencana.
+
+## Urutan pelaksanaan dan ketergantungan
+
+Urutan ini bukan nomor tahap, melainkan urutan pengerjaan yang disarankan agar
+setiap tahap dapat dirilis dan diuji sendiri tanpa menunggu tahap besar lain.
+
+| Urutan | Tahap | Bergantung pada | Alasan urutan |
+| --- | --- | --- | --- |
+| 1 | Tahap 1 — Verifikasi nota | Tidak ada | Perubahan terisolasi di layar kasir; menyentuh alur simpan harian sehingga paling cepat memberi manfaat dan paling mudah diuji ulang |
+| 2 | Tahap 3 — Onboarding dan profil bengkel | Tahap 1 | Mengubah layar awal dan pengelompokan master data; alur kasir sebaiknya stabil lebih dulu |
+| 3 | Tahap 5 — Peran owner dan admin | Tahap 3 | Profil bengkel dan PIN pertama menjadi dasar penetapan owner serta hak akses |
+| 4 | Tahap 4 — Akun, langganan, dan database daring | Tahap 3, Tahap 5 | Akun dan langganan melekat pada owner; onboarding sudah punya tempat untuk layar akun |
+| 5 | Tahap 7 — Pemindai barcode | Tahap 3, Tahap 5 | Kategori barang mengikuti profil; hak ubah stok hanya milik owner |
+| Berjalan | Tahap 8 — Uji perangkat dan printer | Build APK terbaru | Pengujian fisik dapat berjalan paralel dengan tahap kode lain |
+| Sebelum rilis publik | Tahap 9 — Token Telegram | Tidak ada | Gate keamanan; harus selesai sebelum aplikasi dipakai pihak lain |
+| Berkelanjutan | Tahap 10 — Regresi dan dokumentasi | Semua tahap | Dijalankan setiap kali tahap lain selesai |
+
+Catatan ketergantungan:
+
+- Tahap 4 tidak boleh dimulai sebelum peran owner jelas, agar akun tidak
+  otomatis dianggap owner.
+- Tahap 7 boleh dikerjakan sebelum Tahap 4; pemindai barcode tidak memerlukan
+  akun atau langganan.
+- Tahap 8 dan Tahap 9 adalah gerbang rilis, bukan fitur. Keduanya dapat
+  diselesaikan kapan saja sebelum rilis publik, tetapi tidak boleh dilewati.
+- Tahap 10 berjalan di setiap tahap: setiap perubahan UI diuji pada Terang/Gelap
+  dan lebar ponsel, dokumentasi diperbarui, lalu build APK diverifikasi.
+
+### Usulan pemetaan rilis
+
+Pemetaan ini usulan awal dan dapat berubah saat tahap dimulai.
+
+| Rilis | Isi |
+| --- | --- |
+| 2.3.0 | Tahap 1 — verifikasi nota sebelum simpan/cetak |
+| 2.4.0 | Tahap 3 — informasi aplikasi dan profil bengkel |
+| 2.5.0 | Tahap 5 — peran owner dan admin |
+| 3.0.0 | Tahap 4 — akun, langganan, database daring, dan backup otomatis |
+| 3.1.0 | Tahap 7 — penambahan stok dengan pemindai barcode |
+
+Setiap rilis wajib menaikkan `versionCode`, membangun APK Debug, menjalankan
+pytest pada kedua stack, dan menjalankan unit test Kotlin sebelum di-commit.
+
 ## Tahap 1 — Verifikasi nota sebelum disimpan
 
 **Masalah.** Tombol **Simpan & cetak struk** dan **Simpan tanpa cetak** saat ini
@@ -55,6 +100,93 @@ transaksi dikirim, tanpa mengubah perhitungan uang di backend.
 6. Setelah dikonfirmasi, alur penyimpanan yang sekarang berjalan seperti biasa,
    termasuk konfirmasi stok minus bila backend menolak stok.
 
+### 1.1 Rancangan layar pemeriksaan
+
+- Pemeriksaan tampil sebagai dialog di atas layar kasir, bukan halaman baru,
+  agar isi keranjang tetap terlihat konteksnya dan tidak ada data yang perlu
+  dimuat ulang.
+- Isi dialog, dari atas ke bawah:
+  1. Judul **Periksa nota sebelum disimpan** dan nama pelanggan + nomor HP.
+  2. Unit servis: nopol dan model, atau `[BAWA RADIATOR SAJA]` beserta tipe.
+  3. Daftar jasa: deskripsi, qty, harga satuan, dan subtotal per baris.
+  4. Daftar sparepart: nama part, qty, harga satuan, dan subtotal per baris.
+  5. Ringkasan uang: subtotal jasa, subtotal sparepart, diskon, total nota,
+     metode bayar, uang diterima, serta kembalian atau kekurangan.
+  6. Status garansi: bergaransi/tidak dan tanggal berakhir bila ada.
+- Bagian isi dapat digulir; baris tombol tetap terlihat di bawah layar,
+  termasuk pada ponsel.
+- Tombol: **Periksa lagi** (kiri, gaya sekunder), **Simpan tanpa cetak**, dan
+  **Simpan & cetak struk** (kanan, gaya utama). Urutan tombol mengikuti tombol
+  simpan yang sudah ada agar kasir tidak mencari posisi baru.
+- Dialog mengikuti mode Terang/Gelap dan tidak memotong teks panjang; nama
+  pelanggan, part, atau jasa yang panjang turun ke baris berikutnya.
+
+### 1.2 Sumber data dan konsistensi nominal
+
+- Semua angka diambil dari respons `/api/pos/preview` terbaru, termasuk diskon,
+  total, uang diterima, kembalian, dan kekurangan. JavaScript hanya memformat
+  tampilan, tidak menjumlahkan ulang.
+- Pratinjau diminta saat tombol simpan ditekan, memakai payload yang sama
+  dengan yang nantinya dikirim ke `/api/pos/transaction`.
+- Selama dialog terbuka, isi keranjang tidak dapat diubah sehingga angka pada
+  pemeriksaan tidak bergeser tanpa sepengetahuan kasir.
+- Bila pratinjau gagal (server belum siap, sesi berakhir, atau validasi
+  backend menolak), dialog tidak dibuka. Kasir melihat pesan yang jelas dan
+  keranjang tetap utuh.
+- Backend tetap sumber kebenaran terakhir. Bila data berubah karena transaksi
+  lain di perangkat yang sama, backend yang menolak atau menyesuaikan, dan
+  pesan kesalahan ditampilkan di dialog tanpa menutup keranjang.
+
+### 1.3 Perilaku batal, gagal, dan stok minus
+
+- **Periksa lagi**, tombol tutup, tombol kembali, atau tombol Esc menutup
+  dialog tanpa mengirim request: tidak ada nota baru, tidak ada nomor nota
+  terpakai, dan tidak ada pergerakan stok.
+- Kedua tombol simpan di dalam dialog memakai alur penyimpanan yang sudah ada;
+  hanya satu request yang boleh berjalan. Selama request berjalan, kedua
+  tombol dinonaktifkan dan menampilkan status proses agar ketukan ganda tidak
+  membuat nota ganda.
+- Bila backend menolak karena stok kurang, dialog stok minus yang sudah ada
+  muncul di atas dialog pemeriksaan. Bila kasir menolak, kembali ke dialog
+  pemeriksaan tanpa menyimpan; bila menerima, transaksi disimpan satu kali.
+- Bila penyimpanan gagal karena kesalahan lain, dialog tetap terbuka, alasan
+  ditampilkan, dan keranjang tidak dibersihkan.
+- Setelah berhasil, dialog ditutup dan alur pascasimpan yang berlaku sekarang
+  berjalan seperti biasa: pratinjau struk, cetak, atau pesan tanpa printer.
+- Tidak ada penyimpanan otomatis dan tidak ada percobaan ulang diam-diam.
+
+### 1.4 Risiko dan penanganan
+
+| Risiko | Penanganan |
+| --- | --- |
+| Angka pratinjau berbeda dari nota tersimpan | Angka dari backend, keranjang dibekukan selama dialog, dan struk tersimpan tetap acuan akhir |
+| Dialog terlalu panjang di ponsel | Isi digulir, ringkasan uang dan tombol tetap terlihat |
+| Kasir merasa alur jadi lebih lambat | Satu dialog ringkas, fokus awal pada **Simpan & cetak struk**, dan tidak ada langkah tambahan setelah konfirmasi |
+| Ketukan ganda saat simpan | Tombol dinonaktifkan selama request dan request idempotensi yang sudah ada tetap dipakai |
+| Pratinjau gagal karena server lambat | Tampilkan status memuat di dialog tombol, bukan pesan error yang menutup alur |
+
+### 1.5 Rencana pengujian
+
+Pengujian manual pada instance terisolasi (database sementara, bukan data
+produksi):
+
+- **Kedua jalur simpan** — Simpan tanpa cetak dan Simpan & cetak struk
+  sama-sama menampilkan pemeriksaan sebelum request terkirim.
+- **Batal** — menutup dialog tidak menambah nota, tidak memakai nomor nota,
+  dan tidak mengubah stok.
+- **Kecocokan angka** — total, diskon, kembalian, dan status garansi pada
+  dialog sama dengan struk yang tersimpan.
+- **Metode bayar** — CASH dengan kembalian, CASH kurang bayar, dan TRANSFER.
+- **Stok minus** — tolak dan terima konfirmasi; pastikan hanya satu nota
+  tersimpan saat menerima.
+- **Gagal simpan** — matikan server sesaat sebelum konfirmasi; dialog tetap
+  terbuka, keranjang utuh, dan pesan jelas.
+- **Ketukan ganda** — tekan tombol simpan berulang cepat; hanya satu nota.
+- **Tampilan** — Terang dan Gelap, lebar ponsel 360–430 px, serta nama
+  pelanggan/part yang panjang.
+- **Regresi** — cetak ulang, void, retur, dan label barang tetap berjalan
+  seperti sebelum perubahan.
+
 **Batasan.**
 
 - Nominal pada ringkasan berasal dari pratinjau backend, bukan hitungan ulang
@@ -68,6 +200,8 @@ transaksi dikirim, tanpa mengubah perhitungan uang di backend.
 - Kedua tombol simpan selalu menampilkan pemeriksaan sebelum mengirim request.
 - Membatalkan pemeriksaan tidak menyimpan apa pun dan tidak mengubah stok.
 - Ringkasan cocok dengan nota yang akhirnya tersimpan.
+- Ketukan ganda pada tombol simpan tetap menghasilkan satu nota.
+- Bila pratinjau gagal, dialog tidak dibuka dan keranjang tidak hilang.
 - Berfungsi di mode Terang dan Gelap serta pada lebar layar ponsel.
 
 ## Tahap 3 — Informasi aplikasi dan profil bengkel saat instalasi pertama
