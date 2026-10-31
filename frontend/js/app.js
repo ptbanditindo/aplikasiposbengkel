@@ -811,14 +811,12 @@
       nama: $('#custNama').value.trim(),
       nomor_hp: $('#custHp').value.trim(),
       alamat: $('#custAlamat').value.trim() || null,
-      wa_consent: $('#custWaConsent').checked,
     };
 
     setBusy(button, true, 'Menyimpan...');
     try {
       const customer = await API.createCustomer(payload);
       $('#customerForm').reset();
-      $('#custWaConsent').checked = true;
       closeModal('#customerModal');
       toast('Pelanggan ' + customer.nama + ' tersimpan.', 'success');
 
