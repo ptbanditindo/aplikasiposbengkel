@@ -18,24 +18,38 @@ build step) di `http://127.0.0.1:8000`.
   pembayaran CASH/TRANSFER, kembalian, validasi stok, serta opsi izinkan stok
   minus. Zona input jasa dan sparepart dibedakan warna agar kasir tidak salah
   memasukkan item, dan kolom uang otomatis memakai pemisah ribuan
-  (`1.000.000`) saat diketik. Setelah nota tersimpan, strip label barang ikut
-  tercetak di bawah garis potong.
-- **Label barang** — strip label memuat pelanggan, nomor HP, unit, jenis barang,
-  dan kode `RAD-YYYYMMDD-NNN` yang berurutan per hari mulai `001`. Kode dibuat
-  sekali saat transaksi pertama, lalu dipakai ulang pada cetak ulang, void, dan
-  retur. Unit lama yang sudah berlabel tetap memakai kodenya; unit tanpa label
-  mendapat kode saat transaksi pertamanya tercatat.
+  (`1.000.000`) saat diketik. Strip label hanya ikut tercetak untuk radiator
+  copotan; mobil utuh dicetak tanpa strip dan tanpa garis potong.
+- **Label barang** — strip label radiator copotan memuat pelanggan, nomor HP,
+  unit, jenis barang, dan kode `RAD-YYYYMMDD-NNN` yang berurutan per hari mulai
+  `001`. Kode dibuat sekali saat transaksi pertama, lalu dipakai ulang pada
+  cetak ulang, void, dan retur. Unit lama yang sudah berlabel tetap memakai
+  kodenya; unit radiator tanpa label mendapat kode saat transaksi pertamanya
+  tercatat.
 - **Pembatalan dan retur** — nota bisa dibatalkan (VOID) atau diretur sebagian
   maupun seluruhnya. Stok dikembalikan secara atomik lewat ledger pergerakan
   stok, bukan dengan menyunting angka stok manual.
 - **Garansi** — masa garansi per nota (bulan bebas), status aktif/kadaluarsa,
   catatan klaim, dan klaim yang hanya bisa dilakukan sekali.
-- **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, snapshot modal
-  saat part dipakai, dan proteksi hapus item yang sudah dipakai transaksi.
-  Daftar stok memakai baris lebih rapat agar lebih banyak item terlihat; tabel
-  jasa, riwayat, dan laporan tidak ikut dirapatkan.
-- **Laporan** — kas harian, rekap periode, penjualan sparepart, laba kotor,
-  rincian per metode bayar, dan laporan semua waktu.
+- **DP & piutang** — nota bisa dibayar sebagian sebagai DP, dengan atau tanpa
+  jatuh tempo, lalu dilunasi kapan saja dari detail nota. Daftar piutang per
+  pelanggan menampilkan sisa, umur piutang, dan nota yang belum lunas.
+- **WhatsApp manual** — setelah struk dicetak, aplikasi membuka WhatsApp berisi
+  struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
+  membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor
+  ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
+- **Follow-up & servis berkala** — ringkasan tindak lanjut di dasbor untuk
+  piutang, garansi yang akan habis, servis berkala, dan prospek pelanggan,
+  dengan daftar rincian dan riwayat tindakan. Setiap tarif jasa dan sparepart
+  punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
+  saat dikerjakan dan menjadi pengingat servis berikutnya.
+- **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, interval servis
+  berkala per jasa dan per sparepart, snapshot modal saat part dipakai, dan
+  proteksi hapus item yang sudah dipakai transaksi. Daftar stok memakai baris
+  lebih rapat agar lebih banyak item terlihat; tabel jasa, riwayat, dan laporan
+  tidak ikut dirapatkan.
+- **Laporan** — kas harian, rekap periode, penjualan sparepart, estimasi laba
+  bersih sparepart dan jasa, rincian per metode bayar, dan laporan semua waktu.
 - **Printer universal** — kelola beberapa printer dari Pengaturan: Bluetooth
   (SPP), Wi-Fi/LAN (TCP 9100), USB OTG, cetak lewat layanan Android, dan cetak
   lewat browser. Mendukung kertas 58/80 mm, tes cetak, serta printer utama.
@@ -57,7 +71,8 @@ build step) di `http://127.0.0.1:8000`.
 
 ## Menjalankan versi web/desktop
 
-Prasyarat: Python 3.10 atau lebih baru (diverifikasi pada Python 3.12.10).
+Prasyarat: Python 3.10 atau lebih baru (diverifikasi pada Python 3.12.10 dan
+3.14.7).
 
 ```bash
 python -m venv .venv
@@ -134,7 +149,8 @@ Kode Android ada di `android/`. Backend Python yang sama dibundel sebagai asset
 ZIP dan dijalankan di dalam proses aplikasi memakai Chaquopy 16 (Python 3.10),
 sehingga tidak perlu server terpisah dan tetap offline.
 
-Prasyarat build: JDK 17, Android SDK 35, dan Python 3.10+ di mesin build.
+Prasyarat build: JDK 17, Android SDK 35, dan Python 3.10+ lengkap dengan
+modul `venv` di mesin build.
 
 ```bash
 cd android
@@ -142,10 +158,14 @@ cd android
 ./gradlew assembleDebug # APK debug
 ```
 
+Di Windows, tunjuk interpreter host lewat
+`-Pchaquopy.buildPython="C:/path/python/python.exe"` bila `py` atau `python`
+tidak tersedia di PATH.
+
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir adalah versi **2.2.2** (versionCode 5).
+terakhir adalah versi **2.2.4** (versionCode 7).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
@@ -185,18 +205,25 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-239 test mencakup transaksi, void/retur, stok, garansi, laporan, pengaturan,
-label barang, printer, backup/restore, Telegram, serta pemeriksaan keamanan
-akses (PIN, sesi, token instalasi, loopback, host/origin). Suite yang sama
-lulus di dua jalur dependensi: Pydantic v2 (desktop) dan Pydantic 1.10 +
-FastAPI 0.115 (kombinasi yang dipakai APK).
+288 test mencakup transaksi, DP/pelunasan/piutang, WhatsApp, follow-up dan
+servis berkala (jasa dan sparepart), void/retur, stok, garansi, laporan,
+pengaturan, label barang, printer, backup/restore, Telegram, serta pemeriksaan
+keamanan akses (PIN, sesi, token instalasi, loopback, host/origin). Jalur
+desktop memakai Pydantic v2; kombinasi APK tetap memakai Pydantic 1.10 +
+FastAPI 0.115.
 
-Unit test Kotlin untuk PIN, backup, dan printer juga tersedia (150 test):
+Unit test Kotlin untuk PIN, backup, printer, dan shell WebView juga tersedia
+(308 test):
 
 ```bash
 cd android
-./gradlew test
+./gradlew test -Pchaquopy.buildPython="<path python lengkap dengan venv>"
 ```
+
+Chaquopy memakai interpreter host hanya untuk menjalankan pip. Nilainya wajib
+ditunjuk eksplisit di Windows karena `py`/`python` tidak ada di PATH mesin build.
+Interpreter host boleh berbeda dari target runtime 3.10; build terakhir memakai
+Python 3.14.
 
 ## Keamanan dan data
 

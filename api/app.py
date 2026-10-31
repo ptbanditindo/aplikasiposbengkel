@@ -14,17 +14,21 @@ from api import (
     audit_routes,
     auth_routes,
     customer_routes,
+    followup_routes,
+    payment_routes,
     pos_routes,
     printer_routes,
     report_routes,
     settings_routes,
     stock_routes,
+    whatsapp_routes,
 )
 from api.deps import require_auth
 from api.schemas import (
     BackupStatusOut,
     BengkelInfoOut,
     ConfigOut,
+    OpsSettingsOut,
     PrinterInfoOut,
     TelegramInfoOut,
 )
@@ -193,6 +197,9 @@ def create_app() -> FastAPI:
     app.include_router(auth_routes.router, prefix=api_prefix)
     app.include_router(customer_routes.router, prefix=api_prefix)
     app.include_router(pos_routes.router, prefix=api_prefix)
+    app.include_router(payment_routes.router, prefix=api_prefix)
+    app.include_router(whatsapp_routes.router, prefix=api_prefix)
+    app.include_router(followup_routes.router, prefix=api_prefix)
     app.include_router(stock_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
@@ -229,6 +236,7 @@ def create_app() -> FastAPI:
             garansi_syarat=settings.garansi_syarat,
             metode_bayar=["CASH", "TRANSFER"],
             keluhan_presets=KELUHAN_PRESETS,
+            ops=OpsSettingsOut(**settings_service.get_ops_settings(db)),
         )
 
     if FRONTEND_DIR.exists():

@@ -6,10 +6,10 @@ from typing import Any, Dict, List
 
 from config import settings
 from database.models import ServiceRecord
-from services import settings_service, warranty_service
+from services import settings_service, warranty_service, whatsapp_service
 from services.customer_service import describe_unit
 from services.escpos_service import ReceiptBuilder
-from services.utils import format_rupiah, money
+from services.utils import format_rupiah, money, normalize_whatsapp
 
 
 def _net_qty(item) -> int:
@@ -24,6 +24,27 @@ def _total_neto(record: ServiceRecord):
     if _is_void(record):
         return money(Decimal("0.00"))
     return money(record.total_servis - (record.total_retur or Decimal("0.00")))
+
+
+def _sisa_bayar(record: ServiceRecord):
+    if _is_void(record):
+        return money(Decimal("0.00"))
+    netto = money(
+        max(
+            Decimal(record.total_servis or 0)
+            - Decimal(record.total_retur or 0),
+            Decimal("0.00"),
+        )
+    )
+    return money(max(netto - Decimal(record.total_dibayar or 0), Decimal("0.00")))
+
+
+def _payment_label(payment) -> str:
+    if payment.jenis == "DP":
+        return "DP"
+    if payment.jenis == "REFUND":
+        return "Refund"
+    return "Pembayaran"
 
 
 def _duration_label(record: ServiceRecord) -> str:
@@ -59,7 +80,8 @@ def _labels(record: ServiceRecord) -> List[Dict[str, Any]]:
     dipakai agar beberapa strip dapat dicetak bila unit bertambah.
     """
     unit = record.unit
-    if not unit or not unit.label_radiator:
+    # Mobil utuh tidak memakai strip label, walau data label lama masih ada.
+    if not unit or unit.unit_type != "RADIATOR_ONLY" or not unit.label_radiator:
         return []
     customer = unit.customer
     return [
@@ -89,7 +111,11 @@ def _append_label_strips(b: ReceiptBuilder, labels: List[Dict[str, Any]]) -> Non
 
 
 def _build(
-    record: ServiceRecord, width: int, bengkel: Dict[str, str]
+    record: ServiceRecord,
+    width: int,
+    bengkel: Dict[str, str],
+    payment=None,
+    include_labels: bool = True,
 ) -> ReceiptBuilder:
     unit = record.unit
     customer = unit.customer
@@ -109,6 +135,8 @@ def _build(
     b.kv("No. Nota", record.no_nota)
     b.kv("Tanggal", record.waktu_service.strftime("%d/%m/%Y %H:%M"))
     b.kv("Kasir", "Kasir")
+    if payment is not None:
+        b.center("*** STRUK PELUNASAN ***", bold=True)
     if _is_void(record):
         b.divider("-")
         b.center("*** NOTA DIBATALKAN (VOID) ***", bold=True)
@@ -157,6 +185,32 @@ def _build(
     b.kv("Bayar", format_rupiah(record.bayar))
     b.kv("Kembali", format_rupiah(record.kembalian))
 
+    sisa = _sisa_bayar(record)
+    if sisa > 0:
+        b.divider("-")
+        b.kv("Status Bayar", "BELUM LUNAS", bold=True)
+        b.kv("DP / Dibayar", format_rupiah(record.total_dibayar or 0))
+        b.kv("Sisa", format_rupiah(sisa), bold=True)
+        if record.jatuh_tempo:
+            b.kv("Jatuh Tempo", record.jatuh_tempo.strftime("%d/%m/%Y"))
+    else:
+        b.kv("Status Bayar", "LUNAS")
+
+    payments = list(getattr(record, "payments", []) or [])
+    if payment is not None or len(payments) > 1:
+        b.divider("-")
+        b.add("RIWAYAT PEMBAYARAN:", bold=True)
+        for row in payments:
+            label = _payment_label(row)
+            if row.jenis == "PELUNASAN":
+                label = f"Pelunasan {row.metode}"
+            b.kv(label, format_rupiah(row.nominal))
+        b.kv("Total Dibayar", format_rupiah(record.total_dibayar or 0))
+        b.kv("Sisa", format_rupiah(sisa))
+        if payment is not None:
+            b.kv("Waktu Bayar", payment.waktu.strftime("%d/%m/%Y %H:%M"))
+            b.kv("Metode", "TRANSFER BANK" if payment.metode == "TRANSFER" else "CASH / TUNAI")
+
     b.divider("-")
     b.add("GARANSI SERVIS:", bold=True)
     if _is_void(record):
@@ -183,23 +237,47 @@ def _build(
     b.center("")
     b.center("Terima kasih!")
     b.divider("=")
-    labels = _labels(record)
-    if labels:
-        _append_label_strips(b, labels)
+    if include_labels:
+        labels = _labels(record)
+        if labels:
+            _append_label_strips(b, labels)
     return b
 
 
+def receipt_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
+    """Teks nota lengkap untuk WhatsApp, tanpa strip label potong."""
+    builder = _build(record, 32, bengkel, include_labels=False)
+    return "\n".join(line.rstrip() for line in builder.lines()).strip()
+
+
 def build_receipt_payload(
-    record: ServiceRecord, bengkel: Dict[str, str] | None = None
+    record: ServiceRecord,
+    bengkel: Dict[str, str] | None = None,
+    payment=None,
 ) -> Dict[str, Any]:
     """Data lengkap struk (58mm & 80mm) untuk reprint / cetak Bluetooth."""
     unit = record.unit
     customer = unit.customer
     info = bengkel or settings_service.default_bengkel_info()
 
-    builder_58 = _build(record, 32, info)
-    builder_80 = _build(record, 48, info)
+    builder_58 = _build(record, 32, info, payment)
+    builder_80 = _build(record, 48, info, payment)
     labels = _labels(record)
+    sisa = _sisa_bayar(record)
+    payments = [
+        {
+            "id": row.id,
+            "service_record_id": row.service_record_id,
+            "jenis": row.jenis,
+            "metode": row.metode,
+            "nominal": row.nominal,
+            "waktu": row.waktu,
+            "operator": row.operator,
+            "catatan": row.catatan,
+            "request_id": row.request_id,
+        }
+        for row in (getattr(record, "payments", []) or [])
+    ]
 
     jobs: List[Dict[str, Any]] = [
         {
@@ -209,6 +287,7 @@ def build_receipt_payload(
             "jumlah_retur": int(job.jumlah_retur or 0),
             "harga": job.harga,
             "subtotal": job.subtotal,
+            "interval_servis_bulan": int(job.interval_servis_bulan or 0),
         }
         for job in record.jobs
     ]
@@ -220,6 +299,7 @@ def build_receipt_payload(
             "jumlah_retur": int(part.jumlah_retur or 0),
             "harga_satuan": part.harga_satuan,
             "subtotal": part.subtotal,
+            "interval_servis_bulan": int(part.interval_servis_bulan or 0),
         }
         for part in record.parts
     ]
@@ -240,6 +320,13 @@ def build_receipt_payload(
         "metode_bayar": record.metode_bayar,
         "bayar": record.bayar,
         "kembalian": record.kembalian,
+        "status_bayar": "LUNAS" if _is_void(record) else (record.status_bayar or "LUNAS"),
+        "jenis_bayar": record.jenis_bayar
+        or ("DP" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
+        "jatuh_tempo": record.jatuh_tempo,
+        "rencana_bayar": money(record.rencana_bayar or 0),
+        "total_dibayar": money(record.total_dibayar or 0),
+        "sisa_bayar": sisa,
         "bergaransi": record.bergaransi,
         "garansi_sampai": record.garansi_sampai,
         "catatan_garansi": record.catatan_garansi,
@@ -257,6 +344,10 @@ def build_receipt_payload(
         "labels": labels,
         "jobs": jobs,
         "parts": parts,
+        "payments": payments,
+        "wa_text": receipt_wa_text(record, info),
+        "completion_wa_text": whatsapp_service.completion_wa_text(record, info),
+        "customer_wa": normalize_whatsapp(customer.nomor_hp),
         "bengkel_nama": info["nama"],
         "bengkel_tagline": info["tagline"],
         "bengkel_alamat": info["alamat"],
@@ -312,6 +403,13 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "metode_bayar": record.metode_bayar,
         "bayar": record.bayar,
         "kembalian": record.kembalian,
+        "status_bayar": "LUNAS" if status == "VOID" else (record.status_bayar or "LUNAS"),
+        "jenis_bayar": record.jenis_bayar
+        or ("DP" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
+        "jatuh_tempo": record.jatuh_tempo,
+        "rencana_bayar": money(record.rencana_bayar or 0),
+        "total_dibayar": money(record.total_dibayar or 0),
+        "sisa_bayar": _sisa_bayar(record),
         "bergaransi": record.bergaransi,
         "garansi_sampai": record.garansi_sampai,
         "catatan_garansi": record.catatan_garansi,
@@ -333,4 +431,4 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
     }
 
 
-__all__ = ["build_receipt_payload", "record_summary", "Decimal"]
+__all__ = ["build_receipt_payload", "receipt_wa_text", "record_summary", "Decimal"]

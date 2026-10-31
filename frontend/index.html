@@ -175,6 +175,40 @@
           </article>
         </div>
 
+        <h2 class="section-label">Follow up</h2>
+        <div class="stats-grid stats-grid--secondary">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
+            <span class="stat-label">Piutang</span>
+            <strong id="statReceivable">Rp 0</strong>
+            <span class="stat-sub" id="statReceivableSub">0 nota</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka servis berkala" data-action="open-followup" data-jenis="servis_berkala">
+            <span class="stat-label">Servis berkala</span>
+            <strong id="statDueService">0</strong>
+            <span class="stat-sub">Jatuh tempo dekat</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka garansi akan habis" data-action="open-followup" data-jenis="garansi">
+            <span class="stat-label">Garansi akan habis</span>
+            <strong id="statWarrantyEnding">0</strong>
+            <span class="stat-sub">Ingatkan pelanggan</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang garansi" data-action="open-followup" data-jenis="garansi" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Garansi</span>
+            <strong id="statAkanGaransi">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Servis berkala</span>
+            <strong id="statAkanServis">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka semua tugas follow-up aktif" data-action="open-followup">
+            <span class="stat-label">Tugas follow-up</span>
+            <strong id="statFollowupToday">0</strong>
+            <span class="stat-sub">Belum selesai</span>
+          </article>
+        </div>
+
         <section class="card">
           <div class="card-head">
             <div>
@@ -233,7 +267,7 @@
               <div class="selected-box hidden" id="selectedCustomer"></div>
             </section>
 
-            <section class="card step-card hidden" id="unitCard">
+            <section class="card step-card step-card--unit hidden" id="unitCard">
               <div class="step-head">
                 <span class="step-num" aria-hidden="true">2</span>
                 <div>
@@ -287,7 +321,7 @@
               </div>
             </section>
 
-            <section class="card step-card hidden" id="complaintCard">
+            <section class="card step-card step-card--complaint hidden" id="complaintCard">
               <div class="step-head">
                 <span class="step-num" aria-hidden="true">3</span>
                 <div>
@@ -304,6 +338,9 @@
                 <span>Catatan pengerjaan (opsional)</span>
                 <input type="text" class="input" id="catatanPengerjaan" placeholder="Contoh: ganti upper tank, tes tekanan" maxlength="2000">
               </label>
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" id="btnSaveComplaint">Simpan keluhan</button>
+              </div>
             </section>
 
             <section class="card step-card hidden" id="itemsCard">
@@ -327,11 +364,12 @@
                   <input type="text" class="input money-input" id="jasaHarga" inputmode="numeric" placeholder="Harga deal">
                   <button type="button" class="btn btn-outline" id="btnAddJob">+ Tambah jasa</button>
                 </div>
+                <p class="tiny muted line-hint hidden" id="jasaIntervalHint"></p>
               </div>
               <div class="table-wrap items-block items-block--jasa">
                 <table class="table items-table">
                   <thead>
-                    <tr><th>Jasa</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="text-right">Subtotal</th><th></th></tr>
+                    <tr><th>Jasa</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="col-interval">Servis berkala</th><th class="text-right">Subtotal</th><th></th></tr>
                   </thead>
                   <tbody id="jobsBody"></tbody>
                 </table>
@@ -349,13 +387,15 @@
                   <input type="number" class="input qty-input" id="partQty" value="1" min="1" placeholder="Qty">
                   <input type="text" class="input money-input" id="partHarga" inputmode="numeric" placeholder="Harga deal">
                   <input type="text" class="input money-input" id="partModal" inputmode="numeric" placeholder="Modal (sparepart manual)">
+                  <input type="number" class="input interval-input" id="partInterval" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="Servis (bln)" title="Interval servis berkala dalam bulan. 0 = nonaktif.">
                   <button type="button" class="btn btn-outline" id="btnAddPart">+ Tambah sparepart</button>
                 </div>
+                <p class="tiny muted line-hint hidden" id="partIntervalHint"></p>
               </div>
               <div class="table-wrap items-block items-block--part">
                 <table class="table items-table">
                   <thead>
-                    <tr><th>Sparepart</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="col-price">Modal</th><th class="text-right">Subtotal</th><th></th></tr>
+                    <tr><th>Sparepart</th><th class="col-qty">Qty</th><th class="col-price">Harga deal</th><th class="col-price">Modal</th><th class="col-interval">Servis berkala</th><th class="text-right">Subtotal</th><th></th></tr>
                   </thead>
                   <tbody id="partsBody"></tbody>
                 </table>
@@ -399,19 +439,72 @@
                 </div>
               </div>
 
+              <div class="field">
+                <span>Jenis pembayaran</span>
+                <div class="segmented sm" id="jenisBayarSwitch" role="group" aria-label="Jenis pembayaran">
+                  <button type="button" data-jenis="LUNAS" class="active">Lunas</button>
+                  <button type="button" data-jenis="DP">DP / uang muka</button>
+                  <button type="button" data-jenis="KREDIT">Kredit</button>
+                </div>
+              </div>
+
+              <div class="hidden" id="dpFields">
+                <label class="field">
+                  <span>DP diterima (Rp)</span>
+                  <input type="text" class="input money-input" id="dpInput" inputmode="numeric" placeholder="0">
+                </label>
+                <label class="field">
+                  <span>Jatuh tempo (opsional)</span>
+                  <input type="date" class="input" id="jatuhTempoInput">
+                  <small class="tiny muted">Boleh dikosongkan. Pelunasan dicatat saat pekerjaan selesai.</small>
+                </label>
+              </div>
+
+              <div class="hidden" id="kreditFields">
+                <label class="field">
+                  <span>Rencana pembayaran (Rp)</span>
+                  <input type="text" class="input money-input" id="rencanaBayarInput" inputmode="numeric" placeholder="0">
+                  <small class="tiny muted">Nominal yang dijanjikan pelanggan. Boleh dikosongkan.</small>
+                </label>
+                <label class="field">
+                  <span>Tanggal rencana pembayaran (opsional)</span>
+                  <input type="date" class="input" id="rencanaTanggalInput">
+                  <small class="tiny muted">Dipakai sebagai pengingat piutang.</small>
+                </label>
+                <label class="switch-row">
+                  <span>Ada penambahan uang (uang muka)</span>
+                  <input type="checkbox" id="kreditUangMukaAktif">
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <div class="hidden" id="kreditUangMukaFields">
+                  <label class="field">
+                    <span>Uang muka diterima (Rp)</span>
+                    <input type="text" class="input money-input" id="kreditUangMukaInput" inputmode="numeric" placeholder="0">
+                    <small class="tiny muted">Sisanya menjadi tagihan kredit.</small>
+                  </label>
+                </div>
+              </div>
+
               <div class="bank-info hidden" id="bankInfo">
                 <span class="tiny">Rekening tujuan transfer</span>
                 <strong id="bankAccount">-</strong>
                 <small id="bankOwner">-</small>
               </div>
 
-              <label class="field">
-                <span>Uang diterima (Rp)</span>
-                <input type="text" class="input money-input" id="bayarInput" inputmode="numeric" placeholder="0">
-              </label>
-              <div class="summary-row change">
-                <span>Kembalian</span>
-                <strong id="kembalianValue">Rp 0</strong>
+              <div id="lunasFields">
+                <label class="field">
+                  <span>Uang diterima (Rp)</span>
+                  <input type="text" class="input money-input" id="bayarInput" inputmode="numeric" placeholder="0">
+                </label>
+                <div class="summary-row change">
+                  <span>Kembalian</span>
+                  <strong id="kembalianValue">Rp 0</strong>
+                </div>
+              </div>
+
+              <div class="summary-row hidden" id="dpSummaryRow">
+                <span>Sisa tagihan</span>
+                <strong id="dpSisaValue">Rp 0</strong>
               </div>
 
               <div class="warranty-box">
@@ -444,8 +537,9 @@
               </div>
 
               <div class="summary-actions">
-                <button type="button" class="btn btn-primary btn-block" id="btnSavePrint">Simpan &amp; cetak struk</button>
-                <button type="button" class="btn btn-outline btn-block" id="btnSaveOnly">Simpan tanpa cetak</button>
+                <button type="button" class="btn btn-primary btn-block" id="btnReviewNota">Periksa nota</button>
+                <button type="button" class="btn btn-primary btn-block hidden" id="btnSavePrint">Simpan &amp; cetak struk</button>
+                <button type="button" class="btn btn-outline btn-block hidden" id="btnSaveOnly">Simpan tanpa cetak</button>
               </div>
             </div>
           </aside>
@@ -509,7 +603,7 @@
           <div class="table-wrap">
             <table class="table table-stock">
               <thead>
-                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th></th></tr>
+                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th class="col-interval">Servis berkala</th><th></th></tr>
               </thead>
               <tbody id="stockBody"></tbody>
             </table>
@@ -540,7 +634,7 @@
           <div class="table-wrap">
             <table class="table table-jasa">
               <thead>
-                <tr><th>Nama jasa</th><th class="text-right">Tarif</th><th></th></tr>
+                <tr><th>Nama jasa</th><th class="text-right">Tarif</th><th>Servis berkala</th><th></th></tr>
               </thead>
               <tbody id="jasaBody"></tbody>
             </table>
@@ -554,7 +648,7 @@
         <div class="page-head">
           <div>
             <h1>Laporan kas</h1>
-            <p class="muted">Pemasukan tunai, transfer, dan estimasi laba kotor sparepart.</p>
+            <p class="muted">Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa.</p>
           </div>
         </div>
 
@@ -572,7 +666,7 @@
           <button type="button" class="btn btn-primary" id="btnLoadReport">Tampilkan</button>
         </div>
 
-        <div class="stats-grid">
+        <div class="stats-grid stats-grid--report">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua nota pada periode" data-action="report-notas" data-filter="omset">
             <span class="stat-label">Total omset</span>
             <strong id="reportOmset">Rp 0</strong>
@@ -585,9 +679,13 @@
             <span class="stat-label">Transfer</span>
             <strong id="reportTransfer">Rp 0</strong>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba kotor sparepart" data-action="report-notas" data-filter="profit">
-            <span class="stat-label">Estimasi laba kotor sparepart</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba bersih sparepart" data-action="report-notas" data-filter="profit">
+            <span class="stat-label">Estimasi laba bersih sparepart</span>
             <strong id="reportProfit">Rp 0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Estimasi laba bersih jasa</span>
+            <strong id="reportProfitJasa">Rp 0</strong>
           </article>
         </div>
 
@@ -621,7 +719,7 @@
           <div class="table-wrap">
             <table class="table table-period">
               <thead>
-                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba kotor sparepart</th></tr>
+                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba bersih sparepart</th><th class="text-right">Laba bersih jasa</th></tr>
               </thead>
               <tbody id="periodBody"></tbody>
             </table>
@@ -725,6 +823,42 @@
           <div class="form-actions">
             <button type="button" class="btn btn-ghost" id="settingsReset">Batalkan perubahan</button>
             <button type="submit" class="btn btn-primary" id="settingsSave">Simpan pengaturan</button>
+          </div>
+        </form>
+
+        <form class="card" id="opsForm">
+          <div class="card-head">
+            <div>
+              <h2>Pengingat dan follow-up</h2>
+              <p class="muted">Batas hari untuk piutang, garansi, prospek, dan pesan WhatsApp.</p>
+            </div>
+          </div>
+
+          <div class="form-grid form-grid--ops">
+            <label class="field">
+              <span>Tempo piutang bawaan (hari)</span>
+              <input type="number" class="input" id="opsTempoHari" min="1" max="365" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Ingatkan prospek setelah (hari)</span>
+              <input type="number" class="input" id="opsProspekHari" min="1" max="365" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Jeda follow-up WhatsApp (hari)</span>
+              <input type="number" class="input" id="opsCooldownHari" min="0" max="90" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Ingatkan garansi H- (hari)</span>
+              <input type="number" class="input" id="opsGaransiHari" min="1" max="90" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Tampilkan servis berkala H- (hari)</span>
+              <input type="number" class="input" id="opsServisHari" min="1" max="90" step="1" inputmode="numeric">
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="opsSave">Simpan pengaturan follow-up</button>
           </div>
         </form>
 
@@ -939,10 +1073,11 @@
           <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat unit servis.</div>
         </section>
       </section>
+
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.2</span>
+        <span>BengkelPOS Radiator v2.2.4</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -1137,6 +1272,7 @@
           <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptRetry">Coba lagi</button>
           <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptChooseOther">Pilih printer lain</button>
           <button type="button" class="btn btn-ghost btn-sm hidden" id="btnReceiptOpenSettings">Buka pengaturan printer</button>
+          <button type="button" class="btn btn-outline btn-sm hidden" id="btnReceiptWhatsappFallback">Buka WhatsApp</button>
         </div>
       </div>
 
@@ -1144,8 +1280,27 @@
         <pre id="receiptPreview"></pre>
       </div>
       <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btnReceiptCopyText">Salin teks</button>
         <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
         <button type="button" class="btn btn-primary" id="btnReceiptPrint">Cetak</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ NOTA REVIEW MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="notaReviewModal" role="dialog" aria-modal="true" aria-labelledby="notaReviewTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="notaReviewTitle">Periksa nota</h3>
+          <p class="muted">Pastikan seluruh isi nota sudah benar sebelum disimpan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="notaReviewClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="notaReviewBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btnNotaEdit">Edit</button>
+        <button type="button" class="btn btn-primary" id="btnNotaCorrect">Benar</button>
       </div>
     </div>
   </div>
@@ -1188,10 +1343,6 @@
       <div id="recordDetail"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="recordDismiss">Tutup</button>
-        <button type="button" class="btn btn-outline hidden" id="btnRecordCustomer">Lihat pelanggan</button>
-        <button type="button" class="btn btn-outline hidden" id="btnRecordReturn">Retur</button>
-        <button type="button" class="btn btn-danger hidden" id="btnRecordVoid">Batalkan nota</button>
-        <button type="button" class="btn btn-primary" id="btnRecordReprint">Cetak struk</button>
       </div>
     </div>
   </div>
@@ -1250,6 +1401,11 @@
             <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0">
           </label>
         </div>
+        <label class="field">
+          <span>Servis berkala</span>
+          <input type="number" class="input" id="stockIntervalInput" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="0">
+          <small class="tiny muted">Interval bulan untuk pengingat servis. 0 berarti nonaktif.</small>
+        </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="stockCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan sparepart</button>
@@ -1278,11 +1434,95 @@
           <span>Tarif standar (Rp)</span>
           <input type="text" class="input money-input" id="jasaHargaInput" inputmode="numeric" value="0">
         </label>
+        <label class="field">
+          <span>Servis berkala</span>
+          <input type="number" class="input" id="jasaIntervalInput" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="0">
+          <small class="tiny muted">Isi interval bulan (mis. 6 untuk ganti oli). 0 berarti nonaktif.</small>
+        </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="jasaCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan jasa</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ============================ WHATSAPP MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="waModal" role="dialog" aria-modal="true" aria-labelledby="waModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="waModalTitle">Pesan WhatsApp</h3>
+          <p class="muted" id="waModalSubtitle">Periksa pesan sebelum dibuka di WhatsApp.</p>
+        </div>
+        <button type="button" class="icon-btn" id="waModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <label class="field">
+        <span>Nomor tujuan</span>
+        <input type="text" class="input" id="waModalNumber" readonly>
+      </label>
+      <label class="field">
+        <span>Isi pesan</span>
+        <textarea class="input textarea" id="waModalText" rows="9"></textarea>
+      </label>
+      <p class="tiny muted" id="waModalNote">Pesan dibuka di WhatsApp. Pengiriman tetap dilakukan oleh kasir.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="waModalCancel">Tutup</button>
+        <button type="button" class="btn btn-outline" id="waModalCopy">Salin teks</button>
+        <a class="btn btn-primary" id="waModalOpen" href="#" target="_blank" rel="noopener">Buka WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ FOLLOW-UP LIST MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="followupListModal" role="dialog" aria-modal="true" aria-labelledby="followupListTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="followupListTitle">Daftar follow-up</h3>
+          <p class="muted" id="followupListSubtitle">Pilih item untuk melihat detail.</p>
+        </div>
+        <button type="button" class="icon-btn" id="followupListClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="followup-list" id="followupListBody"></div>
+      <div class="empty-state hidden" id="followupListEmpty">Tidak ada item follow-up.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="followupListDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ FOLLOW-UP DETAIL MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="followupModal" role="dialog" aria-modal="true" aria-labelledby="followupModalTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="followupModalTitle">Detail follow-up</h3>
+          <p class="muted" id="followupModalSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="followupModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="followupDetailBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="followupModalDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ RECEIVABLES MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="receivablesModal" role="dialog" aria-modal="true" aria-labelledby="receivablesTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="receivablesTitle">Piutang pelanggan</h3>
+          <p class="muted" id="receivablesSubtitle">Nota yang belum lunas.</p>
+        </div>
+        <button type="button" class="icon-btn" id="receivablesClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="receivablesBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="receivablesDismiss">Tutup</button>
+      </div>
     </div>
   </div>
 

@@ -150,6 +150,42 @@ def test_preview_uang_kurang_hanya_perkiraan_dan_simpan_tetap_ditolak(
     assert "kurang" in created.json()["detail"].lower()
 
 
+def test_preview_dp_nol_kosong_tetap_menampilkan_sisa_penuh(
+    client, create_customer, create_unit, make_transaction
+):
+    customer = create_customer(nama="Pelanggan DP Pratinjau")
+    unit = create_unit(customer["id"], nopol="B 0906 ARC")
+    jobs = [{"deskripsi": "Servis", "jumlah": 1, "harga": "100000"}]
+
+    preview = _preview(
+        client,
+        jobs=jobs,
+        parts=[],
+        metode_bayar="CASH",
+        bayar="0",
+        jenis_bayar="DP",
+        dp="0",
+    )
+    assert preview.status_code == 200, preview.text
+    data = preview.json()
+    assert data["jenis_bayar"] == "DP"
+    assert data["status_bayar"] == "BELUM_LUNAS"
+    assert data["bayar"] == "0.00"
+    assert data["sisa_bayar"] == "100000.00"
+
+    # Pratinjau toleran, tetapi penyimpanan tetap menolak DP nol.
+    created = make_transaction(
+        unit["id"],
+        jobs=jobs,
+        parts=[],
+        metode_bayar="CASH",
+        bayar="0",
+        jenis_bayar="DP",
+        dp="0",
+    )
+    assert created.status_code == 400, created.text
+
+
 def test_total_nota_konsisten_dengan_laporan_backend(
     client, create_customer, create_unit, make_transaction, stock
 ):

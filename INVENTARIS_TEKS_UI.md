@@ -50,7 +50,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.2 |
+| Versi | BengkelPOS Radiator v2.2.4 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -61,11 +61,36 @@ Aturan yang dipakai:
 | Keterangan | Servis dan pembayaran yang tercatat hari ini. |
 | Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
+| Label bagian | Follow up |
+| Kartu follow up | Piutang (N nota), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal), Tugas follow-up (Belum selesai) |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Tombol | Muat ulang |
 | Kosong | Belum ada transaksi hari ini. Mulai dari tombol Servis baru. |
 | Gagal muat | Ringkasan hari ini gagal dimuat. Coba muat ulang. |
+
+### 3.1 Daftar dan detail follow-up
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul daftar | Daftar follow-up, Servis berkala, Garansi akan habis, Akan datang — Garansi, Akan datang — Servis berkala, Prospek pelanggan |
+| Keterangan daftar | Semua tugas aktif. Pilih item untuk melihat detail. / Pengingat aktif. Pilih item untuk melihat detail. / Jadwal kunjungan yang sudah disepakati. Pilih item untuk melihat detail. |
+| Memuat | Memuat follow-up... |
+| Kosong | Tidak ada item follow-up. |
+| Kartu item | Label jenis, jatuh tempo, nama pelanggan, judul pengingat, unit, nomor nota, penanggung jawab, "Lihat detail" |
+| Belum ditugaskan | Belum ditugaskan |
+| Gagal muat | Daftar follow-up gagal dimuat. Coba lagi. |
+| Judul detail | Nama pelanggan |
+| Subjudul detail | Jenis · judul · jatuh tempo |
+| Label detail | Pelanggan, Unit, Jatuh tempo, Follow up terakhir, Tanggal service |
+| Peringatan jeda | Bisa follow up lagi setelah <waktu>. |
+| Tombol detail | Buka WhatsApp, Buka chat, Buka nota, Simpan status |
+| Bagian detail | Rincian, Riwayat tindakan, Pesan WhatsApp, Ubah status |
+| Pilihan status | Baru, Sudah follow up, Janji bayar, Masih kendala, Selesai, Arsip; servis berkala dan garansi: Akan datang service, Tidak akan datang service |
+| Field status | Status, Janji bayar (untuk JANJI_BAYAR), Tanggal service (wajib bila akan datang), Catatan / alasan arsip |
+| Placeholder arsip | Opsional, wajib untuk arsip |
+| Validasi arsip | Isi alasan arsip minimal 3 karakter. |
+| Tombol tutup | Tutup |
 
 ## 4. Kasir
 
@@ -86,18 +111,22 @@ Aturan yang dipakai:
 | Langkah 3 | Keluhan awal. Pilih keluhan yang sering muncul atau tulis sendiri. |
 | Kolom | Keluhan pelanggan, Catatan pengerjaan (opsional) |
 | Langkah 4 | Rincian pengerjaan. Harga master hanya patokan. Harga deal boleh naik atau turun. |
-| Tabel jasa | Jasa, Qty, Harga deal, Subtotal |
-| Keterangan jasa | Harga deal tidak mengubah tarif master |
+| Tabel jasa | Jasa, Qty, Harga deal, Servis berkala, Subtotal |
+| Keterangan jasa | Harga deal tidak mengubah tarif master. Servis berkala: N bulan. Nilai di baris nota boleh diubah untuk nota ini saja. Jasa ini tanpa interval servis berkala. |
 | Tombol | + Tambah jasa, + Tambah sparepart |
-| Tabel sparepart | Sparepart, Qty, Harga deal, Modal, Subtotal |
-| Keterangan stok | Stok gudang otomatis dipotong. Stok tersedia N. Harga patokan Rp X. |
+| Tabel sparepart | Sparepart, Qty, Harga deal, Modal, Servis berkala, Subtotal |
+| Keterangan stok | Stok gudang otomatis dipotong. Stok tersedia N. Harga patokan Rp X. Servis berkala: N bulan. Sparepart ini tanpa interval servis berkala. |
 | Zona input | Blok jasa dan blok sparepart memakai latar tipis berbeda beserta penanda warna pada judul dan tombol tambah, sehingga kasir mudah membedakan keduanya. |
 | Kosong | Belum ada jasa ditambahkan. Belum ada sparepart ditambahkan. |
 | Ringkasan | Ringkasan nota, Subtotal jasa, Subtotal sparepart, Total nota, Diskon (Rp) |
 | Catatan | Perkiraan sementara. Nilai final dicatat saat nota disimpan. |
-| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian |
+| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian, Jenis pembayaran, Lunas, DP / uang muka, Kredit, DP diterima (Rp), Jatuh tempo (opsional), Sisa tagihan |
+| Bantuan DP | Boleh dikosongkan. Pelunasan dicatat saat pekerjaan selesai. |
+| Kolom kredit | Rencana pembayaran (Rp), Tanggal rencana pembayaran (opsional), Ada penambahan uang (uang muka), Uang muka diterima (Rp) |
+| Bantuan kredit | Nominal yang dijanjikan pelanggan. Boleh dikosongkan. / Dipakai sebagai pengingat piutang. / Sisanya menjadi tagihan kredit. |
 | Garansi | Garansi servis, Durasi garansi, 1 bulan (30 hari), 2 bulan (60 hari), 3 bulan (90 hari), 6 bulan (180 hari), 12 bulan (360 hari), Atur sendiri, Jumlah bulan (1 sampai 120), Catatan garansi |
-| Tombol | Simpan dan cetak struk, Simpan tanpa cetak |
+| Tombol | Periksa nota, Simpan dan cetak struk, Simpan tanpa cetak |
+| Modal periksa nota | Periksa nota. Nama, No. HP, Unit, Keluhan & catatan, Jasa, Sparepart, Total jasa, Total part, Diskon, Grand total, Pembayaran & garansi. Baris jasa/sparepart menyebut interval bila lebih dari 0 (servis tiap N bulan). Tombol Benar, Edit, Tutup. |
 | Validasi | Pilih pelanggan terlebih dahulu. Pilih unit servis terlebih dahulu. Keluhan awal wajib diisi. Tambahkan minimal satu jasa atau sparepart. |
 | Validasi uang | Angka uang harus rupiah bulat tanpa desimal. Label harus berupa rupiah bulat tanpa desimal. Contoh: 150.000. |
 | Format uang | Kolom uang otomatis memakai pemisah ribuan saat diketik, misalnya 1.000.000. Nilai yang dikirim ke backend tetap angka bulat tanpa pemisah, dan total tetap dihitung backend. |
@@ -116,15 +145,10 @@ Aturan yang dipakai:
 | Tombol | Muat ulang |
 | Jumlah | N nota |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode, Garansi, Aksi |
-| Tombol baris | Cetak ulang, Retur, Batalkan nota, Klaim garansi |
-| Lencana | Tunai, Transfer, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
+| Tombol baris | Cetak ulang, Klaim garansi |
+| Lencana | Tunai, Transfer, Lunas, DP, Kredit, Belum bayar, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
 | Kosong | Belum ada riwayat servis. |
 | Gagal muat | Riwayat servis gagal dimuat. Coba muat ulang. |
-| Retur | Isi jumlah retur minimal satu item. Alasan retur minimal 3 karakter. Simpan retur N item? Stok akan diperbarui. |
-| Sukses retur | Retur tersimpan. |
-| Pembatalan | Batalkan nota <nomor>? Stok dikembalikan dan nota tetap tersimpan di riwayat. |
-| Alasan batal | Alasan pembatalan (minimal 3 karakter): |
-| Sukses batal | Nota dibatalkan. |
 | Klaim | Proses klaim garansi untuk nota ini? |
 | Sukses klaim | Klaim garansi tercatat. |
 | Detail gagal | Detail nota gagal dimuat. Coba lagi. |
@@ -134,17 +158,12 @@ Aturan yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Detail nota |
-| Tombol | Tutup, Lihat pelanggan, Retur, Batalkan nota, Cetak struk |
-| Pembatalan | Nota dibatalkan |
+| Tombol | Tutup (Catat pembayaran ada di bagian Pembayaran) |
 | Bagian | Pelanggan dan unit, Keluhan awal, Catatan pengerjaan, Rincian jasa, Sparepart, Catatan garansi, Riwayat retur |
 | Kolom | Jasa, Qty, Harga, Subtotal, Barang, Harga deal |
 | Total | Total jasa, Total part, Diskon, Bayar, Kembalian, Total servis, Retur, Total neto |
 | Info | Waktu servis, Metode bayar, Status garansi, Garansi sampai |
-| Retur | Retur jasa / sparepart. Isi jumlah yang diretur. Stok sparepart kembali otomatis dan tidak bisa diretur dua kali. |
-| Kolom retur | Alasan retur, Contoh: barang tidak cocok / salah pasang |
-| Catatan retur | Operator pencatat diambil otomatis dari sesi yang masuk. |
-| Tombol retur | Batal, Simpan retur |
-| Kosong | Tidak ada rincian jasa. Tidak ada sparepart. Semua item nota ini sudah diretur. |
+| Kosong | Tidak ada rincian jasa. Tidak ada sparepart. |
 | Label modal | Laba <nominal>, modal belum diisi, modal estimasi |
 
 ## 7. Detail pelanggan (popup)
@@ -203,23 +222,25 @@ Aturan yang dipakai:
 | Judul stok | Stok sparepart. Harga master hanya patokan awal untuk kasir. |
 | Tombol | + Sparepart |
 | Panel | Sparepart gudang |
-| Kolom | Kode, Nama, Modal, Jual, Stok |
+| Kolom | Kode, Nama, Modal, Jual, Stok, Servis berkala |
 | Kosong | Belum ada data sparepart. |
 | Ringkasan | N item · N stok menipis (3 atau kurang) |
 | Judul jasa | Tarif jasa. Patokan ongkos pengerjaan untuk kasir. |
 | Tombol | + Tarif jasa |
 | Panel | Daftar tarif jasa |
-| Kolom | Nama jasa, Tarif |
+| Kolom | Nama jasa, Tarif, Servis berkala |
 | Kosong | Belum ada tarif jasa. |
 | Gagal muat stok | Data stok gagal dimuat. Coba muat ulang. |
 | Popup stok | Tambah sparepart / Edit sparepart. Harga jual di sini adalah patokan awal kasir. |
-| Kolom popup stok | Kode, Jumlah stok, Nama sparepart, Harga modal, Harga jual patokan |
+| Kolom popup stok | Kode, Jumlah stok, Nama sparepart, Harga modal, Harga jual patokan, Interval servis |
+| Bantuan interval stok | Interval bulan untuk pengingat servis. 0 berarti nonaktif. |
 | Tombol popup stok | Batal, Simpan sparepart |
 | Sukses stok | Data sparepart tersimpan. |
 | Hapus stok | Hapus sparepart "<nama>"? |
 | Sukses hapus stok | Sparepart dihapus. |
 | Popup jasa | Tambah tarif jasa / Edit tarif jasa. Patokan tarif untuk kasir. |
-| Kolom popup jasa | Nama jasa, Tarif standar (Rp) |
+| Kolom popup jasa | Nama jasa, Tarif standar (Rp), Interval servis |
+| Bantuan interval jasa | Isi interval bulan (mis. 6 untuk ganti oli). 0 berarti nonaktif. |
 | Tombol popup jasa | Batal, Simpan jasa |
 | Sukses jasa | Tarif jasa tersimpan. |
 | Hapus jasa | Hapus tarif jasa "<nama>"? |
@@ -230,18 +251,18 @@ Aturan yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Laporan kas |
-| Keterangan | Pemasukan tunai, transfer, dan estimasi laba kotor sparepart. |
+| Keterangan | Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa. |
 | Periode | Periode laporan, Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba kotor sparepart |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa |
 | Tabel transaksi | Transaksi pada periode, Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Kosong | Tidak ada transaksi pada periode ini. |
 | Rekap | Rekap harian periode. Hanya hari yang memiliki transaksi. |
-| Kolom rekap | Tanggal, Transaksi, Omset, Tunai, Transfer, Laba kotor sparepart |
+| Kolom rekap | Tanggal, Transaksi, Omset, Tunai, Transfer, Laba bersih sparepart, Laba bersih jasa |
 | Bagian | Stok pernah terjual. Harga mengikuti harga deal. Barang yang sama diurutkan menurut waktu. |
 | Kolom terjual | Barang, Qty, Harga akhir, Subtotal, Waktu, No. nota |
 | Meta | <tanggal> sampai <tanggal>, N transaksi, N unit, Diskon, Garansi aktif, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
-| Label laba | Laba kotor <nominal>, retur -<nominal>, modal sparepart belum diisi |
+| Label laba | Laba bersih <nominal>, retur -<nominal>, modal sparepart belum diisi |
 | Gagal muat | Laporan gagal dimuat. Coba lagi. |
 | Catatan tombol backup | Tombol backup di halaman Laporan sudah dihapus. Backup hanya tersedia di Pengaturan. |
 
@@ -490,11 +511,38 @@ HTTP diganti dengan kalimat umum di atas.
 2. Penjelasan backup Telegram menyebut cakupan lengkap: pelanggan, unit, riwayat
    servis, transaksi keuangan, stok, dan pengaturan bengkel. PIN dan token tidak ikut
    dijelaskan karena memang tidak disertakan dalam file backup.
-3. Semua tombol, id, dan alur data lama tetap dipertahankan. Perubahan hanya pada
-   teks, penamaan yang tampil, dan gaya visual.
+3. Tombol, id, dan alur data yang masih dipakai tetap dipertahankan. Beberapa
+   alur lama diganti secara sengaja seperti dijelaskan pada poin berikut.
 4. Layar utama aplikasi Android kini dapat di-screenshot dan direkam. Proteksi
    `FLAG_SECURE` hanya tersisa di layar PIN agar PIN tidak ikut terambil; pratinjau
    recents tetap ditutup `privacyCover` saat aplikasi masuk latar belakang.
 5. Seluruh tampilan memakai satu sistem desain: latar kertas hangat, sidebar
    ink gelap, aksen copper, angka nominal monospace, dan navigasi 4x2 di layar
    kecil. Id elemen, tombol, dan alur data tidak berubah.
+6. Nota mobil utuh tidak lagi memuat strip label `POTONG DI SINI`. Strip hanya
+   dicetak untuk unit radiator copotan. Label lama yang mungkin tersimpan pada
+   unit mobil tidak ikut tercetak.
+7. Form tambah pelanggan hanya meminta nama, nomor HP, dan alamat. Pertanyaan
+   izin WhatsApp dihapus; pelanggan baru otomatis boleh dihubungi, dan izin
+   tetap bisa diubah dari detail pelanggan.
+8. Setiap kartu unit di kasir punya tombol Hapus. Unit yang dihapus hilang dari
+   pilihan kasir dan daftar unit, tetapi riwayat nota lama tetap utuh.
+9. Kartu keluhan awal punya warna sendiri dan tombol Simpan keluhan. Rincian
+   pengerjaan baru muncul setelah keluhan disimpan, dan keluhan masih bisa
+   diedit sebelum transaksi disimpan.
+10. DP boleh disimpan tanpa tanggal jatuh tempo. Pelunasan dicatat dari tombol
+    Pelunasan setelah pekerjaan selesai, tanpa menunggu tanggal. Pesan WhatsApp
+    "Kendaraan selesai" memakai kalimat "siap diambil" tanpa kata hutang atau
+    piutang.
+11. Sebelum transaksi disimpan, kasir melihat popup Periksa nota berisi
+    ringkasan pelanggan, unit, jasa, sparepart, servis berkala, pembayaran, dan
+    total. Tombol Benar menyimpan, Edit atau Tutup kembali ke isian.
+12. Tombol cetak kini mencetak struk lalu membuka WhatsApp berisi struk lengkap.
+    Tidak ada lagi tombol WhatsApp terpisah setelah transaksi, template pesan
+    WhatsApp, atau pilihan kirim otomatis setelah cetak.
+13. Halaman Follow-up mandiri dihapus dari navigasi. Pengingat tampil di
+    Ringkasan sebagai bagian Follow up dengan kartu piutang, servis berkala,
+    garansi, dan tugas hari ini, lalu dibuka lewat daftar dan detail follow-up.
+14. Tarif jasa dan sparepart punya interval servis berkala 0 sampai 120 bulan.
+    Nilainya tampil di kasir, daftar stok, daftar jasa, dan pratinjau nota, serta
+    menjadi sumber pengingat servis berkala. Interval 0 berarti nonaktif.

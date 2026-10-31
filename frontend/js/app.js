@@ -202,9 +202,7 @@
     reportLabel: 'Hari ini',
     notaList: [],
     detailRecord: null,
-    detailRecordCustomerId: null,
     detailReturns: [],
-    returnMode: false,
     detailCustomer: null,
     customerHistory: [],
     customerHistorySeq: 0,
@@ -229,6 +227,16 @@
     printFailure: null,
     printJobTimer: null,
     printJobSeen: new Set(),
+    jenisBayar: 'LUNAS',
+    complaintConfirmed: false,
+    notaReviewed: false,
+    detailPayments: [],
+    detailWaLogs: [],
+    followupList: null,
+    followupDetail: null,
+    receivables: null,
+    receivablesCustomerId: null,
+    waPreview: null,
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -373,6 +381,41 @@
     return '';
   }
 
+  function paymentBadge(record) {
+    if (!record || record.status === 'VOID') return '';
+    if (record.status_bayar === 'LUNAS') {
+      return '<span class="badge green">Lunas</span>';
+    }
+    if (record.jenis_bayar === 'KREDIT') {
+      return '<span class="badge amber">Kredit</span>';
+    }
+    if (record.status_bayar === 'BELUM_LUNAS') {
+      const paid = moneyToCents(record.total_dibayar);
+      return paid > 0
+        ? '<span class="badge amber">DP</span>'
+        : '<span class="badge red">Belum bayar</span>';
+    }
+    return '';
+  }
+
+  function dueLabel(item) {
+    if (item.pengingat) return item.pengingat;
+    if (item.status === 'AKAN_DATANG' && item.tanggal_service) {
+      return 'Service ' + fmtDate(item.tanggal_service);
+    }
+    if (item.sisa_hari == null) return '-';
+    if (item.sisa_hari < 0) return 'Lewat ' + Math.abs(item.sisa_hari) + ' hari';
+    if (item.sisa_hari === 0) return 'Hari ini';
+    return 'H-' + item.sisa_hari;
+  }
+
+  function jenisTone(jenis) {
+    if (jenis === 'piutang') return 'red';
+    if (jenis === 'garansi') return 'amber';
+    if (jenis === 'servis_berkala') return 'blue';
+    return 'gray';
+  }
+
   function netTotal(record) {
     // Selalu pakai total_neto dari server; frontend tidak menghitung ulang.
     return record && record.total_neto != null ? record.total_neto : '0.00';
@@ -424,6 +467,7 @@
     if (view === 'report') loadReport();
     if (view === 'settings') {
       fillSettingsForm();
+      fillOpsForm();
       fillTelegramForm();
       initPrinterSettings();
     }
@@ -451,6 +495,7 @@
     renderComplaintChips();
     refreshReceiptPrinterUI();
     fillSettingsForm();
+    fillOpsForm();
     fillTelegramForm();
   }
 
@@ -532,6 +577,7 @@
     state.selectedUnit = null;
     state.jobs = [];
     state.parts = [];
+    state.complaintConfirmed = false;
     $('#unitCard').classList.add('hidden');
     $('#complaintCard').classList.add('hidden');
     $('#itemsCard').classList.add('hidden');
@@ -600,11 +646,13 @@
   }
 
   async function chooseCustomer(customer) {
+    invalidateNotaReview();
     state.selectedCustomer = customer;
     state.selectedUnit = null;
     state.jobs = [];
     state.parts = [];
     state.units = [];
+    state.complaintConfirmed = false;
 
     $('#customerSearch').value = customer.nama;
     hideCustomerResults();
@@ -654,6 +702,7 @@
           ? ''
           : '<span class="unit-label">Tanpa nopol</span>';
         return (
+          '<div class="unit-card-wrap">' +
           '<button type="button" class="unit-card' +
           (selected ? ' selected' : '') +
           '" data-unit-id="' +
@@ -671,21 +720,81 @@
           '</span>' +
           tag +
           '</span>' +
-          '</button>'
+          '</button>' +
+          '<button type="button" class="unit-delete" data-delete-unit="' +
+          unit.id +
+          '" aria-label="Hapus unit ' +
+          esc(title) +
+          '">Hapus</button>' +
+          '</div>'
         );
       })
       .join('');
   }
 
+  async function deleteUnit(unitId) {
+    const unit = state.units.find((item) => item.id === unitId);
+    if (!unit) return;
+    const title =
+      unit.unit_type === 'MOBIL'
+        ? unit.nopol || 'unit mobil'
+        : unit.tipe_radiator || unit.label_radiator || 'unit radiator';
+    if (
+      !window.confirm(
+        'Hapus unit ' +
+          title +
+          '? Riwayat servis yang sudah ada tetap tersimpan.'
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await API.deleteUnit(unitId);
+      const wasSelected =
+        state.selectedUnit && state.selectedUnit.id === unitId;
+      state.units = state.units.filter((item) => item.id !== unitId);
+      if (wasSelected) {
+        invalidateNotaReview();
+        state.selectedUnit = null;
+        state.jobs = [];
+        state.parts = [];
+        $('#complaintCard').classList.add('hidden');
+        $('#itemsCard').classList.add('hidden');
+        renderItems();
+        updateSummary();
+      }
+      renderUnits();
+      updateSummaryCustomer();
+      toast('Unit dihapus dari daftar. Riwayat servis tetap tersimpan.', 'success');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
   function selectUnit(unitId) {
     const unit = state.units.find((item) => item.id === unitId);
     if (!unit) return;
+    invalidateNotaReview();
     state.selectedUnit = unit;
+    state.complaintConfirmed = false;
     renderUnits();
     $('#complaintCard').classList.remove('hidden');
-    $('#itemsCard').classList.remove('hidden');
+    $('#itemsCard').classList.add('hidden');
     updateSummaryCustomer();
     updateSummary();
+  }
+
+  function saveComplaint() {
+    if (!$('#keluhanInput').value.trim()) {
+      toast('Keluhan awal wajib diisi.', 'warning');
+      $('#keluhanInput').focus();
+      return;
+    }
+    state.complaintConfirmed = true;
+    $('#itemsCard').classList.remove('hidden');
+    $('#itemsCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    toast('Keluhan disimpan.', 'success');
   }
 
   function setUnitType(type) {
@@ -987,32 +1096,66 @@
     }
   }
 
+  function clampInterval(value) {
+    return Math.min(120, Math.max(0, intValue(value, 0)));
+  }
+
   function onJasaPickerChange() {
     const id = intValue($('#jasaPicker').value, 0);
     const master = state.jasa.find((jasa) => jasa.id === id);
-    if (!master) return;
+    const hint = $('#jasaIntervalHint');
+    if (!master) {
+      if (hint) hint.classList.add('hidden');
+      return;
+    }
     $('#jasaNama').value = master.nama;
     setMoneyValue($('#jasaHarga'), Math.round(Number(master.harga_standar) || 0));
     $('#jasaQty').value = '1';
+    if (hint) {
+      const interval = clampInterval(master.interval_servis_bulan);
+      hint.textContent =
+        interval > 0
+          ? 'Servis berkala: ' +
+            interval +
+            ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
+          : 'Jasa ini tanpa interval servis berkala.';
+      hint.classList.remove('hidden');
+    }
   }
 
   function onPartPickerChange() {
     const id = intValue($('#partPicker').value, 0);
     const stock = state.stock.find((item) => item.id === id);
     const hint = $('#partStockHint');
+    const intervalHint = $('#partIntervalHint');
     if (!stock) {
       if (hint) hint.textContent = 'Stok gudang otomatis dipotong.';
+      $('#partInterval').value = '0';
+      if (intervalHint) intervalHint.classList.add('hidden');
       return;
     }
     $('#partNama').value = stock.nama;
     setMoneyValue($('#partHarga'), Math.round(Number(stock.harga_jual) || 0));
     $('#partQty').value = '1';
+    $('#partInterval').value = String(
+      clampInterval(stock.interval_servis_bulan)
+    );
     if (hint) {
       hint.textContent =
         'Stok tersedia ' +
         stock.jumlah +
         '. Harga patokan ' +
         fmtRp(stock.harga_jual);
+    }
+    if (intervalHint) {
+      const interval = clampInterval(stock.interval_servis_bulan);
+      intervalHint.textContent =
+        interval > 0
+          ? 'Servis berkala: ' +
+            interval +
+            ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
+          : 'Sparepart ini tanpa interval servis berkala.';
+      intervalHint.classList.remove('hidden');
     }
   }
 
@@ -1030,17 +1173,22 @@
     const price = readMoneyInput($('#jasaHarga'), 'Harga jasa');
     if (price === null) return;
 
+    invalidateNotaReview();
     state.jobs.push({
       harga_jasa_id: master ? master.id : null,
       deskripsi: description,
       jumlah: quantity,
       harga: String(price),
+      interval_servis_bulan: master
+        ? clampInterval(master.interval_servis_bulan)
+        : 0,
     });
 
     $('#jasaPicker').value = '';
     $('#jasaNama').value = '';
     $('#jasaQty').value = '1';
     $('#jasaHarga').value = '';
+    $('#jasaIntervalHint').classList.add('hidden');
     renderItems();
   }
 
@@ -1063,12 +1211,14 @@
       : null;
     if (modalInput && modal === null) return;
 
+    invalidateNotaReview();
     state.parts.push({
       stock_item_id: stock ? stock.id : null,
       nama_part: name,
       jumlah: quantity,
       harga_satuan: String(price),
       harga_modal: stock ? null : modal,
+      interval_servis_bulan: clampInterval($('#partInterval').value),
     });
 
     $('#partPicker').value = '';
@@ -1076,7 +1226,9 @@
     $('#partQty').value = '1';
     $('#partHarga').value = '';
     $('#partModal').value = '';
+    $('#partInterval').value = '0';
     $('#partStockHint').textContent = 'Stok gudang otomatis dipotong.';
+    $('#partIntervalHint').classList.add('hidden');
     renderItems();
   }
 
@@ -1104,6 +1256,11 @@
           '" data-field="harga" value="' +
           esc(formatMoneyValue(job.harga)) +
           '"></td>' +
+          '<td><input type="number" min="0" max="120" class="table-input interval" data-kind="job" data-index="' +
+          index +
+          '" data-field="interval_servis_bulan" value="' +
+          esc(clampInterval(job.interval_servis_bulan)) +
+          '" title="Interval servis berkala (bulan). 0 = nonaktif."></td>' +
           '<td class="text-right item-subtotal" data-subtotal-kind="job" data-subtotal-index="' +
           index +
           '">&mdash;</td>' +
@@ -1156,6 +1313,11 @@
           '<td>' +
           modalCell +
           '</td>' +
+          '<td><input type="number" min="0" max="120" class="table-input interval" data-kind="part" data-index="' +
+          index +
+          '" data-field="interval_servis_bulan" value="' +
+          esc(clampInterval(part.interval_servis_bulan)) +
+          '" title="Interval servis berkala (bulan). 0 = nonaktif."></td>' +
           '<td class="text-right item-subtotal" data-subtotal-kind="part" data-subtotal-index="' +
           index +
           '">&mdash;</td>' +
@@ -1173,6 +1335,7 @@
   }
 
   function removeItem(kind, index) {
+    invalidateNotaReview();
     if (kind === 'job') state.jobs.splice(index, 1);
     if (kind === 'part') state.parts.splice(index, 1);
     renderItems();
@@ -1186,6 +1349,7 @@
     const item = list[index];
     if (!item) return;
 
+    invalidateNotaReview();
     item[field] = target.value;
 
     if (field === 'jumlah' || field === 'harga' || field === 'harga_satuan') {
@@ -1204,13 +1368,40 @@
     return checked ? checked.value : 'CASH';
   }
 
+  function getJenisBayar() {
+    return ['DP', 'KREDIT'].indexOf(state.jenisBayar) >= 0
+      ? state.jenisBayar
+      : 'LUNAS';
+  }
+
+  function isKreditMode() {
+    return getJenisBayar() === 'KREDIT';
+  }
+
+  function kreditUangMukaAktif() {
+    const toggle = $('#kreditUangMukaAktif');
+    return isKreditMode() && !!(toggle && toggle.checked);
+  }
+
   function buildPreviewPayload() {
     const metode = getMetode();
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
+    const uangMuka = kreditUangMukaAktif()
+      ? String(parseMoney($('#kreditUangMukaInput').value))
+      : '0';
     return {
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar:
-        metode === 'CASH' ? String(parseMoney($('#bayarInput').value)) : '0',
+        !dpMode && !kreditMode && metode === 'CASH'
+          ? String(parseMoney($('#bayarInput').value))
+          : '0',
+      jenis_bayar: getJenisBayar(),
+      dp: dpMode ? String(parseMoney($('#dpInput').value)) : uangMuka,
+      rencana_bayar: kreditMode
+        ? String(parseMoney($('#rencanaBayarInput').value))
+        : '0',
       jobs: state.jobs.map((job) => ({
         deskripsi: job.deskripsi || 'Jasa',
         jumlah: Math.max(1, intValue(job.jumlah, 1)),
@@ -1241,15 +1432,20 @@
 
   function renderPreview(preview, error) {
     const transfer = getMetode() === 'TRANSFER';
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
+    const installment = dpMode || kreditMode;
     const paidInput = $('#bayarInput');
-    paidInput.disabled = transfer;
+    paidInput.disabled = transfer || installment;
     $('#bankInfo').classList.toggle('hidden', !transfer);
+    $('#dpSummaryRow').classList.toggle('hidden', !installment);
 
     if (error) {
       $('#jobSubtotal').textContent = '\u2014';
       $('#partSubtotal').textContent = '\u2014';
       $('#grandTotalValue').textContent = '\u2014';
       $('#kembalianValue').textContent = '\u2014';
+      $('#dpSisaValue').textContent = '\u2014';
       setLineSubtotals('job', null);
       setLineSubtotals('part', null);
       setSummaryNote(error);
@@ -1265,19 +1461,23 @@
       if (zeroChange.parentElement) {
         zeroChange.parentElement.classList.remove('short');
       }
+      $('#dpSisaValue').textContent = 'Rp 0';
       setLineSubtotals('job', null);
       setLineSubtotals('part', null);
       setSummaryNote('Perkiraan sementara. Nilai final dicatat saat nota disimpan.');
       return;
     }
 
-    if (transfer) setMoneyValue(paidInput, moneyToCents(preview.total_servis) / 100);
+    if (transfer && !installment) {
+      setMoneyValue(paidInput, moneyToCents(preview.total_servis) / 100);
+    }
 
     setLineSubtotals('job', preview.jobs);
     setLineSubtotals('part', preview.parts);
     $('#jobSubtotal').textContent = fmtRp(preview.biaya_jasa);
     $('#partSubtotal').textContent = fmtRp(preview.total_part);
     $('#grandTotalValue').textContent = fmtRp(preview.total_servis);
+    $('#dpSisaValue').textContent = fmtRp(preview.sisa_bayar);
 
     const kurang = Number(preview.kekurangan) > 0;
     const changeEl = $('#kembalianValue');
@@ -1309,10 +1509,17 @@
   function updateSummary() {
     const diskonInput = $('#diskonInput');
     const bayarInput = $('#bayarInput');
+    const dpInput = $('#dpInput');
     const cash = getMetode() === 'CASH';
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
+    const uangMukaAktif = kreditUangMukaAktif();
     if (
       !moneyInputValid(diskonInput.value) ||
-      (cash && !moneyInputValid(bayarInput.value))
+      (cash && !dpMode && !kreditMode && !moneyInputValid(bayarInput.value)) ||
+      (dpMode && !moneyInputValid(dpInput.value)) ||
+      (kreditMode && !moneyInputValid($('#rencanaBayarInput').value)) ||
+      (uangMukaAktif && !moneyInputValid($('#kreditUangMukaInput').value))
     ) {
       renderPreview(
         null,
@@ -1325,10 +1532,34 @@
   }
 
   function handlePaymentModeChange() {
+    invalidateNotaReview();
     const transfer = getMetode() === 'TRANSFER';
-    $('#bayarInput').disabled = transfer;
+    const installment = getJenisBayar() !== 'LUNAS';
+    $('#bayarInput').disabled = transfer || installment;
     $('#bankInfo').classList.toggle('hidden', !transfer);
     updateSummary();
+  }
+
+  function updateKreditUangMuka() {
+    invalidateNotaReview();
+    const aktif = kreditUangMukaAktif();
+    $('#kreditUangMukaFields').classList.toggle('hidden', !aktif);
+    updateSummary();
+  }
+
+  function updateJenisBayar() {
+    invalidateNotaReview();
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
+    $('#lunasFields').classList.toggle('hidden', dpMode || kreditMode);
+    $('#dpFields').classList.toggle('hidden', !dpMode);
+    $('#kreditFields').classList.toggle('hidden', !kreditMode);
+    $('#dpSummaryRow').classList.toggle('hidden', !(dpMode || kreditMode));
+    $('#bayarInput').disabled = getMetode() === 'TRANSFER' || dpMode || kreditMode;
+    $$('#jenisBayarSwitch button').forEach((button) => {
+      button.classList.toggle('active', button.dataset.jenis === getJenisBayar());
+    });
+    updateKreditUangMuka();
   }
 
   function updateGaransiFields() {
@@ -1393,6 +1624,9 @@
     state.jobs = [];
     state.parts = [];
     state.unitType = 'MOBIL';
+    state.complaintConfirmed = false;
+    state.notaReviewed = false;
+    showSaveActions(false);
 
     if ($('#customerSearch')) $('#customerSearch').value = '';
     hideCustomerResults();
@@ -1404,9 +1638,18 @@
     $('#catatanPengerjaan').value = '';
     $('#diskonInput').value = '0';
     $('#bayarInput').value = '';
+    $('#dpInput').value = '';
+    $('#jatuhTempoInput').value = '';
+    $('#rencanaBayarInput').value = '';
+    $('#rencanaTanggalInput').value = '';
+    $('#kreditUangMukaAktif').checked = false;
+    $('#kreditUangMukaInput').value = '';
     $('#metodeCash').checked = true;
     $('#metodeTransfer').checked = false;
+    state.jenisBayar = 'LUNAS';
     $('#garansiAktif').checked = true;
+    $('#partInterval').value = '0';
+    $('#partIntervalHint').classList.add('hidden');
 
     if (state.config) {
       setGaransiBulan(state.config.default_garansi_bulan || 1);
@@ -1416,6 +1659,7 @@
     setUnitType('MOBIL');
     resetUnitForm();
     updateGaransiFields();
+    updateJenisBayar();
     state.preview = null;
     state.previewError = null;
     state.previewSeq += 1;
@@ -1432,9 +1676,16 @@
   /* ---------------------------- Transaction ------------------------------- */
   function buildTransactionPayload() {
     const metode = getMetode();
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
     // Server menghitung nilai final; frontend hanya mengirim angka mentah.
     const paid =
-      metode === 'CASH' ? parseMoney($('#bayarInput').value) : 0;
+      !dpMode && !kreditMode && metode === 'CASH'
+        ? parseMoney($('#bayarInput').value)
+        : 0;
+    const uangMuka = kreditUangMukaAktif()
+      ? String(parseMoney($('#kreditUangMukaInput').value))
+      : '0';
 
     return {
       unit_id: state.selectedUnit.id,
@@ -1443,6 +1694,16 @@
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar: String(paid),
+      jenis_bayar: getJenisBayar(),
+      dp: dpMode ? String(parseMoney($('#dpInput').value)) : uangMuka,
+      rencana_bayar: kreditMode
+        ? String(parseMoney($('#rencanaBayarInput').value))
+        : '0',
+      jatuh_tempo: dpMode
+        ? $('#jatuhTempoInput').value || null
+        : kreditMode
+          ? $('#rencanaTanggalInput').value || null
+          : null,
       bergaransi: $('#garansiAktif').checked,
       garansi_bulan: garansiBulanValue(),
       catatan_garansi: $('#garansiCatatan').value.trim() || null,
@@ -1451,6 +1712,7 @@
         deskripsi: job.deskripsi,
         jumlah: Math.max(1, intValue(job.jumlah, 1)),
         harga: String(parseMoney(job.harga)),
+        interval_servis_bulan: clampInterval(job.interval_servis_bulan),
       })),
       parts: state.parts.map((part) => ({
         stock_item_id: part.stock_item_id || null,
@@ -1461,36 +1723,244 @@
           part.stock_item_id || part.harga_modal === '' || part.harga_modal == null
             ? null
             : String(parseMoney(part.harga_modal)),
+        interval_servis_bulan: clampInterval(part.interval_servis_bulan),
       })),
     };
   }
 
-  async function saveTransaction(printAfter) {
-    if (state.saving) return;
+  function showSaveActions(visible) {
+    ['#btnSavePrint', '#btnSaveOnly'].forEach((selector) => {
+      const button = $(selector);
+      if (button) button.classList.toggle('hidden', !visible);
+    });
+  }
+
+  function invalidateNotaReview() {
+    state.notaReviewed = false;
+    showSaveActions(false);
+  }
+
+  function validatePosForm() {
     if (!state.selectedCustomer) {
       toast('Pilih pelanggan terlebih dahulu.', 'warning');
-      return;
+      return false;
     }
     if (!state.selectedUnit) {
       toast('Pilih unit servis terlebih dahulu.', 'warning');
-      return;
+      return false;
     }
     if (!$('#keluhanInput').value.trim()) {
       toast('Keluhan awal wajib diisi.', 'warning');
       $('#keluhanInput').focus();
-      return;
+      return false;
+    }
+    if (!state.complaintConfirmed) {
+      toast('Simpan keluhan awal terlebih dahulu.', 'warning');
+      $('#btnSaveComplaint').focus();
+      return false;
     }
     if (!state.jobs.length && !state.parts.length) {
       toast('Tambahkan minimal satu jasa atau sparepart.', 'warning');
-      return;
+      return false;
     }
     if (
       !moneyInputValid($('#diskonInput').value) ||
-      (getMetode() === 'CASH' && !moneyInputValid($('#bayarInput').value)) ||
+      (getMetode() === 'CASH' &&
+        getJenisBayar() === 'LUNAS' &&
+        !moneyInputValid($('#bayarInput').value)) ||
+      (getJenisBayar() === 'DP' && !moneyInputValid($('#dpInput').value)) ||
+      (isKreditMode() &&
+        (!moneyInputValid($('#rencanaBayarInput').value) ||
+          (kreditUangMukaAktif() &&
+            !moneyInputValid($('#kreditUangMukaInput').value)))) ||
       state.jobs.some((job) => !moneyInputValid(job.harga)) ||
       state.parts.some((part) => !moneyInputValid(part.harga_satuan))
     ) {
       toast('Angka uang harus rupiah bulat tanpa desimal.', 'warning');
+      return false;
+    }
+    if (getJenisBayar() === 'DP' && parseMoney($('#dpInput').value) <= 0) {
+      toast('Isi DP lebih dari Rp 0.', 'warning');
+      $('#dpInput').focus();
+      return false;
+    }
+    if (kreditUangMukaAktif() && parseMoney($('#kreditUangMukaInput').value) <= 0) {
+      toast('Isi uang muka lebih dari Rp 0 atau matikan opsi penambahan uang.', 'warning');
+      $('#kreditUangMukaInput').focus();
+      return false;
+    }
+    return true;
+  }
+
+  function reviewLineHtml(item, line, name) {
+    const qty = Math.max(1, intValue(item.jumlah, 1));
+    const price = name === 'job' ? item.harga : item.harga_satuan;
+    const interval = clampInterval(item.interval_servis_bulan);
+    return (
+      '<div class="review-line">' +
+      '<div class="review-line-main"><strong>' +
+      esc(item.deskripsi || item.nama_part || '-') +
+      '</strong><span>x' +
+      qty +
+      ' · ' +
+      fmtRp(price) +
+      (interval > 0 ? ' · servis tiap ' + interval + ' bulan' : '') +
+      '</span></div>' +
+      '<span class="review-line-total">' +
+      (line ? fmtRp(line.subtotal) : '\u2014') +
+      '</span></div>'
+    );
+  }
+
+  function buildNotaReviewHtml(preview) {
+    const customer = state.selectedCustomer || {};
+    const unit = state.selectedUnit || {};
+    const dpMode = getJenisBayar() === 'DP';
+    const kreditMode = isKreditMode();
+    const kreditTanggal = $('#rencanaTanggalInput').value;
+    const jenisLabel = dpMode
+      ? 'DP / uang muka'
+      : kreditMode
+        ? 'Kredit'
+        : 'Lunas';
+    const jobs = state.jobs.length
+      ? state.jobs
+          .map((job, index) =>
+            reviewLineHtml(job, (preview.jobs || [])[index], 'job')
+          )
+          .join('')
+      : '<div class="empty-state sm">Belum ada jasa.</div>';
+    const parts = state.parts.length
+      ? state.parts
+          .map((part, index) =>
+            reviewLineHtml(part, (preview.parts || [])[index], 'part')
+          )
+          .join('')
+      : '<div class="empty-state sm">Belum ada sparepart.</div>';
+    const jatuhTempo = $('#jatuhTempoInput').value;
+    const garansiAktif = $('#garansiAktif').checked;
+
+    return (
+      '<div class="nota-review">' +
+      '<div class="review-block"><h4 class="detail-section-title">Pelanggan &amp; unit</h4>' +
+      '<div class="detail-grid">' +
+      detailItem('Nama', esc(customer.nama || '-')) +
+      detailItem('No. HP', esc(customer.nomor_hp || '-')) +
+      detailItem('Unit', esc(describeUnit(unit))) +
+      '</div></div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Keluhan &amp; catatan</h4>' +
+      '<p class="detail-text">' +
+      esc($('#keluhanInput').value.trim()) +
+      '</p>' +
+      ($('#catatanPengerjaan').value.trim()
+        ? '<p class="tiny muted">Catatan: ' +
+          esc($('#catatanPengerjaan').value.trim()) +
+          '</p>'
+        : '') +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Jasa</h4>' +
+      jobs +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Sparepart</h4>' +
+      parts +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Total</h4>' +
+      '<div class="review-total-row"><span>Total jasa</span><strong>' +
+      fmtRp(preview.biaya_jasa) +
+      '</strong></div>' +
+      '<div class="review-total-row"><span>Total part</span><strong>' +
+      fmtRp(preview.total_part) +
+      '</strong></div>' +
+      '<div class="review-total-row"><span>Diskon</span><strong>' +
+      fmtRp(preview.diskon) +
+      '</strong></div>' +
+      '<div class="review-total-row is-grand"><span>Grand total</span><strong>' +
+      fmtRp(preview.total_servis) +
+      '</strong></div></div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Pembayaran &amp; garansi</h4>' +
+      '<div class="detail-grid">' +
+      detailItem(
+        'Metode',
+        esc(getMetode() === 'TRANSFER' ? 'Transfer' : 'Tunai')
+      ) +
+      detailItem('Jenis', esc(jenisLabel)) +
+      (dpMode
+        ? detailItem('DP diterima', fmtRp(parseMoney($('#dpInput').value))) +
+          detailItem('Sisa', fmtRp(preview.sisa_bayar)) +
+          detailItem(
+            'Jatuh tempo',
+            esc(jatuhTempo ? fmtDate(jatuhTempo) : 'Tidak ditentukan')
+          )
+        : kreditMode
+          ? detailItem(
+              'Rencana pembayaran',
+              fmtRp(parseMoney($('#rencanaBayarInput').value))
+            ) +
+            detailItem(
+              'Tanggal rencana',
+              esc(kreditTanggal ? fmtDate(kreditTanggal) : 'Tidak ditentukan')
+            ) +
+            detailItem(
+              'Uang muka',
+              fmtRp(
+                kreditUangMukaAktif()
+                  ? parseMoney($('#kreditUangMukaInput').value)
+                  : 0
+              )
+            ) +
+            detailItem('Sisa tagihan', fmtRp(preview.sisa_bayar))
+          : detailItem('Uang diterima', fmtRp(parseMoney($('#bayarInput').value))) +
+            detailItem('Kembalian', fmtRp(preview.kembalian))) +
+      detailItem('Garansi', esc(garansiAktif ? 'Aktif' : 'Tidak aktif')) +
+      (garansiAktif
+        ? detailItem('Durasi', esc(garansiBulanValue() + ' bulan'))
+        : '') +
+      '</div>' +
+      (garansiAktif && $('#garansiCatatan').value.trim()
+        ? '<p class="tiny muted">Catatan garansi: ' +
+          esc($('#garansiCatatan').value.trim()) +
+          '</p>'
+        : '') +
+      '</div></div>'
+    );
+  }
+
+  async function reviewNota() {
+    if (!validatePosForm()) return false;
+    await refreshPreview();
+    if (state.previewError) {
+      toast(state.previewError, 'warning');
+      return false;
+    }
+    if (!state.preview) {
+      toast('Ringkasan nota belum siap. Coba lagi.', 'warning');
+      return false;
+    }
+    $('#notaReviewBody').innerHTML = buildNotaReviewHtml(state.preview);
+    openModal('#notaReviewModal');
+    return true;
+  }
+
+  function editNotaReview() {
+    closeModal('#notaReviewModal');
+    const target = $('#keluhanInput');
+    if (target) target.focus();
+  }
+
+  function confirmNotaReview() {
+    closeModal('#notaReviewModal');
+    state.notaReviewed = true;
+    showSaveActions(true);
+    const button = $('#btnSavePrint');
+    if (button) button.focus();
+  }
+
+  async function saveTransaction(printAfter) {
+    if (state.saving) return;
+    if (!validatePosForm()) return;
+    if (!state.notaReviewed) {
+      toast('Periksa nota dan tekan Benar sebelum menyimpan.', 'warning');
+      await reviewNota();
       return;
     }
     if (state.previewError) {
@@ -1587,6 +2057,7 @@
     renderReceiptPreview();
     refreshReceiptPrinterUI();
     setReceiptPrintStatus('', '');
+    showWhatsappFallback(false);
     openModal('#receiptModal');
   }
 
@@ -1624,6 +2095,251 @@
     );
     syncReceiptWidthUI();
     renderReceiptPreview();
+  }
+
+  /* ------------------------------ WhatsApp -------------------------------- */
+  function waDigits(value) {
+    return String(value == null ? '' : value).replace(/\D/g, '');
+  }
+
+  function waLink(number, text) {
+    let target = waDigits(number);
+    if (!target) return '';
+    if (target.charAt(0) === '0') {
+      target = '62' + target.slice(1);
+    } else if (target.charAt(0) === '8') {
+      target = '62' + target;
+    }
+    const suffix = text ? '?text=' + encodeURIComponent(text) : '';
+    return 'https://wa.me/' + target + suffix;
+  }
+
+  async function openExternalLink(url) {
+    const target = String(url || '').trim();
+    if (!target) return false;
+    if (
+      hasNativeBridge() &&
+      window.BengkelBridge &&
+      typeof window.BengkelBridge.call === 'function'
+    ) {
+      try {
+        await window.BengkelBridge.call('openExternal', { url: target }, 15000);
+        return true;
+      } catch (err) {
+        toast(err.message || 'Tautan tidak dapat dibuka.', 'error', 6000);
+        return false;
+      }
+    }
+    const opened = window.open(target, '_blank');
+    if (!opened) {
+      toast('Tautan tidak dapat dibuka. Izinkan pop-up lalu coba lagi.', 'warning');
+      return false;
+    }
+    opened.opener = null;
+    return true;
+  }
+
+  async function copyText(value, successMessage) {
+    const text = String(value == null ? '' : value);
+    if (!text.trim()) {
+      toast('Tidak ada teks untuk disalin.', 'warning');
+      return false;
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+      toast(successMessage || 'Teks disalin.', 'success');
+      return true;
+    } catch (err) {
+      toast('Gagal menyalin. Salin manual dari kotak teks.', 'warning');
+      return false;
+    }
+  }
+
+  function waStatusLabel(status) {
+    if (status === 'DIBUKA') return 'Dibuka';
+    if (status === 'DIBATALKAN') return 'Dibatalkan';
+    if (status === 'TIDAK_TERSEDIA') return 'Nomor tidak tersedia';
+    return status || '-';
+  }
+
+  function openWaPreview(options) {
+    const opts = options || {};
+    const link = opts.link || waLink(opts.nomor, opts.text);
+    state.waPreview = {
+      link: link,
+      disabled: Boolean(opts.disabled),
+      onOpen: typeof opts.onOpen === 'function' ? opts.onOpen : null,
+    };
+    $('#waModalTitle').textContent = opts.judul || 'Pesan WhatsApp';
+    $('#waModalSubtitle').textContent =
+      opts.subtitle || 'Periksa pesan sebelum dibuka di WhatsApp.';
+    $('#waModalNumber').value = opts.masked || opts.nomor || '-';
+    $('#waModalText').value = opts.text || '';
+    $('#waModalNote').textContent =
+      opts.note ||
+      'Pesan hanya dibuka di WhatsApp, tidak dikirim otomatis. Upaya dicatat saat tombol dibuka.';
+    const open = $('#waModalOpen');
+    if (!link || opts.disabled) {
+      open.classList.add('hidden');
+    } else {
+      open.classList.remove('hidden');
+      open.href = link;
+    }
+    openModal('#waModal');
+  }
+
+  async function handleWaOpen(event) {
+    event.preventDefault();
+    const preview = state.waPreview;
+    if (!preview || preview.disabled || !preview.link) return;
+    const link = preview.link;
+    const onOpen = preview.onOpen;
+    state.waPreview = null;
+    closeModal('#waModal');
+    const opening = openExternalLink(link);
+    if (!onOpen) {
+      await opening;
+      return;
+    }
+    try {
+      await onOpen();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+    await opening;
+  }
+
+  function receiptWaNumber(receipt) {
+    return receipt.customer_wa || receipt.customer_hp || '';
+  }
+
+  async function openRecordForPayment(id) {
+    await openRecordDetail(id);
+    const input = $('#paymentNominal');
+    if (!input) return;
+    input.focus();
+    if (input.scrollIntoView) {
+      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  async function openCompletionWhatsapp(id) {
+    try {
+      let receipt = state.detailRecord;
+      if (!receipt || receipt.id !== id) {
+        receipt = await API.receipt(id);
+      }
+      if (!waDigits(receiptWaNumber(receipt))) {
+        toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
+        return;
+      }
+      if (!(receipt.completion_wa_text || '').trim()) {
+        toast('Pesan kendaraan selesai belum tersedia.', 'warning');
+        return;
+      }
+      openWaPreview({
+        judul: 'Kendaraan selesai · ' + receipt.no_nota,
+        subtitle: 'Periksa pesan untuk ' + receipt.customer_nama + '.',
+        nomor: receiptWaNumber(receipt),
+        text: receipt.completion_wa_text,
+        note: 'Membuka WhatsApp akan mencatat upaya pemberitahuan. Kasir tetap menekan kirim di WhatsApp.',
+        onOpen: async () => {
+          await API.recordWhatsapp(receipt.id, {
+            status: 'DIBUKA',
+            jenis: 'piutang',
+          });
+          toast('Pemberitahuan kendaraan selesai tercatat.', 'success');
+          if (state.detailRecord && state.detailRecord.id === receipt.id) {
+            await loadRecordExtras(receipt.id);
+          }
+        },
+      });
+    } catch (err) {
+      toast('Pesan kendaraan selesai gagal dimuat.', 'error', 6000);
+    }
+  }
+
+  function showWhatsappFallback(visible) {
+    const button = $('#btnReceiptWhatsappFallback');
+    if (button) button.classList.toggle('hidden', !visible);
+  }
+
+  async function sendReceiptToWhatsapp(receipt) {
+    if (!receipt) return false;
+    if (!waDigits(receiptWaNumber(receipt))) return false;
+    const text = String(receipt.wa_text || '').trim();
+    if (!text) return false;
+    const link = waLink(receiptWaNumber(receipt), text);
+    if (!link) return false;
+
+    showWhatsappFallback(false);
+    if (
+      hasNativeBridge() &&
+      window.BengkelBridge &&
+      typeof window.BengkelBridge.call === 'function'
+    ) {
+      try {
+        await window.BengkelBridge.call('openExternal', { url: link }, 15000);
+      } catch (err) {
+        try {
+          await API.recordWhatsapp(receipt.id, {
+            status: 'TIDAK_TERSEDIA',
+            jenis: 'struk',
+          });
+        } catch (logErr) {
+          /* Kegagalan mencatat tidak boleh menyembunyikan pesan utama. */
+        }
+        toast(
+          (err && err.message) ||
+            'WhatsApp tidak tersedia di perangkat ini. Gunakan Salin teks.',
+          'error',
+          8000
+        );
+        return false;
+      }
+    } else {
+      const opened = window.open(link, '_blank');
+      if (!opened) {
+        showWhatsappFallback(true);
+        toast(
+          'WhatsApp tidak dapat dibuka otomatis karena pop-up diblokir. ' +
+            'Tekan "Buka WhatsApp" atau salin teks struk.',
+          'warning',
+          9000
+        );
+        return false;
+      }
+      opened.opener = null;
+    }
+
+    try {
+      await API.recordWhatsapp(receipt.id, {
+        status: 'DIBUKA',
+        jenis: 'struk',
+      });
+      toast(
+        'WhatsApp nota ' + receipt.no_nota + ' dibuka. Tekan kirim di WhatsApp.',
+        'success',
+        6000
+      );
+      if (state.detailRecord && state.detailRecord.id === receipt.id) {
+        await loadRecordExtras(receipt.id);
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+    return true;
   }
 
   function hasNativeBridge() {
@@ -1755,7 +2471,7 @@
     return 'Status belum tersedia';
   }
 
-  function monitorSystemPrintJob(printer, jobId) {
+  function monitorSystemPrintJob(printer, jobId, receipt) {
     const manager = window.printerManager;
     const adapter = manager && manager.adapterFor('SYSTEM');
     if (!adapter || typeof adapter.jobStatus !== 'function') return;
@@ -1790,6 +2506,7 @@
       }
       if (stateName === 'COMPLETED') {
         toast('Layanan cetak melaporkan pekerjaan selesai.', 'success');
+        if (receipt) await sendReceiptToWhatsapp(receipt);
         return;
       }
       if (stateName === 'FAILED' || stateName === 'UNAVAILABLE') {
@@ -1830,6 +2547,7 @@
         'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
         {}
       );
+      await sendReceiptToWhatsapp(receipt);
       return true;
     }
 
@@ -1840,6 +2558,7 @@
         'Fitur printer tidak tersedia. Muat ulang aplikasi.',
         {}
       );
+      await sendReceiptToWhatsapp(receipt);
       return false;
     }
 
@@ -1851,6 +2570,7 @@
         { chooseOther: true, settings: authState.role === 'owner' }
       );
       toast('Belum ada printer utama. Pilih printer di Pengaturan.', 'warning');
+      await sendReceiptToWhatsapp(receipt);
       return false;
     }
     if (target.supported === false) {
@@ -1861,6 +2581,7 @@
           ' tidak didukung di perangkat ini. Pilih printer lain.',
         { chooseOther: true, settings: authState.role === 'owner' }
       );
+      await sendReceiptToWhatsapp(receipt);
       return false;
     }
     // Pratinjau harus sama dengan lebar kertas printer tujuan; pengelola
@@ -1875,6 +2596,7 @@
 
     state.printing = true;
     state.printFailure = null;
+    showWhatsappFallback(false);
     refreshReceiptPrinterUI();
     const button = $('#btnReceiptPrint');
     setBusy(button, true, 'Mengirim...');
@@ -1889,11 +2611,11 @@
         printerId: target.id,
       });
       const adapterResult = result && result.adapter_result;
-      if (
+      const systemJob =
         target.connection_type === 'SYSTEM' &&
         adapterResult &&
-        adapterResult.job_id != null
-      ) {
+        adapterResult.job_id != null;
+      if (systemJob) {
         setReceiptPrintStatus(
           'info',
           'Dialog Android dibuka. ' +
@@ -1904,7 +2626,7 @@
             '.',
           {}
         );
-        monitorSystemPrintJob(target, adapterResult.job_id);
+        monitorSystemPrintJob(target, adapterResult.job_id, receipt);
       } else if (target.connection_type === 'WEB') {
         setReceiptPrintStatus(
           'info',
@@ -1925,6 +2647,7 @@
         );
       }
       toast('Perintah cetak dikirim ke ' + target.name + '.', 'success');
+      if (!systemJob) await sendReceiptToWhatsapp(receipt);
       return true;
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
@@ -1945,6 +2668,7 @@
         }
       );
       toast('Cetak gagal: ' + message, 'error', 8000);
+      await sendReceiptToWhatsapp(receipt);
       return false;
     } finally {
       state.printing = false;
@@ -3018,6 +3742,20 @@
       $('#statTransfer').textContent = fmtRp(daily.total_transfer);
       $('#statWarranty').textContent = daily.garansi_aktif;
 
+      $('#statReceivable').textContent = fmtRp(daily.piutang_total);
+      $('#statReceivableSub').textContent =
+        (daily.piutang_count || 0) +
+        ' nota · ' +
+        (daily.piutang_customers || 0) +
+        ' pelanggan';
+      $('#statDueService').textContent = daily.servis_berkala_due || 0;
+      $('#statWarrantyEnding').textContent = daily.garansi_akan_habis || 0;
+      const akanGaransi = $('#statAkanGaransi');
+      const akanServis = $('#statAkanServis');
+      if (akanGaransi) akanGaransi.textContent = daily.akan_datang_garansi || 0;
+      if (akanServis) akanServis.textContent = daily.akan_datang_servis || 0;
+      $('#statFollowupToday').textContent = daily.followup_aktif || 0;
+
       renderRecent(records.slice(0, 6));
     } catch (err) {
       toast('Ringkasan hari ini gagal dimuat. Coba muat ulang.', 'error', 6000);
@@ -3066,6 +3804,7 @@
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
           '</td>' +
           '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
           record.id +
@@ -3140,6 +3879,7 @@
           '</td>' +
           '<td>' +
           metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
           '</td>' +
           '<td>' +
           warrantyBadge(record) +
@@ -3161,22 +3901,6 @@
   }
 
   /* --------------------------- Detail & drilldown ------------------------- */
-  function findRecordById(id) {
-    const lists = [
-      state.customerHistory,
-      state.history,
-      state.reportRows,
-      state.dashboardRecords,
-      state.dashboardToday,
-      state.notaList,
-    ];
-    for (let i = 0; i < lists.length; i += 1) {
-      const found = (lists[i] || []).find((record) => record.id === id);
-      if (found) return found;
-    }
-    return null;
-  }
-
   function findRecordByCustomerId(customerId) {
     const lists = [
       state.history,
@@ -3212,7 +3936,7 @@
     const meta = [list.length + ' nota', 'total ' + centsToRp(totals.omsetCents)];
     if (opts.note) meta.push(opts.note);
     if (opts.showProfit) {
-      meta.push('laba kotor ' + centsToRp(totals.profitCents));
+      meta.push('laba bersih ' + centsToRp(totals.profitCents));
     }
     $('#notaListSubtitle').textContent = meta.join(' · ');
 
@@ -3262,6 +3986,7 @@
             '</td>' +
             '<td>' +
             metodeBadge(record.metode_bayar) +
+            paymentBadge(record) +
             '</td>' +
             '</tr>'
         )
@@ -3281,13 +4006,6 @@
     );
   }
 
-  function remainingQty(item) {
-    return Math.max(
-      intValue(item.jumlah, 0) - intValue(item.jumlah_retur, 0),
-      0
-    );
-  }
-
   function qtyCell(item) {
     const returned = intValue(item.jumlah_retur, 0);
     return (
@@ -3295,67 +4013,6 @@
       (returned > 0
         ? '<span class="cell-sub">retur ' + returned + '</span>'
         : '')
-    );
-  }
-
-  function returnFormHtml(receipt) {
-    const lines = [];
-    (receipt.jobs || []).forEach((job) => {
-      const sisa = remainingQty(job);
-      if (sisa <= 0) return;
-      lines.push(
-        '<label class="return-line"><span class="cell-primary">' +
-          esc(job.deskripsi) +
-          '</span><span class="cell-sub">jasa · sisa ' +
-          sisa +
-          '</span><input type="number" class="input return-qty" min="0" max="' +
-          sisa +
-          '" value="0" data-return-kind="job" data-return-id="' +
-          job.id +
-          '"></label>'
-      );
-    });
-    (receipt.parts || []).forEach((part) => {
-      const sisa = remainingQty(part);
-      if (sisa <= 0) return;
-      lines.push(
-        '<label class="return-line"><span class="cell-primary">' +
-          esc(part.nama_part) +
-          '</span><span class="cell-sub">sparepart · sisa ' +
-          sisa +
-          '</span><input type="number" class="input return-qty" min="0" max="' +
-          sisa +
-          '" value="0" data-return-kind="part" data-return-id="' +
-          part.id +
-          '"></label>'
-      );
-    });
-
-    if (!lines.length) {
-      return (
-        '<div class="detail-section"><h4 class="detail-section-title">Retur</h4>' +
-        '<p class="muted">Semua item nota ini sudah diretur.</p></div>'
-      );
-    }
-
-    return (
-      '<div class="detail-section">' +
-      '<h4 class="detail-section-title">Retur jasa / sparepart</h4>' +
-      '<p class="muted">Isi jumlah yang diretur. Stok sparepart kembali otomatis dan tidak bisa diretur dua kali.</p>' +
-      '<div class="return-lines">' +
-      lines.join('') +
-      '</div>' +
-      '<label class="detail-label" for="returnReason">Alasan retur</label>' +
-      '<input type="text" class="input" id="returnReason" maxlength="500" placeholder="Contoh: barang tidak cocok / salah pasang">' +
-      '<p class="tiny muted">Operator pencatat diambil otomatis dari sesi yang masuk.</p>' +
-      '<div class="return-actions">' +
-      '<button type="button" class="btn btn-ghost" data-action="return-cancel" data-id="' +
-      receipt.id +
-      '">Batal</button>' +
-      '<button type="button" class="btn btn-primary" data-action="return-submit" data-id="' +
-      receipt.id +
-      '">Simpan retur</button>' +
-      '</div></div>'
     );
   }
 
@@ -3399,6 +4056,116 @@
       '<div class="return-history">' +
       entries +
       '</div></div>'
+    );
+  }
+
+  function paymentSectionHtml(receipt) {
+    if (receipt.status === 'VOID') return '';
+    const payments = state.detailPayments || [];
+    const rows = payments
+      .map(
+        (payment) =>
+          '<div class="payment-row"><div><small>' +
+          esc(fmtDateTime(payment.waktu)) +
+          ' · ' +
+          esc(payment.operator || '-') +
+          '</small><div>' +
+          esc(payment.jenis || 'PEMBAYARAN') +
+          ' · ' +
+          esc(payment.metode || '-') +
+          (payment.catatan ? ' · ' + esc(payment.catatan) : '') +
+          '</div></div><strong>' +
+          fmtRp(payment.nominal) +
+          '</strong></div>'
+      )
+      .join('');
+    const sisa = moneyToCents(receipt.sisa_bayar);
+    const canPay = receipt.status_bayar === 'BELUM_LUNAS' && sisa > 0;
+    const form = canPay
+      ? '<div class="payment-form">' +
+        '<div class="form-grid">' +
+        '<label class="field"><span>Nominal pembayaran</span>' +
+        '<input type="text" class="input money-input" id="paymentNominal" inputmode="numeric" placeholder="0"></label>' +
+        '<label class="field"><span>Metode</span>' +
+        '<select class="input" id="paymentMetode">' +
+        '<option value="CASH">Tunai</option>' +
+        '<option value="TRANSFER">Transfer</option>' +
+        '</select></label>' +
+        '</div>' +
+        '<label class="field"><span>Catatan (opsional)</span>' +
+        '<input type="text" class="input" id="paymentCatatan" maxlength="500" placeholder="Contoh: pelunasan transfer"></label>' +
+        '<div class="payment-form-actions">' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-action="payment-fill-sisa">Isi sisa</button>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="payment-submit" data-id="' +
+        receipt.id +
+        '">Catat pembayaran</button>' +
+        '</div></div>'
+      : '';
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Pembayaran</h4>' +
+      '<div class="detail-grid">' +
+      detailItem('Status bayar', paymentBadge(receipt) || '-') +
+      detailItem('Total dibayar', fmtRp(receipt.total_dibayar)) +
+      detailItem('Sisa bayar', fmtRp(receipt.sisa_bayar)) +
+      detailItem(
+        'Jatuh tempo',
+        esc(receipt.jatuh_tempo ? fmtDate(receipt.jatuh_tempo) : '-')
+      ) +
+      (Number(receipt.rencana_bayar) > 0
+        ? detailItem('Rencana pembayaran', fmtRp(receipt.rencana_bayar))
+        : '') +
+      '</div>' +
+      (payments.length
+        ? '<div class="payment-list">' + rows + '</div>'
+        : '<div class="empty-state sm">Belum ada pembayaran tercatat.</div>') +
+      form +
+      '</div>'
+    );
+  }
+
+  function waSectionHtml(receipt) {
+    const logs = state.detailWaLogs || [];
+    const number = receiptWaNumber(receipt);
+    let hint = '';
+    if (!waDigits(number)) {
+      hint = 'Nomor HP pelanggan belum valid untuk WhatsApp.';
+    } else if (!(receipt.wa_text || '').trim()) {
+      hint = 'Pesan WhatsApp belum tersedia untuk nota ini.';
+    }
+    const rows = logs
+      .map((log) => {
+        const tone =
+          log.status === 'DIBUKA'
+            ? 'green'
+            : log.status === 'TIDAK_TERSEDIA'
+              ? 'red'
+              : 'gray';
+        return (
+          '<div class="wa-log-row"><div><strong>' +
+          esc(waStatusLabel(log.status)) +
+          '</strong><small>' +
+          esc(fmtDateTime(log.created_at)) +
+          ' · ' +
+          esc(log.operator || '-') +
+          ' · ' +
+          esc(log.nomor_masked || '-') +
+          '</small></div><span class="badge ' +
+          tone +
+          '">' +
+          esc(log.status) +
+          '</span></div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">WhatsApp</h4>' +
+      (hint ? '<p class="tiny muted">' + esc(hint) + '</p>' : '') +
+      (logs.length
+        ? '<div class="wa-log-list">' + rows + '</div>'
+        : '<div class="empty-state sm">Belum ada upaya WhatsApp untuk nota ini.</div>') +
+      '</div>'
     );
   }
 
@@ -3538,42 +4305,110 @@
           esc(receipt.catatan_garansi) +
           '</p></div>'
         : '') +
-      returnHistoryHtml(state.detailReturns) +
-      (state.returnMode ? returnFormHtml(receipt) : '');
-
-    const hasReturnable =
-      jobs.some((job) => remainingQty(job) > 0) ||
-      parts.some((part) => remainingQty(part) > 0);
-
-    $('#btnRecordCustomer').classList.toggle(
-      'hidden',
-      !state.detailRecordCustomerId
-    );
-    $('#btnRecordVoid').classList.toggle(
-      'hidden',
-      isVoid || intValue(receipt.retur_count, 0) > 0
-    );
-    $('#btnRecordReturn').classList.toggle(
-      'hidden',
-      isVoid || !hasReturnable || state.returnMode
-    );
+      paymentSectionHtml(receipt) +
+      waSectionHtml(receipt) +
+      returnHistoryHtml(state.detailReturns);
   }
 
   async function openRecordDetail(id) {
     if (!id) return;
     try {
-      const results = await Promise.all([API.receipt(id), API.returns(id)]);
+      const results = await Promise.all([
+        API.receipt(id),
+        API.returns(id),
+        API.payments(id),
+        API.recordWhatsappLogs(id),
+      ]);
       const receipt = results[0];
-      const source = findRecordById(id);
       state.detailRecord = receipt;
       state.detailReturns = results[1] || [];
-      state.detailRecordCustomerId = source ? source.customer_id : null;
-      state.returnMode = false;
+      state.detailPayments = results[2] || [];
+      state.detailWaLogs = results[3] || [];
       renderRecordDetail(receipt);
       openModal('#recordModal');
     } catch (err) {
       toast('Detail nota gagal dimuat. Coba lagi.', 'error', 6000);
     }
+  }
+
+  async function loadRecordExtras(recordId) {
+    if (!recordId) return;
+    const results = await Promise.all([
+      API.payments(recordId),
+      API.recordWhatsappLogs(recordId),
+    ]);
+    state.detailPayments = results[0] || [];
+    state.detailWaLogs = results[1] || [];
+    if (state.detailRecord && state.detailRecord.id === recordId) {
+      renderRecordDetail(state.detailRecord);
+    }
+  }
+
+  function paymentRequestId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return (
+      'pay-' +
+      Date.now().toString(36) +
+      '-' +
+      Math.random().toString(36).slice(2, 10)
+    );
+  }
+
+  async function submitPayment(recordId) {
+    const record = state.detailRecord;
+    if (!record || record.id !== recordId) return;
+    const nominal = readMoneyInput($('#paymentNominal'), 'Nominal pembayaran');
+    if (nominal === null) return;
+    if (nominal <= 0) {
+      toast('Nominal pembayaran harus lebih dari nol.', 'warning');
+      return;
+    }
+    if (nominal > moneyToCents(record.sisa_bayar)) {
+      toast('Nominal melebihi sisa bayar nota.', 'warning');
+      return;
+    }
+    const metodeEl = $('#paymentMetode');
+    const noteEl = $('#paymentCatatan');
+    const button = $('[data-action="payment-submit"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const result = await API.createPayment(recordId, {
+        nominal: String(nominal),
+        metode: metodeEl ? metodeEl.value : 'CASH',
+        catatan: noteEl && noteEl.value.trim() ? noteEl.value.trim() : null,
+        request_id: paymentRequestId(),
+      });
+      if (result.status_bayar === 'LUNAS') {
+        toast('Nota ' + record.no_nota + ' lunas.', 'success');
+      } else {
+        toast(
+          'Pembayaran tercatat. Sisa ' + fmtRp(result.sisa_bayar) + '.',
+          'success'
+        );
+      }
+      await refreshAfterRecordChange(recordId);
+      if (!$('#receivablesModal').classList.contains('hidden')) {
+        loadReceivables();
+      }
+      if (result.receipt) {
+        showReceipt(result.receipt);
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function fillPaymentSisa() {
+    const record = state.detailRecord;
+    if (!record) return;
+    const input = $('#paymentNominal');
+    if (!input) return;
+    setMoneyValue(input, Math.round(moneyToCents(record.sisa_bayar) / 100));
+    input.focus();
   }
 
   function renderCustomerDetail(customer) {
@@ -3620,7 +4455,102 @@
       '<div class="detail-unit-list">' +
       unitsHtml +
       '</div></div>' +
+      '<div class="detail-section" id="customerReceivableSection"></div>' +
+      '<div class="detail-section" id="customerFollowupSection"></div>' +
       '<div class="detail-section" id="customerHistorySection"></div>';
+  }
+
+  function renderCustomerReceivables(data) {
+    const section = $('#customerReceivableSection');
+    if (!section) return;
+    const count = intValue(data && data.jumlah_nota, 0);
+    const total = data ? data.total_sisa : 0;
+    if (!count) {
+      section.innerHTML =
+        '<h4 class="detail-section-title">Piutang</h4>' +
+        '<div class="empty-state sm">Tidak ada piutang berjalan.</div>';
+      return;
+    }
+    section.innerHTML =
+      '<h4 class="detail-section-title">Piutang</h4>' +
+      '<div class="receivable-head"><div><strong>' +
+      count +
+      ' nota belum lunas</strong><span>Total sisa ' +
+      fmtRp(total) +
+      '</span></div>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="customer-receivables" data-id="' +
+      intValue(state.detailCustomer && state.detailCustomer.id, 0) +
+      '">Lihat rincian</button></div>';
+  }
+
+  function renderCustomerFollowups(result) {
+    const section = $('#customerFollowupSection');
+    if (!section) return;
+    const items = (result && result.items) || [];
+    section.innerHTML =
+      '<h4 class="detail-section-title">Follow-up (' +
+      items.length +
+      ')</h4>' +
+      (items.length
+        ? '<div class="detail-history-list">' +
+          items
+            .map(
+              (item) =>
+                '<button type="button" class="detail-history-item" data-action="followup-detail" data-id="' +
+                item.id +
+                '"><span class="detail-history-main"><span class="detail-history-note">' +
+                esc(item.jenis_label) +
+                '</span><span class="detail-history-unit">' +
+                esc(item.judul || '-') +
+                '</span></span><span class="detail-history-side"><span class="detail-history-date">' +
+                esc(dueLabel(item)) +
+                '</span><span class="detail-history-total">' +
+                esc(item.status_label) +
+                '</span></span></button>'
+            )
+            .join('') +
+          '</div>'
+        : '<div class="empty-state sm">Tidak ada follow-up aktif.</div>');
+  }
+
+  async function loadCustomerExtras(customer) {
+    if (!customer) return;
+    const receivableSection = $('#customerReceivableSection');
+    if (receivableSection) {
+      receivableSection.innerHTML =
+        '<h4 class="detail-section-title">Piutang</h4>' +
+        '<div class="empty-state sm">Memuat piutang...</div>';
+    }
+    try {
+      const data = await API.customerReceivables(customer.id);
+      if (state.detailCustomer && state.detailCustomer.id === customer.id) {
+        renderCustomerReceivables(data);
+      }
+    } catch (err) {
+      if (receivableSection) {
+        receivableSection.innerHTML =
+          '<h4 class="detail-section-title">Piutang</h4>' +
+          '<div class="empty-state sm">Piutang gagal dimuat.</div>';
+      }
+    }
+    const followupSection = $('#customerFollowupSection');
+    if (followupSection) {
+      followupSection.innerHTML =
+        '<h4 class="detail-section-title">Follow-up</h4>' +
+        '<div class="empty-state sm">Memuat follow-up...</div>';
+    }
+    try {
+      const result = await API.followupItems('semua', null, customer.id);
+      if (state.detailCustomer && state.detailCustomer.id === customer.id) {
+        renderCustomerFollowups(result);
+      }
+    } catch (err) {
+      if (followupSection) {
+        followupSection.innerHTML =
+          '<h4 class="detail-section-title">Follow-up</h4>' +
+          '<div class="empty-state sm">Follow-up gagal dimuat.</div>';
+      }
+    }
   }
 
   function customerHistoryItem(record) {
@@ -3648,6 +4578,7 @@
       '</span>' +
       '<span class="detail-history-badges">' +
       metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
       warrantyBadge(record) +
       '</span>' +
       '</button>'
@@ -3713,7 +4644,561 @@
     state.detailCustomer = customer;
     renderCustomerDetail(customer);
     openModal('#customerDetailModal');
+    loadCustomerExtras(customer);
     loadCustomerHistory(customer);
+  }
+
+  /* ------------------------------ Follow-up ------------------------------- */
+  const FOLLOWUP_STATUS_CHOICES = [
+    { value: 'BARU', label: 'Baru' },
+    { value: 'SUDAH_FOLLOWUP', label: 'Sudah follow up' },
+    { value: 'JANJI_BAYAR', label: 'Janji bayar' },
+    { value: 'MASIH_KENDALA', label: 'Masih kendala' },
+    { value: 'SELESAI', label: 'Selesai' },
+    { value: 'ARSIP', label: 'Arsip' },
+  ];
+
+  const FOLLOWUP_STATUS_LABELS = {
+    BARU: 'Baru',
+    SUDAH_FOLLOWUP: 'Sudah follow up',
+    JANJI_BAYAR: 'Janji bayar',
+    MASIH_KENDALA: 'Masih kendala',
+    SELESAI: 'Selesai',
+    ARSIP: 'Arsip',
+    AKAN_DATANG: 'Akan datang service',
+    TIDAK_DATANG: 'Tidak akan datang service',
+  };
+
+  const FOLLOWUP_JADWAL_JENIS = ['servis_berkala', 'garansi'];
+
+  function followupStatusLabel(status) {
+    return FOLLOWUP_STATUS_LABELS[status] || status || '-';
+  }
+
+  const FOLLOWUP_LIST_TITLES = {
+    servis_berkala: 'Servis berkala',
+    garansi: 'Garansi akan habis',
+    prospek: 'Prospek pelanggan',
+  };
+
+  const FOLLOWUP_AKAN_DATANG_TITLES = {
+    garansi: 'Akan datang — Garansi',
+    servis_berkala: 'Akan datang — Servis berkala',
+  };
+
+  function followupCardHtml(item) {
+    const late =
+      item.terlambat &&
+      item.status !== 'SELESAI' &&
+      item.status !== 'ARSIP' &&
+      item.status !== 'TIDAK_DATANG';
+    const assignee = item.penanggung_jawab
+      ? '<span class="badge blue">' + esc(item.penanggung_jawab) + '</span>'
+      : '<span class="badge amber">Belum ditugaskan</span>';
+    return (
+      '<div class="followup-card' +
+      (late ? ' is-late' : '') +
+      '" role="button" tabindex="0" data-action="followup-detail" data-id="' +
+      item.id +
+      '">' +
+      '<div class="followup-card-top"><span class="badge ' +
+      jenisTone(item.jenis) +
+      '">' +
+      esc(item.jenis_label) +
+      '</span><span class="cell-sub">' +
+      esc(dueLabel(item)) +
+      '</span></div>' +
+      '<div class="followup-card-title">' +
+      esc(item.customer_nama) +
+      '</div>' +
+      '<div class="followup-card-meta"><strong>' +
+      esc(item.judul) +
+      '</strong><br>' +
+      esc(item.unit_deskripsi || '-') +
+      '</div>' +
+      '<div class="followup-card-badges">' +
+      (item.status === 'BARU'
+        ? ''
+        : '<span class="badge gray">' + esc(item.status_label) + '</span>') +
+      (item.no_nota
+        ? '<span class="badge gray">' + esc(item.no_nota) + '</span>'
+        : '') +
+      assignee +
+      '</div><span class="followup-card-link">Lihat detail</span></div>'
+    );
+  }
+
+  function openFollowupList(jenis, status) {
+    const type = jenis || '';
+    const itemStatus = status || '';
+    state.followupList = {
+      filter: 'semua',
+      jenis: type,
+      status: itemStatus,
+      items: [],
+    };
+    const title = $('#followupListTitle');
+    const subtitle = $('#followupListSubtitle');
+    if (title) {
+      title.textContent =
+        (itemStatus === 'AKAN_DATANG' && FOLLOWUP_AKAN_DATANG_TITLES[type]) ||
+        FOLLOWUP_LIST_TITLES[type] ||
+        'Tugas follow-up';
+    }
+    if (subtitle) {
+      subtitle.textContent = itemStatus === 'AKAN_DATANG'
+        ? 'Jadwal kunjungan yang sudah disepakati. Pilih item untuk melihat detail.'
+        : type
+          ? 'Pengingat aktif. Pilih item untuk melihat detail.'
+          : 'Semua tugas aktif. Pilih item untuk melihat detail.';
+    }
+    const body = $('#followupListBody');
+    if (body) body.innerHTML = '<div class="empty-state sm">Memuat follow-up...</div>';
+    const empty = $('#followupListEmpty');
+    if (empty) empty.classList.add('hidden');
+    openModal('#followupListModal');
+    loadFollowupList();
+  }
+
+  async function loadFollowupList() {
+    const current = state.followupList;
+    if (!current) return;
+    const body = $('#followupListBody');
+    const empty = $('#followupListEmpty');
+    try {
+      const result = await API.followupItems(
+        current.filter,
+        current.jenis || null,
+        null,
+        current.status || null
+      );
+      if (state.followupList !== current) return;
+      current.items = result.items || [];
+    } catch (err) {
+      if (state.followupList !== current) return;
+      current.items = [];
+      toast('Daftar follow-up gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+    if (state.followupList !== current || !body) return;
+    body.innerHTML = current.items.map(followupCardHtml).join('');
+    if (empty) empty.classList.toggle('hidden', current.items.length > 0);
+  }
+
+  function closeFollowupList() {
+    closeModal('#followupListModal');
+    state.followupList = null;
+  }
+
+  function refreshFollowupViews() {
+    loadDashboard();
+    const modal = $('#followupListModal');
+    const open = modal && !modal.classList.contains('hidden');
+    if (state.followupList && open) loadFollowupList();
+  }
+
+  function followupRincianHtml(item) {
+    const rows = item.rincian || [];
+    if (!rows.length) return '';
+    return (
+      '<div class="detail-section"><h4 class="detail-section-title">Rincian</h4>' +
+      rows
+        .map((row) => {
+          const bits = [];
+          if (row.no_nota) bits.push('Nota ' + row.no_nota);
+          if (row.tanggal_servis) bits.push(fmtDate(row.tanggal_servis));
+          if (row.pekerjaan) bits.push(row.pekerjaan);
+          const money = [];
+          if (row.total_servis != null) money.push('Total ' + fmtRp(row.total_servis));
+          if (row.sisa_bayar != null && moneyToCents(row.sisa_bayar) > 0) {
+            money.push('Sisa ' + fmtRp(row.sisa_bayar));
+          }
+          return (
+            '<div class="detail-text">' +
+            esc(bits.join(' · ') || '-') +
+            (money.length ? '<br><span class="cell-sub">' + esc(money.join(' · ')) + '</span>' : '') +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function followupEventsHtml(events) {
+    if (!events.length) return '';
+    return (
+      '<div class="detail-section"><h4 class="detail-section-title">Riwayat tindakan</h4>' +
+      '<div class="followup-event-list">' +
+      events
+        .map(
+          (event) =>
+            '<div class="followup-event"><div><strong>' +
+            esc(followupStatusLabel(event.from_status)) +
+            ' → ' +
+            esc(followupStatusLabel(event.to_status)) +
+            '</strong>' +
+            (event.alasan ? '<div>' + esc(event.alasan) + '</div>' : '') +
+            '<small>' +
+            esc(fmtDateTime(event.created_at)) +
+            ' · ' +
+            esc(event.operator || '-') +
+            '</small></div></div>'
+        )
+        .join('') +
+      '</div></div>'
+    );
+  }
+
+  function followupStatusOptions(current) {
+    return FOLLOWUP_STATUS_CHOICES.map(
+      (choice) =>
+        '<option value="' +
+        choice.value +
+        '"' +
+        (choice.value === current ? ' selected' : '') +
+        '>' +
+        esc(choice.label) +
+        '</option>'
+    ).join('');
+  }
+
+  function followupStatusFormHtml(item) {
+    const alasanField =
+      '<label class="field"><span>Catatan / alasan arsip</span>' +
+      '<input type="text" class="input" id="followupAlasan" maxlength="500" placeholder="Opsional, wajib untuk arsip"></label>';
+    let fields;
+    if (FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0) {
+      const current =
+        item.status === 'AKAN_DATANG' || item.status === 'TIDAK_DATANG'
+          ? item.status
+          : '';
+      fields =
+        '<div class="form-grid">' +
+        '<label class="field"><span>Status</span>' +
+        '<select class="input" id="followupStatusSelect">' +
+        '<option value="">Pilih status</option>' +
+        '<option value="AKAN_DATANG"' +
+        (current === 'AKAN_DATANG' ? ' selected' : '') +
+        '>Akan datang service</option>' +
+        '<option value="TIDAK_DATANG"' +
+        (current === 'TIDAK_DATANG' ? ' selected' : '') +
+        '>Tidak akan datang service</option>' +
+        '</select></label>' +
+        '<label class="field"><span>Tanggal service (wajib bila akan datang)</span>' +
+        '<input type="date" class="input" id="followupTanggalService" value="' +
+        esc(item.tanggal_service || '') +
+        '"></label>' +
+        '</div>' +
+        alasanField;
+    } else {
+      fields =
+        '<div class="form-grid">' +
+        '<label class="field"><span>Status</span><select class="input" id="followupStatusSelect">' +
+        followupStatusOptions(item.status) +
+        '</select></label>' +
+        '<label class="field"><span>Janji bayar (untuk JANJI_BAYAR)</span>' +
+        '<input type="date" class="input" id="followupJanji" value="' +
+        esc(item.janji_bayar || '') +
+        '"></label>' +
+        '</div>' +
+        alasanField;
+    }
+    return (
+      '<div class="followup-form">' +
+      fields +
+      '<div class="form-actions">' +
+      '<button type="button" class="btn btn-primary btn-sm" data-action="followup-status-save" data-id="' +
+      item.id +
+      '">Simpan status</button>' +
+      '</div></div>'
+    );
+  }
+
+  function renderFollowupDetail(detail) {
+    const item = detail.item;
+    const events = detail.events || [];
+    $('#followupModalTitle').textContent = item.customer_nama;
+    $('#followupModalSubtitle').textContent =
+      item.jenis_label + ' · ' + item.judul + ' · ' + dueLabel(item);
+    const cooldownHint =
+      item.cooldown_sampai && !item.bisa_followup
+        ? 'Bisa follow up lagi setelah ' + fmtDateTime(item.cooldown_sampai) + '.'
+        : '';
+    const jadwal = FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0;
+    $('#followupDetailBody').innerHTML =
+      '<div class="followup-detail-head">' +
+      '<span class="badge ' +
+      jenisTone(item.jenis) +
+      '">' +
+      esc(item.jenis_label) +
+      '</span>' +
+      '<span class="badge gray">' +
+      esc(item.status_label) +
+      '</span>' +
+      '<span class="badge ' +
+      (item.terlambat ? 'red' : 'gray') +
+      '">' +
+      esc(dueLabel(item)) +
+      '</span>' +
+      (item.penanggung_jawab
+        ? '<span class="badge blue">' + esc(item.penanggung_jawab) + '</span>'
+        : '<span class="badge amber">Belum ditugaskan</span>') +
+      '</div>' +
+      '<div class="detail-grid">' +
+      detailItem('Pelanggan', esc(item.customer_nama + ' · ' + item.nomor_masked)) +
+      detailItem('Unit', esc(item.unit_deskripsi || '-')) +
+      detailItem('Jatuh tempo', esc(item.jatuh_tempo ? fmtDate(item.jatuh_tempo) : '-')) +
+      detailItem(
+        'Follow up terakhir',
+        esc(item.followup_terakhir ? fmtDateTime(item.followup_terakhir) : '-')
+      ) +
+      (jadwal
+        ? detailItem(
+            'Tanggal service',
+            esc(item.tanggal_service ? fmtDate(item.tanggal_service) : '-')
+          )
+        : '') +
+      '</div>' +
+      (cooldownHint
+        ? '<p class="tiny muted">' + esc(cooldownHint) + '</p>'
+        : '') +
+      '<div class="followup-actions">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="followup-wa" data-id="' +
+      item.id +
+      '"' +
+      (item.bisa_followup ? '' : ' disabled') +
+      '>Buka WhatsApp</button>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="followup-chat" data-id="' +
+      item.id +
+      '">Buka chat</button>' +
+      (item.service_record_id
+        ? '<button type="button" class="btn btn-outline btn-sm" data-action="record-detail" data-id="' +
+          item.service_record_id +
+          '">Buka nota</button>'
+        : '') +
+      '</div>' +
+      followupRincianHtml(item) +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Pesan WhatsApp</h4>' +
+      '<p class="detail-text">' +
+      esc(detail.pesan || '-') +
+      '</p></div>' +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Ubah status</h4>' +
+      followupStatusFormHtml(item) +
+      '</div>' +
+      followupEventsHtml(events);
+  }
+
+  async function openFollowupDetail(id) {
+    if (!id) return;
+    try {
+      const detail = await API.followupDetail(id);
+      state.followupDetail = detail;
+      renderFollowupDetail(detail);
+      openModal('#followupModal');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  function followupWhatsapp(id) {
+    const detail = state.followupDetail;
+    if (!detail || detail.item.id !== id) return;
+    const item = detail.item;
+    if (!item.bisa_followup) {
+      toast(
+        'Follow up belum bisa dilakukan sekarang. Periksa jeda atau status.',
+        'warning'
+      );
+      return;
+    }
+    openWaPreview({
+      judul: 'WhatsApp ' + item.customer_nama,
+      subtitle: 'Periksa pesan follow-up sebelum dibuka.',
+      nomor: item.nomor_hp,
+      masked: item.nomor_masked,
+      text: detail.pesan || '',
+      note: 'Membuka WhatsApp akan mencatat upaya follow-up. Kasir tetap menekan kirim di WhatsApp.',
+      onOpen: async () => {
+        await API.followupItem(id, { status: 'DIBUKA' });
+        toast('Upaya follow-up tercatat.', 'success');
+        await openFollowupDetail(id);
+        refreshFollowupViews();
+      },
+    });
+  }
+
+  async function openWhatsappChat(id) {
+    const detail = state.followupDetail;
+    if (!detail || detail.item.id !== id) return;
+    const link = waLink(detail.item.nomor_hp, '');
+    if (!link) {
+      toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
+      return;
+    }
+    await openExternalLink(link);
+  }
+
+  async function submitFollowupStatus(id) {
+    const detail = state.followupDetail;
+    if (!detail || detail.item.id !== id) return;
+    const statusEl = $('#followupStatusSelect');
+    const target = statusEl ? statusEl.value : '';
+    if (!target) {
+      toast('Pilih status terlebih dahulu.', 'warning');
+      if (statusEl) statusEl.focus();
+      return;
+    }
+    const reasonEl = $('#followupAlasan');
+    const reason = reasonEl ? reasonEl.value.trim() : '';
+    const janjiEl = $('#followupJanji');
+    const janji = janjiEl ? janjiEl.value : '';
+    const tanggalEl = $('#followupTanggalService');
+    const tanggal = tanggalEl ? tanggalEl.value : '';
+    const payload = { status: target };
+    if (target === 'AKAN_DATANG') {
+      if (!tanggal) {
+        toast('Isi tanggal service.', 'warning');
+        if (tanggalEl) tanggalEl.focus();
+        return;
+      }
+      payload.tanggal_service = tanggal;
+    }
+    if (target === 'JANJI_BAYAR') {
+      if (!janji) {
+        toast('Isi tanggal janji bayar.', 'warning');
+        if (janjiEl) janjiEl.focus();
+        return;
+      }
+      payload.janji_bayar = janji;
+    }
+    if (target === 'ARSIP') {
+      if (reason.length < 3) {
+        toast('Isi alasan arsip minimal 3 karakter.', 'warning');
+        if (reasonEl) reasonEl.focus();
+        return;
+      }
+      payload.alasan = reason;
+    } else if (reason) {
+      payload.alasan = reason;
+    }
+    const button = $('[data-action="followup-status-save"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.followupStatus(id, payload);
+      toast('Status follow-up diperbarui.', 'success');
+      await openFollowupDetail(id);
+      refreshFollowupViews();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  /* ------------------------------- Piutang -------------------------------- */
+  function openReceivables(customerId) {
+    state.receivablesCustomerId = customerId || null;
+    state.receivables = null;
+    const subtitle = $('#receivablesSubtitle');
+    if (subtitle) {
+      subtitle.textContent = customerId
+        ? 'Nota belum lunas pelanggan ini.'
+        : 'Nota yang belum lunas.';
+    }
+    const body = $('#receivablesBody');
+    if (body) body.innerHTML = '<div class="empty-state sm">Memuat piutang...</div>';
+    openModal('#receivablesModal');
+    loadReceivables();
+  }
+
+  async function loadReceivables() {
+    const body = $('#receivablesBody');
+    if (!body) return;
+    try {
+      const data = state.receivablesCustomerId
+        ? await API.customerReceivables(state.receivablesCustomerId)
+        : await API.receivables();
+      state.receivables = data;
+      renderReceivables();
+    } catch (err) {
+      body.innerHTML =
+        '<div class="empty-state sm">Piutang gagal dimuat. Coba lagi.</div>';
+    }
+  }
+
+  function renderReceivables() {
+    const body = $('#receivablesBody');
+    if (!body) return;
+    const data = state.receivables;
+    if (!data || !(data.items || []).length) {
+      body.innerHTML =
+        '<div class="empty-state sm">Tidak ada piutang berjalan.</div>';
+      return;
+    }
+    const summary =
+      '<p class="muted">' +
+      intValue(data.jumlah_pelanggan, 0) +
+      ' pelanggan · ' +
+      intValue(data.jumlah_nota, 0) +
+      ' nota · total sisa ' +
+      fmtRp(data.total_sisa) +
+      '</p>';
+    const groups = data.items
+      .map((customer) => {
+        const rows = (customer.records || [])
+          .map(
+            (record) =>
+              '<tr><td><button type="button" class="btn btn-ghost btn-xs" data-action="record-detail" data-id="' +
+              record.id +
+              '">' +
+              esc(record.no_nota) +
+              '</button></td><td>' +
+              esc(fmtDate(record.waktu_service)) +
+              '</td><td class="num">' +
+              fmtRp(record.sisa_bayar) +
+              '</td><td>' +
+              esc(record.jatuh_tempo ? fmtDate(record.jatuh_tempo) : '-') +
+              '</td><td>' +
+              (record.overdue
+                ? '<span class="badge red">' +
+                  esc(record.umur_bucket) +
+                  '</span>'
+                : '<span class="badge gray">' +
+                  esc(record.umur_bucket) +
+                  '</span>') +
+              '</td><td class="receivable-actions">' +
+              '<button type="button" class="btn btn-primary btn-xs" data-action="record-payment" data-id="' +
+              record.id +
+              '">Pelunasan</button>' +
+              '<button type="button" class="btn btn-outline btn-xs" data-action="record-completion" data-id="' +
+              record.id +
+              '">Kendaraan selesai</button>' +
+              '</td></tr>'
+          )
+          .join('');
+        return (
+          '<div class="receivable-group"><div class="receivable-head"><div><strong>' +
+          esc(customer.nama) +
+          '</strong><span>' +
+          esc(customer.nomor_hp) +
+          ' · ' +
+          intValue(customer.jumlah_nota, 0) +
+          ' nota' +
+          (customer.jatuh_tempo_terdekat
+            ? ' · jatuh tempo ' + esc(fmtDate(customer.jatuh_tempo_terdekat))
+            : '') +
+          '</span></div><span class="receivable-total">' +
+          fmtRp(customer.total_sisa) +
+          '</span></div>' +
+          '<div class="receivable-table-wrap"><table class="receivable-records"><thead><tr><th>Nota</th><th>Tanggal</th><th class="num">Sisa</th><th>Jatuh tempo</th><th>Umur</th><th>Aksi</th></tr></thead><tbody>' +
+          rows +
+          '</tbody></table></div></div>'
+        );
+      })
+      .join('');
+    body.innerHTML = summary + '<div class="receivable-list">' + groups + '</div>';
   }
 
   function openDashboardNotas(filter) {
@@ -3752,7 +5237,7 @@
       list = rows.filter((record) => record.metode_bayar === 'TRANSFER');
       title = 'Nota transfer · ' + period;
     } else if (filter === 'profit') {
-      title = 'Laba kotor sparepart · ' + period;
+      title = 'Laba bersih sparepart · ' + period;
     }
 
     openNotaList(title, list, { showProfit: true });
@@ -3772,79 +5257,6 @@
     loadStock();
     loadDashboard();
     loadReport();
-  }
-
-  function collectReturnItems() {
-    const items = [];
-    $$('#recordDetail .return-qty').forEach((input) => {
-      const qty = intValue(input.value, 0);
-      if (qty <= 0) return;
-      const lineId = intValue(input.dataset.returnId, 0);
-      if (!lineId) return;
-      if (input.dataset.returnKind === 'job') {
-        items.push({ service_job_id: lineId, jumlah: qty });
-      } else {
-        items.push({ service_part_id: lineId, jumlah: qty });
-      }
-    });
-    return items;
-  }
-
-  async function submitReturn(recordId) {
-    if (!recordId) return;
-    const items = collectReturnItems();
-    if (!items.length) {
-      toast('Isi jumlah retur minimal satu item.', 'error', 5000);
-      return;
-    }
-    const reasonEl = $('#returnReason');
-    const reason = (reasonEl ? reasonEl.value : '').trim();
-    if (reason.length < 3) {
-      toast('Alasan retur minimal 3 karakter.', 'error', 5000);
-      if (reasonEl) reasonEl.focus();
-      return;
-    }
-    if (
-      !window.confirm(
-        'Simpan retur ' + items.length + ' item? Stok akan diperbarui.'
-      )
-    ) {
-      return;
-    }
-    try {
-      await API.createReturn(recordId, {
-        alasan: reason,
-        items: items,
-      });
-      state.returnMode = false;
-      toast('Retur tersimpan.', 'success');
-      await refreshAfterRecordChange(recordId);
-    } catch (err) {
-      toast(err.message, 'error', 7000);
-    }
-  }
-
-  async function voidRecord(recordId) {
-    const record = state.detailRecord;
-    if (!record || record.status === 'VOID') return;
-    if (
-      !window.confirm(
-        'Batalkan nota ' +
-          record.no_nota +
-          '? Stok dikembalikan dan nota tetap tersimpan di riwayat.'
-      )
-    ) {
-      return;
-    }
-    const reason = window.prompt('Alasan pembatalan (minimal 3 karakter):', '');
-    if (reason === null) return;
-    try {
-      await API.voidRecord(recordId, { alasan: reason.trim() });
-      toast('Nota dibatalkan.', 'success');
-      await refreshAfterRecordChange(recordId);
-    } catch (err) {
-      toast(err.message, 'error', 7000);
-    }
   }
 
   async function handleAction(action, id, dataset) {
@@ -3870,8 +5282,58 @@
       openDayNotas(data.date);
       return;
     }
+    if (action === 'open-followup') {
+      openFollowupList(data.jenis || '', data.status || '');
+      return;
+    }
+    if (action === 'open-receivables') {
+      openReceivables(null);
+      return;
+    }
+    if (action === 'payment-fill-sisa') {
+      fillPaymentSisa();
+      return;
+    }
+    if (action === 'record-payment') {
+      await openRecordForPayment(id);
+      return;
+    }
+    if (action === 'record-completion') {
+      await openCompletionWhatsapp(id);
+      return;
+    }
 
     if (!id) return;
+
+    if (action === 'followup-detail') {
+      openFollowupDetail(id);
+      return;
+    }
+
+    if (action === 'followup-wa') {
+      followupWhatsapp(id);
+      return;
+    }
+
+    if (action === 'followup-chat') {
+      openWhatsappChat(id);
+      return;
+    }
+
+    if (action === 'followup-status-save') {
+      await submitFollowupStatus(id);
+      return;
+    }
+
+    if (action === 'customer-receivables') {
+      openReceivables(id);
+      return;
+    }
+
+    if (action === 'payment-submit') {
+      await submitPayment(id);
+      return;
+    }
 
     if (action === 'reprint') {
       try {
@@ -3893,29 +5355,6 @@
       } catch (err) {
         toast(err.message, 'error', 7000);
       }
-      return;
-    }
-
-    if (action === 'record-void') {
-      await voidRecord(id);
-      return;
-    }
-
-    if (action === 'record-return-start') {
-      if (!state.detailRecord) return;
-      state.returnMode = true;
-      renderRecordDetail(state.detailRecord);
-      return;
-    }
-
-    if (action === 'return-cancel') {
-      state.returnMode = false;
-      if (state.detailRecord) renderRecordDetail(state.detailRecord);
-      return;
-    }
-
-    if (action === 'return-submit') {
-      await submitReturn(id);
       return;
     }
 
@@ -4000,6 +5439,13 @@
           '">' +
           item.jumlah +
           '</span></td>' +
+          '<td>' +
+          (clampInterval(item.interval_servis_bulan) > 0
+            ? '<span class="badge blue">' +
+              clampInterval(item.interval_servis_bulan) +
+              ' bulan</span>'
+            : '<span class="cell-sub">Nonaktif</span>') +
+          '</td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-stock" data-id="' +
           item.id +
@@ -4032,6 +5478,13 @@
           '<td class="text-right money">' +
           fmtRp(jasa.harga_standar) +
           '</td>' +
+          '<td>' +
+          (clampInterval(jasa.interval_servis_bulan) > 0
+            ? '<span class="badge blue">' +
+              clampInterval(jasa.interval_servis_bulan) +
+              ' bulan</span>'
+            : '<span class="cell-sub">Nonaktif</span>') +
+          '</td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-jasa" data-id="' +
           jasa.id +
@@ -4062,6 +5515,9 @@
       item ? Math.round(Number(item.harga_jual) || 0) : 0
     );
     $('#stockJumlah').value = item ? item.jumlah : '0';
+    $('#stockIntervalInput').value = item
+      ? clampInterval(item.interval_servis_bulan)
+      : '0';
     openModal('#stockModal');
     setTimeout(() => $('#stockNama').focus(), 60);
   }
@@ -4075,6 +5531,7 @@
       harga_modal: String(parseMoney($('#stockModalHarga').value)),
       harga_jual: String(parseMoney($('#stockJualHarga').value)),
       jumlah: Math.max(0, intValue($('#stockJumlah').value, 0)),
+      interval_servis_bulan: clampInterval($('#stockIntervalInput').value),
     };
 
     try {
@@ -4111,6 +5568,9 @@
       $('#jasaHargaInput'),
       jasa ? Math.round(Number(jasa.harga_standar) || 0) : 0
     );
+    $('#jasaIntervalInput').value = jasa
+      ? clampInterval(jasa.interval_servis_bulan)
+      : 0;
     openModal('#jasaModal');
     setTimeout(() => $('#jasaNamaInput').focus(), 60);
   }
@@ -4121,6 +5581,7 @@
     const payload = {
       nama: $('#jasaNamaInput').value.trim(),
       harga_standar: String(parseMoney($('#jasaHargaInput').value)),
+      interval_servis_bulan: clampInterval($('#jasaIntervalInput').value),
     };
 
     try {
@@ -4191,6 +5652,9 @@
           '</td>' +
           '<td class="text-right money">' +
           fmtRp(day.laba_kotor) +
+          '</td>' +
+          '<td class="text-right money">' +
+          fmtRp(day.total_jasa) +
           '</td>' +
           '</tr>'
       )
@@ -4284,6 +5748,7 @@
       $('#reportCash').textContent = fmtRp(data.total_cash);
       $('#reportTransfer').textContent = fmtRp(data.total_transfer);
       $('#reportProfit').textContent = fmtRp(data.laba_kotor);
+      $('#reportProfitJasa').textContent = fmtRp(data.total_jasa);
       $('#reportDateLabel').textContent =
         periodLabel +
         ' · ' +
@@ -4359,7 +5824,7 @@
               '</td>' +
               '<td class="text-right money">' +
               fmtRp(netTotal(record)) +
-              '<span class="cell-sub">Laba kotor ' +
+              '<span class="cell-sub">Laba bersih ' +
               fmtRp(record.laba_kotor) +
               (Number(record.total_retur) > 0
                 ? ' · retur -' + fmtRp(record.total_retur)
@@ -4371,6 +5836,7 @@
               '</span></td>' +
               '<td>' +
               metodeBadge(record.metode_bayar) +
+          paymentBadge(record) +
               '</td>' +
               '</tr>'
           )
@@ -4615,6 +6081,54 @@
     if (note) {
       note.textContent =
         'Perubahan langsung tampil di aplikasi dan struk.';
+    }
+  }
+
+  const OPS_INT_FIELDS = [
+    { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
+    { id: 'opsProspekHari', key: 'prospek_hari', low: 1, high: 365, label: 'Pengingat prospek' },
+    { id: 'opsCooldownHari', key: 'cooldown_hari', low: 0, high: 90, label: 'Jeda follow-up' },
+    { id: 'opsGaransiHari', key: 'garansi_akan_habis_hari', low: 1, high: 90, label: 'Pengingat garansi' },
+    { id: 'opsServisHari', key: 'servis_berkala_awal_hari', low: 1, high: 90, label: 'Pengingat servis berkala' },
+  ];
+
+  function fillOpsForm() {
+    const ops = state.config && state.config.ops;
+    if (!ops || !$('#opsForm')) return;
+    OPS_INT_FIELDS.forEach((field) => {
+      const input = $('#' + field.id);
+      if (input) input.value = String(intValue(ops[field.key], field.low));
+    });
+  }
+
+  async function handleOpsSubmit(event) {
+    event.preventDefault();
+    const payload = {};
+    for (const field of OPS_INT_FIELDS) {
+      const input = $('#' + field.id);
+      if (!input) continue;
+      const value = intValue(input.value, NaN);
+      if (!Number.isFinite(value) || value < field.low || value > field.high) {
+        toast(
+          field.label + ' harus antara ' + field.low + ' dan ' + field.high + ' hari.',
+          'warning'
+        );
+        input.focus();
+        return;
+      }
+      payload[field.key] = value;
+    }
+    const button = $('#opsSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const ops = await API.updateOpsSettings(payload);
+      if (state.config) state.config.ops = ops;
+      fillOpsForm();
+      toast('Pengaturan follow-up disimpan.', 'success');
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
     }
   }
 
@@ -5022,6 +6536,12 @@
       return;
     }
 
+    const deleteUnitButton = target.closest('[data-delete-unit]');
+    if (deleteUnitButton) {
+      deleteUnit(intValue(deleteUnitButton.dataset.deleteUnit, 0));
+      return;
+    }
+
     const unitCard = target.closest('[data-unit-id]');
     if (unitCard) {
       selectUnit(intValue(unitCard.dataset.unitId, 0));
@@ -5054,13 +6574,32 @@
 
   function handleGlobalInput(event) {
     const target = event.target;
+    if (
+      target.id === 'keluhanInput' ||
+      target.id === 'catatanPengerjaan' ||
+      target.id === 'diskonInput' ||
+      target.id === 'bayarInput' ||
+      target.id === 'dpInput' ||
+      target.id === 'jatuhTempoInput' ||
+      target.id === 'rencanaBayarInput' ||
+      target.id === 'rencanaTanggalInput' ||
+      target.id === 'kreditUangMukaInput'
+    ) {
+      invalidateNotaReview();
+    }
     if (isMoneyField(target)) {
       formatMoneyField(target);
       if (target.matches('[data-kind][data-field]')) {
         handleItemInput(target);
         return;
       }
-      if (target.id === 'diskonInput' || target.id === 'bayarInput') {
+      if (
+        target.id === 'diskonInput' ||
+        target.id === 'bayarInput' ||
+        target.id === 'dpInput' ||
+        target.id === 'rencanaBayarInput' ||
+        target.id === 'kreditUangMukaInput'
+      ) {
         updateSummary();
       }
       return;
@@ -5070,6 +6609,9 @@
       return;
     }
     if (target.id === 'diskonInput' || target.id === 'bayarInput') {
+      updateSummary();
+    }
+    if (target.id === 'dpInput') {
       updateSummary();
     }
   }
@@ -5112,17 +6654,37 @@
     $('#partPicker').addEventListener('change', onPartPickerChange);
     $('#btnAddJob').addEventListener('click', addJob);
     $('#btnAddPart').addEventListener('click', addPart);
+    $('#btnSaveComplaint').addEventListener('click', saveComplaint);
 
     $$('input[name="metode"]').forEach((radio) =>
       radio.addEventListener('change', handlePaymentModeChange)
     );
+    $$('#jenisBayarSwitch button').forEach((button) =>
+      button.addEventListener('click', () => {
+        state.jenisBayar = ['DP', 'KREDIT'].indexOf(button.dataset.jenis) >= 0
+          ? button.dataset.jenis
+          : 'LUNAS';
+        updateJenisBayar();
+      })
+    );
+    $('#kreditUangMukaAktif').addEventListener('change', updateKreditUangMuka);
+    $('#rencanaTanggalInput').addEventListener('change', invalidateNotaReview);
     $('#garansiAktif').addEventListener('change', updateGaransiFields);
     $('#garansiBulan').addEventListener('change', updateGaransiFields);
     $('#garansiBulanCustom').addEventListener('change', () => {
       $('#garansiBulanCustom').value = String(garansiBulanValue());
     });
+    $('#btnReviewNota').addEventListener('click', reviewNota);
+    $('#btnNotaEdit').addEventListener('click', editNotaReview);
+    $('#notaReviewClose').addEventListener('click', editNotaReview);
+    $('#btnNotaCorrect').addEventListener('click', confirmNotaReview);
     $('#btnSavePrint').addEventListener('click', () => saveTransaction(true));
     $('#btnSaveOnly').addEventListener('click', () => saveTransaction(false));
+    $('#jatuhTempoInput').addEventListener('change', invalidateNotaReview);
+    $('#garansiAktif').addEventListener('change', invalidateNotaReview);
+    $('#garansiBulan').addEventListener('change', invalidateNotaReview);
+    $('#garansiBulanCustom').addEventListener('change', invalidateNotaReview);
+    $('#garansiCatatan').addEventListener('input', invalidateNotaReview);
 
     $('#historySearch').addEventListener(
       'input',
@@ -5164,7 +6726,40 @@
         'Dialog cetak browser dibuka. Pilih printer lalu konfirmasi.',
         {}
       );
+      sendReceiptToWhatsapp(state.receipt);
     });
+    $('#btnReceiptCopyText').addEventListener('click', () => {
+      if (!state.receipt) return;
+      copyText(currentReceiptLines().join('\n'), 'Teks struk disalin.');
+    });
+    const waFallback = $('#btnReceiptWhatsappFallback');
+    if (waFallback) {
+      waFallback.addEventListener('click', () => {
+        if (state.receipt) sendReceiptToWhatsapp(state.receipt);
+      });
+    }
+
+    $('#waModalOpen').addEventListener('click', handleWaOpen);
+    $('#waModalCopy').addEventListener('click', () =>
+      copyText($('#waModalText').value, 'Pesan disalin.')
+    );
+    $('#waModalClose').addEventListener('click', () => closeModal('#waModal'));
+    $('#waModalCancel').addEventListener('click', () => closeModal('#waModal'));
+
+    $('#followupListClose').addEventListener('click', closeFollowupList);
+    $('#followupListDismiss').addEventListener('click', closeFollowupList);
+    $('#followupModalClose').addEventListener('click', () =>
+      closeModal('#followupModal')
+    );
+    $('#followupModalDismiss').addEventListener('click', () =>
+      closeModal('#followupModal')
+    );
+    $('#receivablesClose').addEventListener('click', () =>
+      closeModal('#receivablesModal')
+    );
+    $('#receivablesDismiss').addEventListener('click', () =>
+      closeModal('#receivablesModal')
+    );
 
     $('#receiptClose').addEventListener('click', () => closeModal('#receiptModal'));
     $('#notaListClose').addEventListener('click', () =>
@@ -5177,24 +6772,6 @@
     $('#recordDismiss').addEventListener('click', () =>
       closeModal('#recordModal')
     );
-    $('#btnRecordReprint').addEventListener('click', () => {
-      if (state.detailRecord) {
-        handleAction('reprint', state.detailRecord.id);
-      }
-    });
-    $('#btnRecordCustomer').addEventListener('click', () => {
-      if (state.detailRecordCustomerId) {
-        openCustomerDetail(state.detailRecordCustomerId);
-      }
-    });
-    $('#btnRecordVoid').addEventListener('click', () => {
-      if (state.detailRecord) handleAction('record-void', state.detailRecord.id);
-    });
-    $('#btnRecordReturn').addEventListener('click', () => {
-      if (state.detailRecord) {
-        handleAction('record-return-start', state.detailRecord.id);
-      }
-    });
     $('#customerDetailClose').addEventListener('click', () =>
       closeModal('#customerDetailModal')
     );
@@ -5224,6 +6801,7 @@
     $('#jasaForm').addEventListener('submit', handleJasaSubmit);
     $('#settingsForm').addEventListener('submit', handleSettingsSubmit);
     $('#settingsReset').addEventListener('click', fillSettingsForm);
+    $('#opsForm').addEventListener('submit', handleOpsSubmit);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
     $('#backupFolderChoose').addEventListener('click', chooseBackupFolder);

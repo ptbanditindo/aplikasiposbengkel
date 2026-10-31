@@ -17,6 +17,7 @@ from api.schemas import (
 from database.models import VehicleOrUnit
 from database.session import get_db
 from services import customer_service
+from services.auth_service import Operator
 from services.customer_service import describe_unit
 
 router = APIRouter(
@@ -72,7 +73,7 @@ def customer_overview(
     result = []
     for customer in customers:
         units = sorted(
-            customer.units,
+            (unit for unit in customer.units if unit.archived_at is None),
             key=lambda unit: (unit.created_at, unit.id),
             reverse=True,
         )
@@ -101,6 +102,16 @@ def customer_overview(
 def list_units(customer_id: int, db: Session = Depends(get_db)):
     units = customer_service.list_units(db, customer_id)
     return [_unit_out(unit) for unit in units]
+
+
+@router.delete("/units/{unit_id}", status_code=204)
+def archive_unit(
+    unit_id: int,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    customer_service.archive_unit(db, unit_id, operator)
+    return None
 
 
 @router.post("/units", response_model=UnitOut, status_code=201)

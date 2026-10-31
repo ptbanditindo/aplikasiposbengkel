@@ -193,6 +193,7 @@
     customerUnits: (customerId) =>
       request('/api/customers/' + customerId + '/units'),
     createUnit: (data) => request('/api/units', { method: 'POST', body: data }),
+    deleteUnit: (id) => request('/api/units/' + id, { method: 'DELETE' }),
 
     stock: () => request('/api/stock'),
     createStock: (data) => request('/api/stock', { method: 'POST', body: data }),
@@ -217,18 +218,58 @@
     receipt: (id) => request('/api/service-records/' + id + '/receipt'),
     claim: (id) =>
       request('/api/service-records/' + id + '/claim', { method: 'PUT' }),
-    voidRecord: (id, data) =>
-      request('/api/service-records/' + id + '/void', {
-        method: 'POST',
-        body: data,
-      }),
-    createReturn: (id, data) =>
-      request('/api/service-records/' + id + '/returns', {
-        method: 'POST',
-        body: data,
-      }),
     returns: (id) =>
       request('/api/service-records/' + id + '/returns'),
+
+    payments: (recordId) =>
+      request('/api/service-records/' + recordId + '/payments'),
+    createPayment: (recordId, data) =>
+      request('/api/service-records/' + recordId + '/payments', {
+        method: 'POST',
+        body: data,
+      }),
+    receivables: (customerId) =>
+      request(
+        '/api/receivables' +
+          (customerId ? '?customer_id=' + qs(customerId) : '')
+      ),
+    customerReceivables: (customerId) =>
+      request('/api/customers/' + customerId + '/receivables'),
+
+    recordWhatsapp: (recordId, data) =>
+      request('/api/service-records/' + recordId + '/whatsapp', {
+        method: 'POST',
+        body: data,
+      }),
+    recordWhatsappLogs: (recordId) =>
+      request('/api/service-records/' + recordId + '/whatsapp-logs'),
+    whatsappLogs: (limit) =>
+      request('/api/whatsapp/logs?limit=' + qs(limit || 100)),
+
+    opsSettings: () => request('/api/settings/ops'),
+    updateOpsSettings: (data) =>
+      request('/api/settings/ops', { method: 'PUT', body: data }),
+
+    followupItems: (filter, jenis, customerId, status) =>
+      request(
+        '/api/followup/items?filter=' +
+          qs(filter || 'semua') +
+          (jenis ? '&jenis=' + qs(jenis) : '') +
+          (customerId ? '&customer_id=' + qs(customerId) : '') +
+          (status ? '&status=' + qs(status) : '')
+      ),
+    followupCounts: () => request('/api/followup/counts'),
+    followupDetail: (id) => request('/api/followup/items/' + id),
+    followupItem: (id, data) =>
+      request('/api/followup/items/' + id + '/followup', {
+        method: 'POST',
+        body: data || {},
+      }),
+    followupStatus: (id, data) =>
+      request('/api/followup/items/' + id + '/status', {
+        method: 'POST',
+        body: data,
+      }),
 
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),

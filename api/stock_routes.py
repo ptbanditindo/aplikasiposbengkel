@@ -56,6 +56,7 @@ def create_stock(payload: StockItemCreate, db: Session = Depends(get_db)):
         harga_jual=payload.harga_jual,
         jumlah=payload.jumlah,
         kode=payload.kode,
+        interval_servis_bulan=payload.interval_servis_bulan,
     )
     return StockItemOut.model_validate(item)
 
@@ -84,7 +85,12 @@ def list_jasa(db: Session = Depends(get_db)):
 
 @router.post("/harga-jasa", response_model=HargaJasaOut, status_code=201)
 def create_jasa(payload: HargaJasaCreate, db: Session = Depends(get_db)):
-    jasa = stock_service.create_jasa(db, payload.nama, payload.harga_standar)
+    jasa = stock_service.create_jasa(
+        db,
+        payload.nama,
+        payload.harga_standar,
+        payload.interval_servis_bulan,
+    )
     return HargaJasaOut.model_validate(jasa)
 
 

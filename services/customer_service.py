@@ -1,7 +1,7 @@
 """Logika bisnis pelanggan & unit servis (mobil / radiator copotan)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from database.models import Customer, VehicleOrUnit
 from database.session import begin_immediate
 from repositories import customer_repository as repo
+from services import audit_service
+from services.auth_service import Operator
 from services.errors import BusinessValidationError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
@@ -16,7 +18,10 @@ VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY"}
 
 
 def create_customer(
-    db: Session, nama: str, nomor_hp: str, alamat: Optional[str] = None
+    db: Session,
+    nama: str,
+    nomor_hp: str,
+    alamat: Optional[str] = None,
 ) -> Customer:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
@@ -28,6 +33,35 @@ def create_customer(
 
     clean_alamat = clean_text(alamat, max_length=500) or None
     return repo.create_customer(db, clean_nama, phone, clean_alamat)
+
+
+def archive_unit(
+    db: Session,
+    unit_id: int,
+    operator: Optional[Operator] = None,
+) -> VehicleOrUnit:
+    """Soft delete unit: sembunyikan dari pilihan tanpa memutus riwayat nota."""
+    with db.begin():
+        begin_immediate(db)
+        unit = repo.get_unit(db, unit_id)
+        if unit is None:
+            raise NotFoundError("Unit servis tidak ditemukan.")
+        if unit.archived_at is not None:
+            db.flush()
+        else:
+            unit.archived_at = datetime.now()
+            if operator is not None:
+                audit_service.record_event(
+                    db,
+                    operator,
+                    audit_service.ACTION_UNIT,
+                    audit_service.REFERENCE_UNIT,
+                    reference_id=str(unit.id),
+                    reason="Unit dihapus dari daftar",
+                )
+            db.flush()
+    db.refresh(unit)
+    return unit
 
 
 def search_customers(db: Session, query: str = "", limit: int = 20) -> List[Customer]:
