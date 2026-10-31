@@ -234,9 +234,7 @@
     notaReviewed: false,
     detailPayments: [],
     detailWaLogs: [],
-    followupItems: [],
-    followupFilter: 'semua',
-    followupJenis: '',
+    followupList: null,
     followupDetail: null,
     receivables: null,
     receivablesCustomerId: null,
@@ -457,7 +455,6 @@
 
     if (view === 'dashboard') loadDashboard();
     if (view === 'history') loadHistory($('#historySearch').value.trim());
-    if (view === 'followup') loadFollowup();
     if (view === 'stock') renderStock();
     if (view === 'jasa') renderJasa();
     if (view === 'customers') {
@@ -4782,14 +4779,20 @@
   }
 
   /* ------------------------------ Follow-up ------------------------------- */
-  const FOLLOWUP_COLUMNS = [
-    { status: 'BARU', label: 'Baru', tone: 'blue' },
-    { status: 'SUDAH_FOLLOWUP', label: 'Sudah follow up', tone: 'amber' },
-    { status: 'JANJI_BAYAR', label: 'Janji bayar', tone: 'amber' },
-    { status: 'MASIH_KENDALA', label: 'Masih kendala', tone: 'red' },
-    { status: 'SELESAI', label: 'Selesai', tone: 'green' },
-    { status: 'ARSIP', label: 'Arsip', tone: 'gray' },
+  const FOLLOWUP_STATUS_CHOICES = [
+    { value: 'BARU', label: 'Baru' },
+    { value: 'SUDAH_FOLLOWUP', label: 'Sudah follow up' },
+    { value: 'JANJI_BAYAR', label: 'Janji bayar' },
+    { value: 'MASIH_KENDALA', label: 'Masih kendala' },
+    { value: 'SELESAI', label: 'Selesai' },
+    { value: 'ARSIP', label: 'Arsip' },
   ];
+
+  const FOLLOWUP_LIST_TITLES = {
+    servis_berkala: 'Servis berkala',
+    garansi: 'Garansi akan habis',
+    prospek: 'Prospek pelanggan',
+  };
 
   function followupCardHtml(item) {
     const late =
@@ -4826,81 +4829,66 @@
         ? '<span class="badge gray">' + esc(item.no_nota) + '</span>'
         : '') +
       assignee +
-      '</div></div>'
+      '</div><span class="followup-card-link">Lihat detail</span></div>'
     );
   }
 
-  function renderFollowupBoard() {
-    const board = $('#followupBoard');
-    const empty = $('#followupEmpty');
-    const meta = $('#followupMeta');
-    if (!board) return;
-    const items = state.followupItems || [];
-    if (meta) meta.textContent = items.length + ' item';
-    const archived = state.followupFilter === 'arsip';
-    const columns = FOLLOWUP_COLUMNS.filter(
-      (column) => !archived || column.status === 'ARSIP'
-    );
-    board.innerHTML = columns
-      .map((column) => {
-        const list = archived
-          ? items
-          : items.filter((item) => item.status === column.status);
-        return (
-          '<section class="followup-column"><div class="followup-col-head"><strong>' +
-          esc(column.label) +
-          '</strong><span class="badge ' +
-          column.tone +
-          '">' +
-          list.length +
-          '</span></div><div class="followup-col-body">' +
-          (list.length
-            ? list.map(followupCardHtml).join('')
-            : '<div class="followup-col-empty">Tidak ada item.</div>') +
-          '</div></section>'
-        );
-      })
-      .join('');
-    board.classList.toggle('hidden', items.length === 0);
-    if (empty) empty.classList.toggle('hidden', items.length > 0);
-  }
-
-  async function loadFollowup() {
-    const board = $('#followupBoard');
-    if (!board) return;
-    const filterEl = $('#followupFilter');
-    const jenisEl = $('#followupJenis');
-    if (filterEl) state.followupFilter = filterEl.value || 'semua';
-    if (jenisEl) state.followupJenis = jenisEl.value || '';
-    board.classList.remove('hidden');
-    board.innerHTML = '<div class="empty-state sm">Memuat follow-up...</div>';
-    const empty = $('#followupEmpty');
+  function openFollowupList(jenis) {
+    const type = jenis || '';
+    state.followupList = {
+      filter: type ? 'semua' : 'hari_ini',
+      jenis: type,
+      items: [],
+    };
+    const title = $('#followupListTitle');
+    const subtitle = $('#followupListSubtitle');
+    if (title) title.textContent = FOLLOWUP_LIST_TITLES[type] || 'Tugas follow-up hari ini';
+    if (subtitle) {
+      subtitle.textContent = type
+        ? 'Pengingat aktif. Pilih item untuk melihat detail.'
+        : 'Hari ini dan terlambat. Pilih item untuk melihat detail.';
+    }
+    const body = $('#followupListBody');
+    if (body) body.innerHTML = '<div class="empty-state sm">Memuat follow-up...</div>';
+    const empty = $('#followupListEmpty');
     if (empty) empty.classList.add('hidden');
+    openModal('#followupListModal');
+    loadFollowupList();
+  }
+
+  async function loadFollowupList() {
+    const current = state.followupList;
+    if (!current) return;
+    const body = $('#followupListBody');
+    const empty = $('#followupListEmpty');
     try {
       const result = await API.followupItems(
-        state.followupFilter,
-        state.followupJenis,
+        current.filter,
+        current.jenis || null,
         null
       );
-      state.followupItems = result.items || [];
-      renderFollowupBoard();
+      if (state.followupList !== current) return;
+      current.items = result.items || [];
     } catch (err) {
-      state.followupItems = [];
-      board.innerHTML =
-        '<div class="empty-state sm">Follow-up gagal dimuat. Coba lagi.</div>';
-      const meta = $('#followupMeta');
-      if (meta) meta.textContent = '0 item';
+      if (state.followupList !== current) return;
+      current.items = [];
+      toast('Daftar follow-up gagal dimuat. Coba lagi.', 'error', 6000);
     }
+    if (state.followupList !== current || !body) return;
+    body.innerHTML = current.items.map(followupCardHtml).join('');
+    if (empty) empty.classList.toggle('hidden', current.items.length > 0);
   }
 
-  function openFollowupView(jenis) {
-    state.followupFilter = 'semua';
-    state.followupJenis = jenis || '';
-    const filterEl = $('#followupFilter');
-    const jenisEl = $('#followupJenis');
-    if (filterEl) filterEl.value = 'semua';
-    if (jenisEl) jenisEl.value = jenis || '';
-    navigate('followup');
+  function closeFollowupList() {
+    closeModal('#followupListModal');
+    state.followupList = null;
+  }
+
+  function refreshFollowupViews() {
+    loadDashboard();
+    const modal = $('#followupListModal');
+    const open = modal && !modal.classList.contains('hidden');
+    if (state.followupList && open) loadFollowupList();
   }
 
   function followupRincianHtml(item) {
@@ -4957,14 +4945,14 @@
   }
 
   function followupStatusOptions(current) {
-    return FOLLOWUP_COLUMNS.map(
-      (column) =>
+    return FOLLOWUP_STATUS_CHOICES.map(
+      (choice) =>
         '<option value="' +
-        column.status +
+        choice.value +
         '"' +
-        (column.status === current ? ' selected' : '') +
+        (choice.value === current ? ' selected' : '') +
         '>' +
-        esc(column.label) +
+        esc(choice.label) +
         '</option>'
     ).join('');
   }
@@ -5101,7 +5089,7 @@
         await API.followupItem(id, { status: 'DIBUKA' });
         toast('Upaya follow-up tercatat.', 'success');
         await openFollowupDetail(id);
-        loadFollowup();
+        refreshFollowupViews();
       },
     });
   }
@@ -5141,7 +5129,7 @@
       await API.followupStatus(id, payload);
       toast('Status follow-up diperbarui.', 'success');
       await openFollowupDetail(id);
-      loadFollowup();
+      refreshFollowupViews();
     } catch (err) {
       toast(err.message, 'error', 7000);
     } finally {
@@ -5157,7 +5145,7 @@
         'success'
       );
       await openFollowupDetail(id);
-      loadFollowup();
+      refreshFollowupViews();
     } catch (err) {
       toast(err.message, 'error', 7000);
     }
@@ -5422,7 +5410,7 @@
       return;
     }
     if (action === 'open-followup') {
-      openFollowupView(data.jenis || '');
+      openFollowupList(data.jenis || '');
       return;
     }
     if (action === 'open-receivables') {
@@ -6899,9 +6887,8 @@
     $('#waModalClose').addEventListener('click', () => closeModal('#waModal'));
     $('#waModalCancel').addEventListener('click', () => closeModal('#waModal'));
 
-    $('#followupFilter').addEventListener('change', loadFollowup);
-    $('#followupJenis').addEventListener('change', loadFollowup);
-    $('#btnRefreshFollowup').addEventListener('click', loadFollowup);
+    $('#followupListClose').addEventListener('click', closeFollowupList);
+    $('#followupListDismiss').addEventListener('click', closeFollowupList);
     $('#followupModalClose').addEventListener('click', () =>
       closeModal('#followupModal')
     );

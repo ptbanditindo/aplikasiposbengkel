@@ -100,10 +100,6 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v5l3 2"></path><circle cx="12" cy="12" r="8"></circle></svg>
           Riwayat servis
         </button>
-        <button type="button" class="nav-tab" data-view="followup">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h10M9 12h10M9 19h10"></path><path d="m3 5 1.5 1.5L7 4M3 12l1.5 1.5L7 11M3 19l1.5 1.5L7 18"></path></svg>
-          Follow-up
-        </button>
         <button type="button" class="nav-tab" data-view="customers">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 19v-1a5 5 0 0 1 10 0v1"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M14 18v-.5a4 4 0 0 1 7 0V18"></path></svg>
           Pelanggan
@@ -179,6 +175,7 @@
           </article>
         </div>
 
+        <h2 class="section-label">Follow up</h2>
         <div class="stats-grid stats-grid--secondary">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
             <span class="stat-label">Piutang</span>
@@ -208,7 +205,7 @@
               <h2>Perlu ditindaklanjuti</h2>
               <p class="muted">Pengingat garansi, piutang, dan servis berkala yang sudah dekat.</p>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="open-followup">Buka papan follow-up</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="open-followup">Buka daftar follow-up</button>
           </div>
           <div class="reminder-list" id="reminderList"></div>
           <div class="empty-state hidden" id="reminderEmpty">Tidak ada pengingat hari ini.</div>
@@ -1047,46 +1044,6 @@
         </section>
       </section>
 
-      <!-- ============================ FOLLOW-UP ============================ -->
-      <section class="view hidden" id="view-followup">
-        <div class="page-head">
-          <div>
-            <h1>Follow-up</h1>
-            <p class="muted">Pengingat garansi, piutang, servis berkala, dan prospek pelanggan.</p>
-          </div>
-          <button type="button" class="btn btn-ghost" id="btnRefreshFollowup">Muat ulang</button>
-        </div>
-
-        <div class="card followup-controls">
-          <div class="followup-filter-row">
-            <label class="field inline">
-              <span>Tugas</span>
-              <select class="input" id="followupFilter">
-                <option value="semua">Semua</option>
-                <option value="hari_ini">Hari ini</option>
-                <option value="terlambat">Terlambat</option>
-                <option value="belum_ditugaskan">Belum ditugaskan</option>
-                <option value="milik_saya">Milik saya</option>
-                <option value="arsip">Arsip</option>
-              </select>
-            </label>
-            <label class="field inline">
-              <span>Jenis</span>
-              <select class="input" id="followupJenis">
-                <option value="">Semua jenis</option>
-                <option value="piutang">Piutang</option>
-                <option value="garansi">Garansi</option>
-                <option value="servis_berkala">Servis berkala</option>
-                <option value="prospek">Prospek</option>
-              </select>
-            </label>
-            <span class="pill-count" id="followupMeta">0 item</span>
-          </div>
-        </div>
-
-        <div class="followup-board" id="followupBoard"></div>
-        <div class="empty-state hidden" id="followupEmpty">Tidak ada item follow-up pada filter ini.</div>
-      </section>
     </main>
 
       <footer class="app-footer">
@@ -1482,6 +1439,24 @@
         <button type="button" class="btn btn-ghost" id="waModalCancel">Tutup</button>
         <button type="button" class="btn btn-outline" id="waModalCopy">Salin teks</button>
         <a class="btn btn-primary" id="waModalOpen" href="#" target="_blank" rel="noopener">Buka WhatsApp</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ FOLLOW-UP LIST MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="followupListModal" role="dialog" aria-modal="true" aria-labelledby="followupListTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="followupListTitle">Daftar follow-up</h3>
+          <p class="muted" id="followupListSubtitle">Pilih item untuk melihat detail.</p>
+        </div>
+        <button type="button" class="icon-btn" id="followupListClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="followup-list" id="followupListBody"></div>
+      <div class="empty-state hidden" id="followupListEmpty">Tidak ada item follow-up.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="followupListDismiss">Tutup</button>
       </div>
     </div>
   </div>
