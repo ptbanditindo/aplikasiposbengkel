@@ -45,6 +45,8 @@ STATUS_JANJI = "JANJI_BAYAR"
 STATUS_KENDALA = "MASIH_KENDALA"
 STATUS_SELESAI = "SELESAI"
 STATUS_ARSIP = "ARSIP"
+STATUS_AKAN_DATANG = "AKAN_DATANG"
+STATUS_TIDAK_DATANG = "TIDAK_DATANG"
 STATUS_VALUES = {
     STATUS_BARU,
     STATUS_SUDAH,
@@ -52,6 +54,8 @@ STATUS_VALUES = {
     STATUS_KENDALA,
     STATUS_SELESAI,
     STATUS_ARSIP,
+    STATUS_AKAN_DATANG,
+    STATUS_TIDAK_DATANG,
 }
 STATUS_LABELS = {
     STATUS_BARU: "Baru",
@@ -60,8 +64,17 @@ STATUS_LABELS = {
     STATUS_KENDALA: "Masih kendala",
     STATUS_SELESAI: "Selesai",
     STATUS_ARSIP: "Arsip",
+    STATUS_AKAN_DATANG: "Akan datang service",
+    STATUS_TIDAK_DATANG: "Tidak akan datang service",
 }
-OPEN_STATUSES = {STATUS_BARU, STATUS_SUDAH, STATUS_JANJI, STATUS_KENDALA}
+OPEN_STATUSES = {
+    STATUS_BARU,
+    STATUS_SUDAH,
+    STATUS_JANJI,
+    STATUS_KENDALA,
+    STATUS_AKAN_DATANG,
+}
+JADWAL_JENIS = {JENIS_SERVIS, JENIS_GARANSI}
 
 SYSTEM_OPERATOR = "Sistem"
 WA_JENIS = {
@@ -145,17 +158,11 @@ def _collect_sources(
 
     for customer_id, customer_records in by_customer.items():
         latest = customer_records[0]
-        customer = latest.unit.customer
 
         # --- Prospek pasca servis ---
         latest_day = latest.waktu_service.date()
         age = (today - latest_day).days
-        consent = bool(getattr(customer, "wa_consent", True))
-        if (
-            age >= prospek_hari
-            and consent
-            and is_valid_whatsapp(customer.nomor_hp)
-        ):
+        if age >= prospek_hari and is_valid_whatsapp(latest.unit.customer.nomor_hp):
             sources[(JENIS_PROSPEK, customer_id)] = _record_source(
                 JENIS_PROSPEK,
                 latest,
@@ -386,6 +393,7 @@ def _update_item(
         item.diambil_pada = None
         item.followup_terakhir = None
         item.janji_bayar = None
+        item.tanggal_service = None
         item.alasan_arsip = None
         item.archived_at = None
         _add_event(
@@ -493,12 +501,10 @@ def _serialize(
         else None
     )
     moment = now or datetime.now()
-    consent = bool(getattr(customer, "wa_consent", True))
     valid_number = is_valid_whatsapp(customer.nomor_hp)
     on_cooldown = cooldown_until is not None and moment < cooldown_until
     bisa = (
-        item.status not in {STATUS_ARSIP, STATUS_SELESAI}
-        and consent
+        item.status not in {STATUS_ARSIP, STATUS_SELESAI, STATUS_TIDAK_DATANG}
         and valid_number
         and not on_cooldown
     )
@@ -510,7 +516,6 @@ def _serialize(
         "customer_nama": customer.nama,
         "nomor_hp": customer.nomor_hp,
         "nomor_masked": mask_phone(customer.nomor_hp),
-        "wa_consent": consent,
         "unit_id": item.unit_id,
         "unit_deskripsi": describe_unit(unit) if unit is not None else "-",
         "service_record_id": item.service_record_id,
@@ -518,7 +523,11 @@ def _serialize(
         "judul": item.judul,
         "jatuh_tempo": item.jatuh_tempo,
         "sisa_hari": sisa_hari,
-        "terlambat": bool(sisa_hari is not None and sisa_hari < 0),
+        "terlambat": bool(
+            item.status != STATUS_AKAN_DATANG
+            and sisa_hari is not None
+            and sisa_hari < 0
+        ),
         "status": item.status,
         "status_label": STATUS_LABELS.get(item.status, item.status),
         "penanggung_jawab": item.penanggung_jawab,
@@ -526,6 +535,7 @@ def _serialize(
         "followup_terakhir": item.followup_terakhir,
         "sudah_followup": item.followup_terakhir is not None,
         "janji_bayar": item.janji_bayar,
+        "tanggal_service": item.tanggal_service,
         "alasan_arsip": item.alasan_arsip,
         "cooldown_sampai": cooldown_until,
         "bisa_followup": bisa,
@@ -552,7 +562,7 @@ def _active_items(
     customer_id: Optional[int] = None,
 ) -> List[FollowupItem]:
     statement = _item_statement(jenis, customer_id).where(
-        FollowupItem.status != STATUS_ARSIP
+        FollowupItem.status.notin_([STATUS_ARSIP, STATUS_TIDAK_DATANG])
     )
     return list(db.scalars(statement).unique().all())
 
@@ -573,6 +583,7 @@ def list_items(
     filter: str = "semua",
     jenis: Optional[str] = None,
     customer_id: Optional[int] = None,
+    status: Optional[str] = None,
     today: Optional[date] = None,
     now: Optional[datetime] = None,
     sync: bool = True,
@@ -598,6 +609,8 @@ def list_items(
         return {"items": serialized, "jumlah": len(serialized)}
 
     items = _active_items(db, jenis, customer_id)
+    if status:
+        items = [item for item in items if item.status == status]
     if filter == "hari_ini":
         items = [
             item
@@ -663,8 +676,18 @@ def counts(
     servis_due = 0
     prospek = 0
     hari_ini = 0
+    aktif = 0
+    akan_datang_servis = 0
+    akan_datang_garansi = 0
     for jenis, jatuh_tempo, status in rows:
-        if status == STATUS_SELESAI:
+        if status in {STATUS_SELESAI, STATUS_TIDAK_DATANG}:
+            continue
+        aktif += 1
+        if status == STATUS_AKAN_DATANG:
+            if jenis == JENIS_SERVIS:
+                akan_datang_servis += 1
+            elif jenis == JENIS_GARANSI:
+                akan_datang_garansi += 1
             continue
         if jenis == JENIS_SERVIS:
             servis_due += 1
@@ -676,6 +699,9 @@ def counts(
         "servis_berkala_due": servis_due,
         "prospek_count": prospek,
         "followup_hari_ini": hari_ini,
+        "followup_aktif": aktif,
+        "akan_datang_servis": akan_datang_servis,
+        "akan_datang_garansi": akan_datang_garansi,
     }
 
 
@@ -807,8 +833,8 @@ def follow_up(
         item = _get_item(db, item_id)
         if item.status == STATUS_ARSIP:
             raise ConflictError("Item sudah diarsipkan.")
-        if item.status == STATUS_SELESAI:
-            raise ConflictError("Item sudah selesai.")
+        if item.status in {STATUS_SELESAI, STATUS_TIDAK_DATANG}:
+            raise ConflictError("Item sudah ditutup.")
         cooldown = int(ops.get("cooldown_hari", 7))
         if cooldown > 0 and item.followup_terakhir is not None:
             until = item.followup_terakhir + timedelta(days=cooldown)
@@ -856,21 +882,32 @@ def change_status(
     operator: Operator,
     alasan: Optional[str] = None,
     janji_bayar: Optional[date] = None,
+    tanggal_service: Optional[date] = None,
     now: Optional[datetime] = None,
 ) -> FollowupItem:
     moment = now or datetime.now()
     target = (status or "").strip().upper()
     if target not in STATUS_VALUES:
-        raise BusinessValidationError(
-            "Status follow-up harus BARU, SUDAH_FOLLOWUP, JANJI_BAYAR, "
-            "MASIH_KENDALA, SELESAI, atau ARSIP."
-        )
+        raise BusinessValidationError("Status follow-up tidak dikenal.")
 
     with db.begin():
         item = _get_item(db, item_id)
         if item.status == STATUS_ARSIP:
             raise ConflictError("Item arsip tidak dapat diubah.")
-        if target == item.status:
+        if item.jenis in JADWAL_JENIS:
+            if target not in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
+                raise BusinessValidationError(
+                    "Status servis berkala dan garansi hanya "
+                    "akan datang service atau tidak akan datang service."
+                )
+            if target == STATUS_AKAN_DATANG and tanggal_service is None:
+                raise BusinessValidationError("Tanggal service wajib diisi.")
+        elif target in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
+            raise BusinessValidationError(
+                "Status akan/tidak datang service hanya untuk servis berkala "
+                "dan garansi."
+            )
+        if target == item.status and item.jenis not in JADWAL_JENIS:
             raise BusinessValidationError("Status item sudah sama.")
         if item.jenis == JENIS_PIUTANG and target in {STATUS_SELESAI, STATUS_ARSIP}:
             raise BusinessValidationError(
@@ -885,9 +922,12 @@ def change_status(
 
         previous = item.status
         item.status = target
+        item.tanggal_service = (
+            tanggal_service if target == STATUS_AKAN_DATANG else None
+        )
         if target == STATUS_JANJI:
             item.janji_bayar = janji_bayar
-        elif target != STATUS_JANJI:
+        else:
             item.janji_bayar = None
         if target == STATUS_ARSIP:
             item.alasan_arsip = (alasan or "").strip()
@@ -961,42 +1001,3 @@ def detail(
         "events": event_rows,
         "pesan": _message(db, item, day),
     }
-
-
-def reminders(
-    db: Session,
-    today: Optional[date] = None,
-    now: Optional[datetime] = None,
-) -> List[Dict[str, Any]]:
-    """Pengingat H-7/H-3/H-1 garansi dan H-3/0/+7 piutang."""
-    day = today or date.today()
-    moment = now or datetime.now()
-    sources = sync_items(db, today=day, now=moment)
-    ops = settings_service.get_ops_settings(db)
-    wanted = {
-        JENIS_GARANSI: {7: "H-7", 3: "H-3", 1: "H-1"},
-        JENIS_PIUTANG: {-7: "H+7", -3: "H-3", 0: "Hari ini"},
-    }
-    rows: List[Dict[str, Any]] = []
-    for (jenis, customer_id), source in sources.items():
-        labels = wanted.get(jenis)
-        if not labels:
-            continue
-        offset = (source["jatuh_tempo"] - day).days
-        label = labels.get(offset)
-        if label is None:
-            continue
-        item = db.scalar(
-            select(FollowupItem).where(
-                FollowupItem.jenis == jenis,
-                FollowupItem.customer_id == customer_id,
-                FollowupItem.status != STATUS_ARSIP,
-            )
-        )
-        if item is None:
-            continue
-        payload = _serialize(item, source, ops, day, moment)
-        payload["pengingat"] = label
-        rows.append(payload)
-    rows.sort(key=lambda row: (row["jatuh_tempo"] or date.max, row["customer_nama"]))
-    return rows

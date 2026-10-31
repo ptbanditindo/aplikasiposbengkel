@@ -22,7 +22,6 @@ def create_customer(
     nama: str,
     nomor_hp: str,
     alamat: Optional[str] = None,
-    wa_consent: bool = True,
 ) -> Customer:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
@@ -33,34 +32,7 @@ def create_customer(
         raise BusinessValidationError("Nomor HP tidak valid (8-15 digit).")
 
     clean_alamat = clean_text(alamat, max_length=500) or None
-    return repo.create_customer(db, clean_nama, phone, clean_alamat, bool(wa_consent))
-
-
-def set_wa_consent(
-    db: Session,
-    customer_id: int,
-    consent: bool,
-    operator: Optional[Operator] = None,
-) -> Customer:
-    """Simpan izin WhatsApp per pelanggan; perubahan dicatat pada audit."""
-    with db.begin():
-        begin_immediate(db)
-        customer = repo.get_customer(db, customer_id)
-        if customer is None:
-            raise NotFoundError("Pelanggan tidak ditemukan.")
-        customer.wa_consent = bool(consent)
-        if operator is not None:
-            audit_service.record_event(
-                db,
-                operator,
-                audit_service.ACTION_WHATSAPP,
-                audit_service.REFERENCE_CUSTOMER,
-                reference_id=str(customer.id),
-                reason="Izin WhatsApp: " + ("Ya" if consent else "Tidak"),
-            )
-        db.flush()
-    db.refresh(customer)
-    return customer
+    return repo.create_customer(db, clean_nama, phone, clean_alamat)
 
 
 def archive_unit(

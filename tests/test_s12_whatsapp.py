@@ -67,7 +67,6 @@ def test_struk_memuat_teks_wa_lengkap_dan_nomor_ternormalisasi(
     assert created.status_code == 201, created.text
     receipt = created.json()["receipt"]
 
-    assert receipt["wa_consent"] is True
     assert receipt["customer_wa"] == "6281211112222"
     text = receipt["wa_text"]
     assert "No. Nota" in text
@@ -164,47 +163,6 @@ def test_status_dibatalkan_dan_tidak_tersedia_dicatat(
         f"/api/service-records/{record_id}/whatsapp", json={"status": "LAINNYA"}
     )
     assert invalid.status_code == 422, invalid.text
-
-
-def test_izin_whatsapp_diminginkan_menolak_pesan(
-    client, create_customer, create_unit
-):
-    customer = create_customer(nama="Tono Tanpa Izin", nomor_hp="0812-9999-0000")
-    unit = create_unit(customer["id"])
-    receipt = _make(client, unit["id"]).json()["receipt"]
-    record_id = receipt["id"]
-
-    revoked = client.put(
-        f"/api/customers/{customer['id']}/consent", json={"wa_consent": False}
-    )
-    assert revoked.status_code == 200, revoked.text
-    assert revoked.json()["wa_consent"] is False
-    overview = client.get(
-        "/api/customers/overview", params={"q": "Tono Tanpa Izin"}
-    )
-    row = next(
-        item for item in overview.json() if item["id"] == customer["id"]
-    )
-    assert row["wa_consent"] is False
-
-    blocked = client.post(
-        f"/api/service-records/{record_id}/whatsapp", json={"status": "DIBUKA"}
-    )
-    assert blocked.status_code == 409, blocked.text
-    assert "menyetujui" in blocked.json()["detail"]
-
-    assert client.get(f"/api/service-records/{record_id}/whatsapp-logs").json() == []
-    detail_receipt = client.get(f"/api/service-records/{record_id}/receipt").json()
-    assert detail_receipt["wa_consent"] is False
-
-    allowed_again = client.put(
-        f"/api/customers/{customer['id']}/consent", json={"wa_consent": True}
-    )
-    assert allowed_again.status_code == 200, allowed_again.text
-    reopened = client.post(
-        f"/api/service-records/{record_id}/whatsapp", json={"status": "DIBUKA"}
-    )
-    assert reopened.status_code == 201, reopened.text
 
 
 def test_log_whatsapp_tidak_bisa_diubah_lewat_orm(

@@ -49,11 +49,8 @@ def create_customer(
     nama: str,
     nomor_hp: str,
     alamat: Optional[str],
-    wa_consent: bool = True,
 ) -> Customer:
-    customer = Customer(
-        nama=nama, nomor_hp=nomor_hp, alamat=alamat, wa_consent=wa_consent
-    )
+    customer = Customer(nama=nama, nomor_hp=nomor_hp, alamat=alamat)
     db.add(customer)
     db.commit()
     db.refresh(customer)

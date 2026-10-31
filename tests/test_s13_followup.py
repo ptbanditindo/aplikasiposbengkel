@@ -528,31 +528,3 @@ def test_dashboard_menampilkan_kartu_followup(
     counts = client.get("/api/followup/counts").json()
     assert counts["prospek_count"] == 1
     assert counts["followup_hari_ini"] >= 1
-
-
-def test_pelanggan_tanpa_izin_wa_tetap_di_daftar_tapi_tidak_bisa_followup(
-    client, create_customer, create_unit, make_transaction, db_session
-):
-    customer = create_customer(nama="Pelanggan Tanpa Izin")
-    denied = client.put(
-        f"/api/customers/{customer['id']}/consent",
-        json={"wa_consent": False},
-    )
-    assert denied.status_code == 200, denied.text
-    assert denied.json()["wa_consent"] is False
-
-    unit = create_unit(customer["id"], nopol="B 7011 NOA")
-    record_id = _record_id(make_transaction(unit["id"]))
-    _shift_record(
-        db_session, record_id, days_ago=20, garansi_sampai=date.today() + timedelta(days=4)
-    )
-
-    items = _items(client, jenis="garansi")
-    assert len(items) == 1
-    assert items[0]["bisa_followup"] is False
-
-    response = client.post(
-        f"/api/followup/items/{items[0]['id']}/followup",
-        json={"status": "DIBUKA"},
-    )
-    assert response.status_code == 409

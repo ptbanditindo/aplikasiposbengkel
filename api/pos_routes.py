@@ -91,6 +91,24 @@ def preview_transaction(payload: TransactionPreviewRequest):
         payment["kekurangan"] = Decimal("0.00")
         status_bayar = "BELUM_LUNAS"
         sisa_bayar = payment["sisa"]
+    elif jenis_bayar == "KREDIT":
+        total = Decimal(str(totals["total_servis"]))
+        uang_muka = Decimal(str(payload.dp or 0))
+        # Pratinjau toleran: saat isian belum lengkap, tampilkan sisa apa adanya.
+        if total <= 0 or uang_muka >= total:
+            sisa = max(total - uang_muka, Decimal("0.00"))
+            payment = {
+                "bayar": uang_muka,
+                "kembalian": Decimal("0.00"),
+                "sisa": sisa,
+            }
+        else:
+            payment = pricing_service.compute_credit_payment(
+                total, uang_muka, Decimal("0.00")
+            )
+        payment["kekurangan"] = Decimal("0.00")
+        status_bayar = "BELUM_LUNAS"
+        sisa_bayar = payment["sisa"]
     else:
         payment = pricing_service.compute_payment_preview(
             totals["total_servis"], payload.metode_bayar, payload.bayar

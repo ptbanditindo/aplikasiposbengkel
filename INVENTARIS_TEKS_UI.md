@@ -50,7 +50,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.2.3 |
+| Versi | BengkelPOS Radiator v2.2.4 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -62,10 +62,7 @@ Aturan yang dipakai:
 | Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
 | Label bagian | Follow up |
-| Kartu follow up | Piutang (N nota), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Tugas follow-up (Hari ini dan terlambat) |
-| Panel | Perlu ditindaklanjuti. Pengingat garansi, piutang, dan servis berkala yang sudah dekat. |
-| Tombol panel | Buka daftar follow-up |
-| Kosong pengingat | Tidak ada pengingat hari ini. |
+| Kartu follow up | Piutang (N nota), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal), Tugas follow-up (Belum selesai) |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Tombol | Muat ulang |
@@ -76,8 +73,8 @@ Aturan yang dipakai:
 
 | Lokasi | Teks |
 | --- | --- |
-| Judul daftar | Daftar follow-up, Servis berkala, Garansi akan habis, Tugas follow-up hari ini |
-| Keterangan daftar | Pengingat aktif. Pilih item untuk melihat detail. / Hari ini dan terlambat. Pilih item untuk melihat detail. |
+| Judul daftar | Daftar follow-up, Servis berkala, Garansi akan habis, Akan datang — Garansi, Akan datang — Servis berkala, Prospek pelanggan |
+| Keterangan daftar | Semua tugas aktif. Pilih item untuk melihat detail. / Pengingat aktif. Pilih item untuk melihat detail. / Jadwal kunjungan yang sudah disepakati. Pilih item untuk melihat detail. |
 | Memuat | Memuat follow-up... |
 | Kosong | Tidak ada item follow-up. |
 | Kartu item | Label jenis, jatuh tempo, nama pelanggan, judul pengingat, unit, nomor nota, penanggung jawab, "Lihat detail" |
@@ -85,13 +82,12 @@ Aturan yang dipakai:
 | Gagal muat | Daftar follow-up gagal dimuat. Coba lagi. |
 | Judul detail | Nama pelanggan |
 | Subjudul detail | Jenis · judul · jatuh tempo |
-| Label detail | Pelanggan, Unit, Jatuh tempo, Follow up terakhir |
+| Label detail | Pelanggan, Unit, Jatuh tempo, Follow up terakhir, Tanggal service |
 | Peringatan jeda | Bisa follow up lagi setelah <waktu>. |
-| Peringatan izin WA | Pelanggan belum menyetujui pesan WhatsApp. |
-| Tombol detail | Buka WhatsApp, Ambil tugas, Lepas tugas, Lihat pelanggan, Buka nota, Simpan status |
+| Tombol detail | Buka WhatsApp, Buka chat, Buka nota, Simpan status |
 | Bagian detail | Rincian, Riwayat tindakan, Pesan WhatsApp, Ubah status |
-| Pilihan status | Baru, Sudah follow up, Janji bayar, Masih kendala, Selesai, Arsip |
-| Field status | Status, Janji bayar (untuk JANJI_BAYAR), Catatan / alasan arsip |
+| Pilihan status | Baru, Sudah follow up, Janji bayar, Masih kendala, Selesai, Arsip; servis berkala dan garansi: Akan datang service, Tidak akan datang service |
+| Field status | Status, Janji bayar (untuk JANJI_BAYAR), Tanggal service (wajib bila akan datang), Catatan / alasan arsip |
 | Placeholder arsip | Opsional, wajib untuk arsip |
 | Validasi arsip | Isi alasan arsip minimal 3 karakter. |
 | Tombol tutup | Tutup |
@@ -124,8 +120,10 @@ Aturan yang dipakai:
 | Kosong | Belum ada jasa ditambahkan. Belum ada sparepart ditambahkan. |
 | Ringkasan | Ringkasan nota, Subtotal jasa, Subtotal sparepart, Total nota, Diskon (Rp) |
 | Catatan | Perkiraan sementara. Nilai final dicatat saat nota disimpan. |
-| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian, Jenis pembayaran, Lunas, DP / uang muka, DP diterima (Rp), Jatuh tempo (opsional), Sisa setelah DP |
+| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian, Jenis pembayaran, Lunas, DP / uang muka, Kredit, DP diterima (Rp), Jatuh tempo (opsional), Sisa tagihan |
 | Bantuan DP | Boleh dikosongkan. Pelunasan dicatat saat pekerjaan selesai. |
+| Kolom kredit | Rencana pembayaran (Rp), Tanggal rencana pembayaran (opsional), Ada penambahan uang (uang muka), Uang muka diterima (Rp) |
+| Bantuan kredit | Nominal yang dijanjikan pelanggan. Boleh dikosongkan. / Dipakai sebagai pengingat piutang. / Sisanya menjadi tagihan kredit. |
 | Garansi | Garansi servis, Durasi garansi, 1 bulan (30 hari), 2 bulan (60 hari), 3 bulan (90 hari), 6 bulan (180 hari), 12 bulan (360 hari), Atur sendiri, Jumlah bulan (1 sampai 120), Catatan garansi |
 | Tombol | Periksa nota, Simpan dan cetak struk, Simpan tanpa cetak |
 | Modal periksa nota | Periksa nota. Nama, No. HP, Unit, Keluhan & catatan, Jasa, Sparepart, Total jasa, Total part, Diskon, Grand total, Pembayaran & garansi. Baris jasa/sparepart menyebut interval bila lebih dari 0 (servis tiap N bulan). Tombol Benar, Edit, Tutup. |
@@ -147,15 +145,10 @@ Aturan yang dipakai:
 | Tombol | Muat ulang |
 | Jumlah | N nota |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode, Garansi, Aksi |
-| Tombol baris | Cetak ulang, Retur, Batalkan nota, Klaim garansi |
-| Lencana | Tunai, Transfer, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
+| Tombol baris | Cetak ulang, Klaim garansi |
+| Lencana | Tunai, Transfer, Lunas, DP, Kredit, Belum bayar, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
 | Kosong | Belum ada riwayat servis. |
 | Gagal muat | Riwayat servis gagal dimuat. Coba muat ulang. |
-| Retur | Isi jumlah retur minimal satu item. Alasan retur minimal 3 karakter. Simpan retur N item? Stok akan diperbarui. |
-| Sukses retur | Retur tersimpan. |
-| Pembatalan | Batalkan nota <nomor>? Stok dikembalikan dan nota tetap tersimpan di riwayat. |
-| Alasan batal | Alasan pembatalan (minimal 3 karakter): |
-| Sukses batal | Nota dibatalkan. |
 | Klaim | Proses klaim garansi untuk nota ini? |
 | Sukses klaim | Klaim garansi tercatat. |
 | Detail gagal | Detail nota gagal dimuat. Coba lagi. |
@@ -165,17 +158,12 @@ Aturan yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Detail nota |
-| Tombol | Tutup, Lihat pelanggan, Retur, Batalkan nota, Cetak struk |
-| Pembatalan | Nota dibatalkan |
+| Tombol | Tutup (Catat pembayaran ada di bagian Pembayaran) |
 | Bagian | Pelanggan dan unit, Keluhan awal, Catatan pengerjaan, Rincian jasa, Sparepart, Catatan garansi, Riwayat retur |
 | Kolom | Jasa, Qty, Harga, Subtotal, Barang, Harga deal |
 | Total | Total jasa, Total part, Diskon, Bayar, Kembalian, Total servis, Retur, Total neto |
 | Info | Waktu servis, Metode bayar, Status garansi, Garansi sampai |
-| Retur | Retur jasa / sparepart. Isi jumlah yang diretur. Stok sparepart kembali otomatis dan tidak bisa diretur dua kali. |
-| Kolom retur | Alasan retur, Contoh: barang tidak cocok / salah pasang |
-| Catatan retur | Operator pencatat diambil otomatis dari sesi yang masuk. |
-| Tombol retur | Batal, Simpan retur |
-| Kosong | Tidak ada rincian jasa. Tidak ada sparepart. Semua item nota ini sudah diretur. |
+| Kosong | Tidak ada rincian jasa. Tidak ada sparepart. |
 | Label modal | Laba <nominal>, modal belum diisi, modal estimasi |
 
 ## 7. Detail pelanggan (popup)
@@ -263,18 +251,18 @@ Aturan yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Laporan kas |
-| Keterangan | Pemasukan tunai, transfer, dan estimasi laba kotor sparepart. |
+| Keterangan | Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa. |
 | Periode | Periode laporan, Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba kotor sparepart |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa |
 | Tabel transaksi | Transaksi pada periode, Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Kosong | Tidak ada transaksi pada periode ini. |
 | Rekap | Rekap harian periode. Hanya hari yang memiliki transaksi. |
-| Kolom rekap | Tanggal, Transaksi, Omset, Tunai, Transfer, Laba kotor sparepart |
+| Kolom rekap | Tanggal, Transaksi, Omset, Tunai, Transfer, Laba bersih sparepart, Laba bersih jasa |
 | Bagian | Stok pernah terjual. Harga mengikuti harga deal. Barang yang sama diurutkan menurut waktu. |
 | Kolom terjual | Barang, Qty, Harga akhir, Subtotal, Waktu, No. nota |
 | Meta | <tanggal> sampai <tanggal>, N transaksi, N unit, Diskon, Garansi aktif, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
-| Label laba | Laba kotor <nominal>, retur -<nominal>, modal sparepart belum diisi |
+| Label laba | Laba bersih <nominal>, retur -<nominal>, modal sparepart belum diisi |
 | Gagal muat | Laporan gagal dimuat. Coba lagi. |
 | Catatan tombol backup | Tombol backup di halaman Laporan sudah dihapus. Backup hanya tersedia di Pengaturan. |
 

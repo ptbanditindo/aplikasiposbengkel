@@ -95,7 +95,6 @@ class CustomerCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
     nomor_hp: str = Field(..., max_length=64)
     alamat: Optional[str] = Field(default=None, max_length=500)
-    wa_consent: bool = True
 
 
 class CustomerOut(ORMModel):
@@ -103,12 +102,7 @@ class CustomerOut(ORMModel):
     nama: str
     nomor_hp: str
     alamat: Optional[str] = None
-    wa_consent: bool = True
     created_at: datetime
-
-
-class CustomerConsentIn(StrictBase):
-    wa_consent: bool
 
 
 class UnitCreate(CompatBase):
@@ -217,8 +211,9 @@ class CreateServiceTransactionRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
-    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP)$"))
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP|KREDIT)$"))
     dp: Decimal = Field(default=Decimal("0.00"), ge=0)
+    rencana_bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     jatuh_tempo: Optional[date] = None
     bergaransi: bool = True
     garansi_bulan: int = Field(default=1, ge=1, le=120)
@@ -233,8 +228,9 @@ class TransactionPreviewRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
-    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP)$"))
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP|KREDIT)$"))
     dp: Decimal = Field(default=Decimal("0.00"), ge=0)
+    rencana_bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     jobs: List[ServiceJobInput] = Field(default_factory=list)
     parts: List[ServicePartInput] = Field(default_factory=list)
 
@@ -350,7 +346,9 @@ class ServiceRecordOut(ORMModel):
     bayar: Money
     kembalian: Money
     status_bayar: str = "LUNAS"
+    jenis_bayar: str = "LUNAS"
     jatuh_tempo: Optional[date] = None
+    rencana_bayar: Money = ZERO_MONEY
     total_dibayar: Money = ZERO_MONEY
     sisa_bayar: Money = ZERO_MONEY
     bergaransi: bool
@@ -474,7 +472,6 @@ class FollowupItemOut(CompatBase):
     customer_nama: str
     nomor_hp: str
     nomor_masked: str
-    wa_consent: bool = True
     unit_id: Optional[int] = None
     unit_deskripsi: str = "-"
     service_record_id: Optional[int] = None
@@ -490,6 +487,7 @@ class FollowupItemOut(CompatBase):
     followup_terakhir: Optional[datetime] = None
     sudah_followup: bool = False
     janji_bayar: Optional[date] = None
+    tanggal_service: Optional[date] = None
     alasan_arsip: Optional[str] = None
     cooldown_sampai: Optional[datetime] = None
     bisa_followup: bool = True
@@ -505,6 +503,9 @@ class FollowupCountsOut(CompatBase):
     servis_berkala_due: int = 0
     prospek_count: int = 0
     followup_hari_ini: int = 0
+    followup_aktif: int = 0
+    akan_datang_servis: int = 0
+    akan_datang_garansi: int = 0
     garansi_akan_habis: int = 0
     piutang_count: int = 0
     piutang_customers: int = 0
@@ -522,11 +523,13 @@ class FollowupStatusIn(StrictBase):
     status: str = Field(
         ...,
         **_pattern(
-            "^(BARU|SUDAH_FOLLOWUP|JANJI_BAYAR|MASIH_KENDALA|SELESAI|ARSIP)$"
+            "^(BARU|SUDAH_FOLLOWUP|JANJI_BAYAR|MASIH_KENDALA|SELESAI|ARSIP"
+            "|AKAN_DATANG|TIDAK_DATANG)$"
         ),
     )
     alasan: Optional[str] = Field(default=None, max_length=500)
     janji_bayar: Optional[date] = None
+    tanggal_service: Optional[date] = None
 
 
 class FollowupAssignIn(StrictBase):
@@ -548,10 +551,6 @@ class FollowupDetailOut(CompatBase):
     item: FollowupItemOut
     events: List[FollowupEventOut] = Field(default_factory=list)
     pesan: str = ""
-
-
-class FollowupReminderOut(FollowupItemOut):
-    pengingat: str = ""
 
 
 class ReceiptLabelOut(CompatBase):
@@ -579,7 +578,9 @@ class ReceiptOut(ORMModel):
     bayar: Money
     kembalian: Money
     status_bayar: str = "LUNAS"
+    jenis_bayar: str = "LUNAS"
     jatuh_tempo: Optional[date] = None
+    rencana_bayar: Money = ZERO_MONEY
     total_dibayar: Money = ZERO_MONEY
     sisa_bayar: Money = ZERO_MONEY
     bergaransi: bool
@@ -603,7 +604,6 @@ class ReceiptOut(ORMModel):
     wa_text: str = ""
     completion_wa_text: str = ""
     customer_wa: str = ""
-    wa_consent: bool = True
     bengkel_nama: str
     bengkel_tagline: str
     bengkel_alamat: str
@@ -662,7 +662,10 @@ class DailySummaryOut(CompatBase):
     garansi_akan_habis: int = 0
     servis_berkala_due: int = 0
     followup_hari_ini: int = 0
+    followup_aktif: int = 0
     prospek_count: int = 0
+    akan_datang_servis: int = 0
+    akan_datang_garansi: int = 0
 
 
 class DailyReportOut(DailySummaryOut):

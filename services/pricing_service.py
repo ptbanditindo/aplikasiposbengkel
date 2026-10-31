@@ -91,6 +91,36 @@ def compute_dp_payment(total_servis: Any, dp: Any) -> Dict[str, Decimal]:
     }
 
 
+def compute_credit_payment(
+    total_servis: Any, uang_muka: Any = 0, rencana_bayar: Any = 0
+) -> Dict[str, Decimal]:
+    """Kredit: uang muka opsional (boleh Rp 0), sisanya menjadi tagihan.
+
+    Rencana pembayaran adalah nominal yang dijanjikan pelanggan dan tidak boleh
+    melebihi sisa tagihan.
+    """
+    total = money(total_servis)
+    muka = money(uang_muka)
+    if muka < 0:
+        raise PaymentError("Uang muka tidak boleh negatif.")
+    if muka >= total:
+        raise PaymentError(
+            "Uang muka harus lebih kecil dari grand total. Gunakan Lunas bila "
+            "pelanggan membayar penuh."
+        )
+    sisa = money(total - muka)
+    rencana = money(rencana_bayar)
+    if rencana > sisa:
+        raise PaymentError(
+            "Rencana pembayaran tidak boleh melebihi sisa tagihan."
+        )
+    return {
+        "bayar": muka,
+        "kembalian": Decimal("0.00"),
+        "sisa": sisa,
+    }
+
+
 def compute_payment_preview(
     total_servis: Any, metode_bayar: str, bayar: Any
 ) -> Dict[str, Decimal]:

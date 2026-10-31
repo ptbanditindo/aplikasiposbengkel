@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 14
 
 
 def get_user_version(conn) -> int:
@@ -504,6 +504,39 @@ def _migrate_012_part_interval(cursor) -> None:
     )
 
 
+def _migrate_013_followup_service_date(cursor) -> None:
+    """P-12: tanggal service yang disepakati pada follow-up berkala/garansi."""
+    _add_column(
+        cursor,
+        "followup_items",
+        "tanggal_service",
+        "tanggal_service DATE",
+    )
+
+
+def _migrate_014_record_credit(cursor) -> None:
+    """Kredit: jenis bayar tersimpan + nominal rencana pembayaran."""
+    if "service_records" not in _tables(cursor):
+        return
+    _add_column(
+        cursor,
+        "service_records",
+        "jenis_bayar",
+        "jenis_bayar VARCHAR(16) NOT NULL DEFAULT 'LUNAS'",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "rencana_bayar",
+        "rencana_bayar NUMERIC(14, 2)",
+    )
+    # Nota lama yang belum lunas adalah DP; belum ada kredit sebelum migrasi ini.
+    cursor.execute(
+        "UPDATE service_records SET jenis_bayar = 'DP' "
+        "WHERE status_bayar = 'BELUM_LUNAS'"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -517,6 +550,8 @@ MIGRATIONS: List[Migration] = [
     (10, _migrate_010_followup),
     (11, _migrate_011_unit_archive),
     (12, _migrate_012_part_interval),
+    (13, _migrate_013_followup_service_date),
+    (14, _migrate_014_record_credit),
 ]
 
 

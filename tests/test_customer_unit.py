@@ -156,7 +156,6 @@ def test_customer_overview_lists_units_and_counts(
     row = next(item for item in response.json() if item["id"] == customer["id"])
 
     assert row["nama"] == "Pak Slamet"
-    assert row["wa_consent"] is True
     assert row["total_unit"] == 2
     assert row["total_mobil"] == 1
     assert row["total_radiator"] == 1

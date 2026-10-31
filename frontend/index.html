@@ -192,24 +192,22 @@
             <strong id="statWarrantyEnding">0</strong>
             <span class="stat-sub">Ingatkan pelanggan</span>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka tugas follow-up hari ini" data-action="open-followup">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang garansi" data-action="open-followup" data-jenis="garansi" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Garansi</span>
+            <strong id="statAkanGaransi">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Servis berkala</span>
+            <strong id="statAkanServis">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka semua tugas follow-up aktif" data-action="open-followup">
             <span class="stat-label">Tugas follow-up</span>
             <strong id="statFollowupToday">0</strong>
-            <span class="stat-sub">Hari ini dan terlambat</span>
+            <span class="stat-sub">Belum selesai</span>
           </article>
         </div>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Perlu ditindaklanjuti</h2>
-              <p class="muted">Pengingat garansi, piutang, dan servis berkala yang sudah dekat.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="open-followup">Buka daftar follow-up</button>
-          </div>
-          <div class="reminder-list" id="reminderList"></div>
-          <div class="empty-state hidden" id="reminderEmpty">Tidak ada pengingat hari ini.</div>
-        </section>
 
         <section class="card">
           <div class="card-head">
@@ -446,6 +444,7 @@
                 <div class="segmented sm" id="jenisBayarSwitch" role="group" aria-label="Jenis pembayaran">
                   <button type="button" data-jenis="LUNAS" class="active">Lunas</button>
                   <button type="button" data-jenis="DP">DP / uang muka</button>
+                  <button type="button" data-jenis="KREDIT">Kredit</button>
                 </div>
               </div>
 
@@ -459,6 +458,31 @@
                   <input type="date" class="input" id="jatuhTempoInput">
                   <small class="tiny muted">Boleh dikosongkan. Pelunasan dicatat saat pekerjaan selesai.</small>
                 </label>
+              </div>
+
+              <div class="hidden" id="kreditFields">
+                <label class="field">
+                  <span>Rencana pembayaran (Rp)</span>
+                  <input type="text" class="input money-input" id="rencanaBayarInput" inputmode="numeric" placeholder="0">
+                  <small class="tiny muted">Nominal yang dijanjikan pelanggan. Boleh dikosongkan.</small>
+                </label>
+                <label class="field">
+                  <span>Tanggal rencana pembayaran (opsional)</span>
+                  <input type="date" class="input" id="rencanaTanggalInput">
+                  <small class="tiny muted">Dipakai sebagai pengingat piutang.</small>
+                </label>
+                <label class="switch-row">
+                  <span>Ada penambahan uang (uang muka)</span>
+                  <input type="checkbox" id="kreditUangMukaAktif">
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <div class="hidden" id="kreditUangMukaFields">
+                  <label class="field">
+                    <span>Uang muka diterima (Rp)</span>
+                    <input type="text" class="input money-input" id="kreditUangMukaInput" inputmode="numeric" placeholder="0">
+                    <small class="tiny muted">Sisanya menjadi tagihan kredit.</small>
+                  </label>
+                </div>
               </div>
 
               <div class="bank-info hidden" id="bankInfo">
@@ -479,7 +503,7 @@
               </div>
 
               <div class="summary-row hidden" id="dpSummaryRow">
-                <span>Sisa setelah DP</span>
+                <span>Sisa tagihan</span>
                 <strong id="dpSisaValue">Rp 0</strong>
               </div>
 
@@ -624,7 +648,7 @@
         <div class="page-head">
           <div>
             <h1>Laporan kas</h1>
-            <p class="muted">Pemasukan tunai, transfer, dan estimasi laba kotor sparepart.</p>
+            <p class="muted">Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa.</p>
           </div>
         </div>
 
@@ -642,7 +666,7 @@
           <button type="button" class="btn btn-primary" id="btnLoadReport">Tampilkan</button>
         </div>
 
-        <div class="stats-grid">
+        <div class="stats-grid stats-grid--report">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua nota pada periode" data-action="report-notas" data-filter="omset">
             <span class="stat-label">Total omset</span>
             <strong id="reportOmset">Rp 0</strong>
@@ -655,9 +679,13 @@
             <span class="stat-label">Transfer</span>
             <strong id="reportTransfer">Rp 0</strong>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba kotor sparepart" data-action="report-notas" data-filter="profit">
-            <span class="stat-label">Estimasi laba kotor sparepart</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota penyumbang laba bersih sparepart" data-action="report-notas" data-filter="profit">
+            <span class="stat-label">Estimasi laba bersih sparepart</span>
             <strong id="reportProfit">Rp 0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Estimasi laba bersih jasa</span>
+            <strong id="reportProfitJasa">Rp 0</strong>
           </article>
         </div>
 
@@ -691,7 +719,7 @@
           <div class="table-wrap">
             <table class="table table-period">
               <thead>
-                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba kotor sparepart</th></tr>
+                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba bersih sparepart</th><th class="text-right">Laba bersih jasa</th></tr>
               </thead>
               <tbody id="periodBody"></tbody>
             </table>
@@ -1049,7 +1077,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.2.3</span>
+        <span>BengkelPOS Radiator v2.2.4</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -1315,10 +1343,6 @@
       <div id="recordDetail"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="recordDismiss">Tutup</button>
-        <button type="button" class="btn btn-outline hidden" id="btnRecordCustomer">Lihat pelanggan</button>
-        <button type="button" class="btn btn-outline hidden" id="btnRecordReturn">Retur</button>
-        <button type="button" class="btn btn-danger hidden" id="btnRecordVoid">Batalkan nota</button>
-        <button type="button" class="btn btn-primary" id="btnRecordReprint">Cetak struk</button>
       </div>
     </div>
   </div>

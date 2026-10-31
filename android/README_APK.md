@@ -134,20 +134,17 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.330.716 byte
-- SHA-256: `f0855f5535aeddc1e980fe02614a584ddf8c6faa0768a0472232ae45a9c31be6`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.3`, versionCode `6`,
+- Ukuran: 45.329.642 byte
+- SHA-256: `a6feb95031eb6af46fb6621b87a5d00aa0772aa3af11cc8e64f44df261e52094`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.4`, versionCode `7`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 250.580 byte, SHA-256
-  `8b1de520ca23147254c3a9230ebc97be2fd5ceab62d8d95c9e41c3c0140fd259`.
-  `frontend/js/app.js`, `frontend/index.html`, `frontend/css/style.css`,
-  `services/pos_service.py`, `services/followup_service.py`, dan
-  `database/migrations.py` di dalam ZIP dicocokkan hash-nya dengan working tree
-  saat build. ZIP ini memuat arsip unit, keluhan awal bertombol simpan, pratinjau
-  nota, DP tanpa jatuh tempo, cetak lalu WhatsApp, pengingat di Ringkasan, dan
-  interval servis berkala untuk jasa dan sparepart.
-- Unit test JVM: **308 test** (Debug) lulus. Pytest backend: **288 test lulus**
-  di masing-masing stack (Pydantic v2 dan Pydantic 1.10).
+- Asset `assets/bengkel_backend.zip`: 249.495 byte, SHA-256
+  `045c7ef7feb32f531a7ff41496eba3f9caa8aae4675f7e1e19994fd84bd8130b`.
+  ZIP ini memuat laporan laba bersih sparepart/jasa, detail nota DP yang
+  disederhanakan, kirim WhatsApp otomatis saat cetak gagal, perbaikan tata
+  letak kasir di HP, dan kartu Tugas follow-up tanpa panel pengingat.
+- Unit test JVM dan pytest tidak dijalankan ulang untuk 2.2.4; hasil terakhir
+  yang tercatat adalah 308 test JVM dan 288 test pytest (2.2.3).
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 
@@ -206,9 +203,9 @@ asli tidak tersentuh. Yang sudah diperiksa dan sesuai:
 5. Nota mobil tidak memuat label atau teks "POTONG DI SINI". Teks WhatsApp
    struk lengkap memuat item dan total. Draf "Kendaraan selesai" memakai
    "siap diambil" tanpa kata hutang.
-6. Ringkasan menampilkan bagian Follow up dan panel Perlu ditindaklanjuti,
-   sedangkan navigasi tidak lagi memuat halaman Follow-up. Daftar Stok dan
-   Jasa menampilkan kolom Servis berkala.
+6. Ringkasan menampilkan bagian Follow up dengan kartu Tugas follow-up; panel
+   Perlu ditindaklanjuti sudah dihapus. Navigasi tidak memuat halaman
+   Follow-up. Daftar Stok dan Jasa menampilkan kolom Servis berkala.
 
 Belum diverifikasi karena butuh perangkat/printer nyata: pemasangan APK,
 cetak Bluetooth/Wi-Fi/USB, pembukaan `wa.me` dari APK, popup cetak browser,

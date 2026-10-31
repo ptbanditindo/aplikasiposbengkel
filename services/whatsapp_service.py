@@ -17,7 +17,7 @@ from database.models import ServiceRecord, WhatsAppLog
 from services import audit_service, payment_service, settings_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
-from services.errors import BusinessValidationError, ConflictError, NotFoundError
+from services.errors import BusinessValidationError, NotFoundError
 from services.utils import (
     format_rupiah,
     is_valid_whatsapp,
@@ -99,8 +99,6 @@ def append_attempt(
         raise BusinessValidationError(
             "Jenis pesan WhatsApp harus struk, followup, garansi, atau piutang."
         )
-    if not bool(getattr(customer, "wa_consent", True)):
-        raise ConflictError("Pelanggan belum menyetujui pesan WhatsApp.")
     if normalized == STATUS_OPENED and not is_valid_whatsapp(customer.nomor_hp):
         raise BusinessValidationError("Nomor WhatsApp pelanggan tidak valid.")
 

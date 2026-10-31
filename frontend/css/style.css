@@ -156,6 +156,7 @@ body {
   color: var(--text);
   background: var(--ground);
   min-height: 100vh;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
@@ -1115,6 +1116,7 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
 }
 .line-grid .qty-input { text-align: center; }
 .line-grid .btn { padding-left: 12px; padding-right: 12px; }
+.line-grid > * { min-width: 0; }
 .line-form--part .line-grid {
   grid-template-columns:
     minmax(150px, 1.1fr) minmax(140px, 1.1fr) 74px
@@ -1850,7 +1852,8 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .line-grid { grid-template-columns: 1fr 1fr; }
+  .line-grid,
+  .line-form--part .line-grid { grid-template-columns: 1fr 1fr; }
   .line-grid .btn { width: 100%; }
 }
 
@@ -1891,7 +1894,8 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   .search-row .btn { width: 100%; }
   .pill-count { align-self: flex-start; }
   .unit-grid { grid-template-columns: 1fr; }
-  .line-grid { grid-template-columns: 1fr; }
+  .line-grid,
+  .line-form--part .line-grid { grid-template-columns: 1fr; }
   .line-grid .qty-input { max-width: none; }
   .report-controls { align-items: stretch; }
   .report-controls .field.inline { flex: 1; }
@@ -2067,6 +2071,15 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
     grid-row: 3;
     justify-self: end;
   }
+  .table-stock td:nth-child(7) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .table-stock td:nth-child(7) .btn { width: auto; }
 
   .items-table {
     display: block;
@@ -2113,19 +2126,59 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
     line-height: 1;
     color: var(--muted);
   }
-  .items-table td:nth-child(4) {
-    grid-column: 1 / 3;
-    grid-row: 3;
-    align-self: center;
-    text-align: left;
-    font-size: 13px;
-  }
-  .items-table td:nth-child(5) {
+  .items-table .item-subtotal {
     grid-column: 3;
-    grid-row: 2 / 4;
+    grid-row: 2;
+    align-self: center;
+    justify-self: end;
+    text-align: right;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .items-table td:last-child {
+    grid-column: 3;
+    grid-row: 3;
     align-self: center;
     justify-self: end;
   }
+  .items-block--jasa .items-table td:nth-child(4) {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    display: grid;
+    gap: 4px;
+  }
+  .items-block--jasa .items-table td:nth-child(4)::before {
+    content: "Servis berkala (bulan)";
+    font-size: 11px;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .items-block--part .items-table td:nth-child(4) {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .items-block--part .items-table td:nth-child(4)::before {
+    content: "Modal";
+    font-size: 11px;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .items-block--part .items-table td:nth-child(5) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    display: grid;
+    gap: 4px;
+  }
+  .items-block--part .items-table td:nth-child(5)::before {
+    content: "Servis berkala (bulan)";
+    font-size: 11px;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .items-table .table-input.interval { max-width: none; text-align: left; }
   .items-table .item-subtotal::before {
     content: "Subtotal ";
     font-size: 11.5px;
@@ -2210,12 +2263,22 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   .table-period td:nth-child(4) { grid-column: 1; }
   .table-period td:nth-child(5) { grid-column: 2; }
   .table-period td:nth-child(6) { grid-column: 3; }
+  .table-period td:nth-child(7) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
   .table-period td:nth-child(4)::before { content: "Tunai"; }
   .table-period td:nth-child(5)::before { content: "Transfer"; }
-  .table-period td:nth-child(6)::before { content: "Laba part"; }
+  .table-period td:nth-child(6)::before { content: "Laba sparepart"; }
+  .table-period td:nth-child(7)::before { content: "Laba jasa "; }
   .table-period td:nth-child(4)::before,
   .table-period td:nth-child(5)::before,
-  .table-period td:nth-child(6)::before {
+  .table-period td:nth-child(6)::before,
+  .table-period td:nth-child(7)::before {
     font-size: 11px;
     font-weight: 400;
     color: var(--muted);
@@ -3263,6 +3326,7 @@ textarea.input, textarea.textarea { border-radius: var(--radius-control); }
   line-height: 1.3;
 }
 .stats-grid--secondary .stat-card strong { font-size: 22px; }
+.stats-grid--report { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
 a.btn { text-decoration: none; }
 
@@ -3277,39 +3341,6 @@ a.btn { text-decoration: none; }
 .items-table .table-input.interval { max-width: 92px; text-align: center; }
 .table .col-interval { width: 112px; }
 .table-jasa .cell-sub { margin-top: 2px; }
-
-/* Ringkasan pengingat */
-.reminder-list { display: grid; gap: 8px; }
-.reminder-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  width: 100%;
-  padding: 11px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  appearance: none;
-  transition: border-color .12s ease, background .12s ease;
-}
-.reminder-item:hover { border-color: var(--accent); background: var(--raised); }
-.reminder-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.reminder-main { display: grid; gap: 2px; min-width: 0; }
-.reminder-main strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 600; }
-.reminder-main small { color: var(--muted); font-size: 11.5px; }
-.reminder-side { display: grid; gap: 2px; text-align: right; }
-.reminder-side strong {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.reminder-side small { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
 /* Ringkasan follow-up */
 .section-label {
@@ -3471,8 +3502,6 @@ a.btn { text-decoration: none; }
 
 @media (max-width: 760px) {
   .stats-grid--secondary .stat-card strong { font-size: 19px; }
-  .reminder-item { grid-template-columns: auto minmax(0, 1fr); }
-  .reminder-side { grid-column: 2; grid-template-columns: auto auto; justify-content: flex-start; gap: 8px; text-align: left; }
 }
 
 @media (max-width: 560px) {

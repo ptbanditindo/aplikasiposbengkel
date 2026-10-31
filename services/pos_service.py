@@ -239,6 +239,7 @@ def _create_transaction_locked(
         )
         jenis_bayar = (getattr(payload, "jenis_bayar", "LUNAS") or "LUNAS").strip().upper()
         jatuh_tempo: date | None = None
+        rencana_bayar: Decimal | None = None
         if jenis_bayar == "DP":
             dp_value = getattr(payload, "dp", None)
             if dp_value is None or money(dp_value) <= 0:
@@ -254,6 +255,22 @@ def _create_transaction_locked(
                 )
             status_bayar = "BELUM_LUNAS"
             total_dibayar = payment["bayar"]
+        elif jenis_bayar == "KREDIT":
+            uang_muka = getattr(payload, "dp", None) or Decimal("0.00")
+            jatuh_tempo = getattr(payload, "jatuh_tempo", None)
+            if jatuh_tempo is not None and jatuh_tempo < now.date():
+                raise BusinessValidationError(
+                    "Tanggal rencana pembayaran tidak boleh di masa lalu."
+                )
+            payment = pricing_service.compute_credit_payment(
+                totals["total_servis"],
+                uang_muka,
+                getattr(payload, "rencana_bayar", None) or 0,
+            )
+            status_bayar = "BELUM_LUNAS"
+            total_dibayar = payment["bayar"]
+            if money(getattr(payload, "rencana_bayar", None) or 0) > 0:
+                rencana_bayar = money(payload.rencana_bayar)
         elif jenis_bayar == "LUNAS":
             payment = pricing_service.compute_payment(
                 totals["total_servis"], payload.metode_bayar, payload.bayar
@@ -261,7 +278,9 @@ def _create_transaction_locked(
             status_bayar = "LUNAS"
             total_dibayar = totals["total_servis"]
         else:
-            raise BusinessValidationError("Jenis bayar harus LUNAS atau DP.")
+            raise BusinessValidationError(
+                "Jenis bayar harus LUNAS, DP, atau KREDIT."
+            )
 
         garansi_sampai: date | None = None
         catatan_garansi: str | None = None
@@ -295,7 +314,9 @@ def _create_transaction_locked(
             bayar=payment["bayar"],
             kembalian=payment["kembalian"],
             status_bayar=status_bayar,
+            jenis_bayar=jenis_bayar,
             jatuh_tempo=jatuh_tempo,
+            rencana_bayar=rencana_bayar,
             total_dibayar=money(total_dibayar),
             bergaransi=bool(payload.bergaransi),
             garansi_sampai=garansi_sampai,

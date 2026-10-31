@@ -168,7 +168,15 @@ class ServiceRecord(Base):
     status_bayar: Mapped[str] = mapped_column(
         String(16), default="LUNAS", nullable=False, index=True
     )
+    # LUNAS | DP | KREDIT (jenis kesepakatan pembayaran saat nota dibuat).
+    jenis_bayar: Mapped[str] = mapped_column(
+        String(16), default="LUNAS", nullable=False
+    )
     jatuh_tempo: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    # Rencana pembayaran untuk nota kredit (null bila bukan kredit).
+    rencana_bayar: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
     total_dibayar: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
@@ -327,6 +335,7 @@ class FollowupItem(Base):
         DateTime, nullable=True
     )
     janji_bayar: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    tanggal_service: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     alasan_arsip: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)

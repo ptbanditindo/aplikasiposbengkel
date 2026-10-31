@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database.models import ServicePayment, ServiceRecord, VehicleOrUnit
+from database.models import FollowupItem, ServicePayment, ServiceRecord, VehicleOrUnit
 from repositories import service_record_repository as record_repo
 from services import followup_service, settings_service, warranty_service
 from services.customer_service import describe_unit
@@ -165,11 +165,19 @@ def _ops_snapshot(db: Session, today: date) -> Dict[str, Any]:
             ServiceRecord.garansi_sampai <= batas_garansi,
         )
     )
+    terjadwal = db.scalar(
+        select(func.count(FollowupItem.id)).where(
+            FollowupItem.jenis == followup_service.JENIS_GARANSI,
+            FollowupItem.status == followup_service.STATUS_AKAN_DATANG,
+        )
+    )
     return {
         "piutang_count": int(piutang[0] or 0),
         "piutang_customers": int(piutang[1] or 0),
         "piutang_total": money(piutang[2] or 0),
-        "garansi_akan_habis": int(garansi_akan_habis or 0),
+        "garansi_akan_habis": max(
+            0, int(garansi_akan_habis or 0) - int(terjadwal or 0)
+        ),
     }
 
 
@@ -181,8 +189,9 @@ def daily_report(db: Session, day: date | None = None) -> Dict[str, Any]:
     payments = _payments_between(db, start, end)
     summary = _summarize_records(db, records, payments)
     summary["tanggal"] = target
-    summary.update(_ops_snapshot(db, date.today()))
+    # Sinkronkan item follow-up dulu agar kartu garansi memakai status terbaru.
     summary.update(followup_service.counts(db, date.today()))
+    summary.update(_ops_snapshot(db, date.today()))
     return summary
 
 

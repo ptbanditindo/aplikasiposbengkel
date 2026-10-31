@@ -48,8 +48,8 @@ build step) di `http://127.0.0.1:8000`.
   proteksi hapus item yang sudah dipakai transaksi. Daftar stok memakai baris
   lebih rapat agar lebih banyak item terlihat; tabel jasa, riwayat, dan laporan
   tidak ikut dirapatkan.
-- **Laporan** — kas harian, rekap periode, penjualan sparepart, laba kotor,
-  rincian per metode bayar, dan laporan semua waktu.
+- **Laporan** — kas harian, rekap periode, penjualan sparepart, estimasi laba
+  bersih sparepart dan jasa, rincian per metode bayar, dan laporan semua waktu.
 - **Printer universal** — kelola beberapa printer dari Pengaturan: Bluetooth
   (SPP), Wi-Fi/LAN (TCP 9100), USB OTG, cetak lewat layanan Android, dan cetak
   lewat browser. Mendukung kertas 58/80 mm, tes cetak, serta printer utama.
@@ -165,7 +165,7 @@ tidak tersedia di PATH.
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir adalah versi **2.2.3** (versionCode 6).
+terakhir adalah versi **2.2.4** (versionCode 7).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan

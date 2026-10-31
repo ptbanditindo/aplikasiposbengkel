@@ -1,7 +1,7 @@
 """Endpoint follow-up, servis berkala, garansi, dan piutang (Tahap 13)."""
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -14,7 +14,6 @@ from api.schemas import (
     FollowupDetailOut,
     FollowupItemOut,
     FollowupListOut,
-    FollowupReminderOut,
     FollowupStatusIn,
     WhatsAppAttemptIn,
     WhatsAppLogOut,
@@ -37,11 +36,16 @@ def list_followup_items(
     filter: str = Query(default="semua", max_length=32),
     jenis: Optional[str] = Query(default=None, max_length=24),
     customer_id: Optional[int] = Query(default=None, gt=0),
+    status: Optional[str] = Query(default=None, max_length=24),
     db: Session = Depends(get_db),
 ):
     return FollowupListOut.model_validate(
         followup_service.list_items(
-            db, filter=filter, jenis=jenis, customer_id=customer_id
+            db,
+            filter=filter,
+            jenis=jenis,
+            customer_id=customer_id,
+            status=status,
         )
     )
 
@@ -49,14 +53,6 @@ def list_followup_items(
 @router.get("/followup/counts", response_model=FollowupCountsOut)
 def followup_counts(db: Session = Depends(get_db)):
     return FollowupCountsOut(**followup_service.counts(db))
-
-
-@router.get("/followup/reminders", response_model=List[FollowupReminderOut])
-def list_reminders(db: Session = Depends(get_db)):
-    return [
-        FollowupReminderOut.model_validate(row)
-        for row in followup_service.reminders(db)
-    ]
 
 
 @router.get("/followup/items/{item_id}", response_model=FollowupDetailOut)
@@ -102,6 +98,7 @@ def change_followup_status(
         operator,
         alasan=payload.alasan,
         janji_bayar=payload.janji_bayar,
+        tanggal_service=payload.tanggal_service,
     )
     return _item_out(db, item)
 
