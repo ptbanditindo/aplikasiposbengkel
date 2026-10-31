@@ -61,6 +61,7 @@
   --info-ink: #1d4f9e;
   --tint-unit-bg: #f3f7fd;
   --tint-unit-border: #d9e6f8;
+  --tint-complaint-border: #f0e0bd;
 
   --chrome-bg: #ffffff;
   --chrome-text: #0a0a0a;
@@ -124,6 +125,7 @@
   --info-ink: #a8caff;
   --tint-unit-bg: #131c2a;
   --tint-unit-border: #24344c;
+  --tint-complaint-border: #4a3a12;
 
   --chrome-bg: #111113;
   --chrome-text: #f4f4f5;
@@ -2773,6 +2775,10 @@ textarea.input, textarea.textarea { border-radius: var(--radius-control); }
 .step-card--unit {
   background: var(--tint-unit-bg);
   border-color: var(--tint-unit-border);
+}
+.step-card--complaint {
+  background: var(--warning-soft);
+  border-color: var(--tint-complaint-border);
 }
 .unit-card { border-radius: var(--radius-control); background: var(--surface); }
 .unit-card:hover { border-color: var(--muted); }

@@ -230,6 +230,7 @@
     printJobTimer: null,
     printJobSeen: new Set(),
     jenisBayar: 'LUNAS',
+    complaintConfirmed: false,
     detailPayments: [],
     detailWaLogs: [],
     followupItems: [],
@@ -575,6 +576,7 @@
     state.selectedUnit = null;
     state.jobs = [];
     state.parts = [];
+    state.complaintConfirmed = false;
     $('#unitCard').classList.add('hidden');
     $('#complaintCard').classList.add('hidden');
     $('#itemsCard').classList.add('hidden');
@@ -648,6 +650,7 @@
     state.jobs = [];
     state.parts = [];
     state.units = [];
+    state.complaintConfirmed = false;
 
     $('#customerSearch').value = customer.nama;
     hideCustomerResults();
@@ -770,11 +773,24 @@
     const unit = state.units.find((item) => item.id === unitId);
     if (!unit) return;
     state.selectedUnit = unit;
+    state.complaintConfirmed = false;
     renderUnits();
     $('#complaintCard').classList.remove('hidden');
-    $('#itemsCard').classList.remove('hidden');
+    $('#itemsCard').classList.add('hidden');
     updateSummaryCustomer();
     updateSummary();
+  }
+
+  function saveComplaint() {
+    if (!$('#keluhanInput').value.trim()) {
+      toast('Keluhan awal wajib diisi.', 'warning');
+      $('#keluhanInput').focus();
+      return;
+    }
+    state.complaintConfirmed = true;
+    $('#itemsCard').classList.remove('hidden');
+    $('#itemsCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    toast('Keluhan disimpan.', 'success');
   }
 
   function setUnitType(type) {
@@ -1548,6 +1564,7 @@
     state.jobs = [];
     state.parts = [];
     state.unitType = 'MOBIL';
+    state.complaintConfirmed = false;
 
     if ($('#customerSearch')) $('#customerSearch').value = '';
     hideCustomerResults();
@@ -1642,6 +1659,11 @@
     if (!$('#keluhanInput').value.trim()) {
       toast('Keluhan awal wajib diisi.', 'warning');
       $('#keluhanInput').focus();
+      return;
+    }
+    if (!state.complaintConfirmed) {
+      toast('Simpan keluhan awal terlebih dahulu.', 'warning');
+      $('#btnSaveComplaint').focus();
       return;
     }
     if (!state.jobs.length && !state.parts.length) {
@@ -6472,6 +6494,7 @@
     $('#partPicker').addEventListener('change', onPartPickerChange);
     $('#btnAddJob').addEventListener('click', addJob);
     $('#btnAddPart').addEventListener('click', addPart);
+    $('#btnSaveComplaint').addEventListener('click', saveComplaint);
 
     $$('input[name="metode"]').forEach((radio) =>
       radio.addEventListener('change', handlePaymentModeChange)
