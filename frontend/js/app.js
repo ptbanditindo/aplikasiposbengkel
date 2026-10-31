@@ -2000,6 +2000,31 @@
     return 'https://wa.me/' + target + suffix;
   }
 
+  async function openExternalLink(url) {
+    const target = String(url || '').trim();
+    if (!target) return false;
+    if (
+      hasNativeBridge() &&
+      window.BengkelBridge &&
+      typeof window.BengkelBridge.call === 'function'
+    ) {
+      try {
+        await window.BengkelBridge.call('openExternal', { url: target }, 15000);
+        return true;
+      } catch (err) {
+        toast(err.message || 'Tautan tidak dapat dibuka.', 'error', 6000);
+        return false;
+      }
+    }
+    const opened = window.open(target, '_blank');
+    if (!opened) {
+      toast('Tautan tidak dapat dibuka. Izinkan pop-up lalu coba lagi.', 'warning');
+      return false;
+    }
+    opened.opener = null;
+    return true;
+  }
+
   async function copyText(value, successMessage) {
     const text = String(value == null ? '' : value);
     if (!text.trim()) {
@@ -2061,20 +2086,24 @@
   }
 
   async function handleWaOpen(event) {
+    event.preventDefault();
     const preview = state.waPreview;
-    if (!preview || preview.disabled || !preview.link) {
-      event.preventDefault();
-      return;
-    }
+    if (!preview || preview.disabled || !preview.link) return;
+    const link = preview.link;
     const onOpen = preview.onOpen;
     state.waPreview = null;
     closeModal('#waModal');
-    if (!onOpen) return;
+    const opening = openExternalLink(link);
+    if (!onOpen) {
+      await opening;
+      return;
+    }
     try {
       await onOpen();
     } catch (err) {
       toast(err.message, 'error', 7000);
     }
+    await opening;
   }
 
   function receiptWaNumber(receipt) {

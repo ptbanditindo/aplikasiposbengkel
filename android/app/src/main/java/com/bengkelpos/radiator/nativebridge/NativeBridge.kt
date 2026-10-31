@@ -11,6 +11,8 @@ import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import com.bengkelpos.radiator.ExternalLinkPolicy
+import com.bengkelpos.radiator.R
 import com.bengkelpos.radiator.backend.BackendManager
 import com.bengkelpos.radiator.backup.BackupFolder
 import com.bengkelpos.radiator.backup.BackupFolderStore
@@ -101,6 +103,7 @@ class NativeBridge(
                     "systemTestPrint" -> systemTestPrint(requestId, args)
                     "systemPrintStatus" -> systemPrintStatus(requestId, args)
                     "systemPrintCancel" -> systemPrintCancel(requestId, args)
+                    "openExternal" -> openExternal(requestId, args)
                     else -> fail(requestId, "UNKNOWN", "Perintah tidak dikenal.")
                 }
             } catch (error: BridgeError) {
@@ -634,6 +637,26 @@ class NativeBridge(
     private fun systemPrintCancel(requestId: String, args: JSONObject) {
         val cancelled = systemPrintController.cancel(args.optInt("job_id", 0))
         reply(requestId, JSONObject().put("ok", true).put("cancelled", cancelled))
+    }
+
+    private fun openExternal(requestId: String, args: JSONObject) {
+        val url = args.optString("url", "").trim()
+        if (!ExternalLinkPolicy.isAllowed(url)) {
+            throw BridgeError("INVALID", "Tautan tidak diizinkan.")
+        }
+        val uri = Uri.parse(url)
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                reply(requestId, JSONObject().put("ok", true))
+            } catch (error: ActivityNotFoundException) {
+                fail(
+                    requestId,
+                    "NO_APP",
+                    activity.getString(R.string.whatsapp_unavailable),
+                )
+            }
+        }
     }
 
     private fun textLines(args: JSONObject): List<String> {

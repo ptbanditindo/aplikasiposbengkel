@@ -301,7 +301,12 @@ class MainActivity : AppCompatActivity() {
                 view: WebView,
                 request: WebResourceRequest,
             ): Boolean {
-                if (isLocalUrl(request.url)) return false
+                val url = request.url
+                if (isLocalUrl(url)) return false
+                if (ExternalLinkPolicy.isAllowed(url.toString())) {
+                    openExternalLink(url)
+                    return true
+                }
                 Toast.makeText(this@MainActivity, R.string.external_link_blocked, Toast.LENGTH_SHORT)
                     .show()
                 return true
@@ -542,6 +547,18 @@ class MainActivity : AppCompatActivity() {
     private fun appOrigin(): String = "http://$APP_HOST:$activePort"
 
     private fun appUrl(): String = "${appOrigin()}/"
+
+    private fun openExternalLink(uri: Uri) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (error: ActivityNotFoundException) {
+            Toast.makeText(
+                this@MainActivity,
+                R.string.whatsapp_unavailable,
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
 
     private fun isLocalUrl(url: Uri?): Boolean {
         if (url == null) return false
