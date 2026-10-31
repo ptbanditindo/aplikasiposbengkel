@@ -231,6 +231,7 @@
     printJobSeen: new Set(),
     jenisBayar: 'LUNAS',
     complaintConfirmed: false,
+    notaReviewed: false,
     detailPayments: [],
     detailWaLogs: [],
     followupItems: [],
@@ -645,6 +646,7 @@
   }
 
   async function chooseCustomer(customer) {
+    invalidateNotaReview();
     state.selectedCustomer = customer;
     state.selectedUnit = null;
     state.jobs = [];
@@ -753,6 +755,7 @@
         state.selectedUnit && state.selectedUnit.id === unitId;
       state.units = state.units.filter((item) => item.id !== unitId);
       if (wasSelected) {
+        invalidateNotaReview();
         state.selectedUnit = null;
         state.jobs = [];
         state.parts = [];
@@ -772,6 +775,7 @@
   function selectUnit(unitId) {
     const unit = state.units.find((item) => item.id === unitId);
     if (!unit) return;
+    invalidateNotaReview();
     state.selectedUnit = unit;
     state.complaintConfirmed = false;
     renderUnits();
@@ -1153,6 +1157,7 @@
     const price = readMoneyInput($('#jasaHarga'), 'Harga jasa');
     if (price === null) return;
 
+    invalidateNotaReview();
     state.jobs.push({
       harga_jasa_id: master ? master.id : null,
       deskripsi: description,
@@ -1190,6 +1195,7 @@
       : null;
     if (modalInput && modal === null) return;
 
+    invalidateNotaReview();
     state.parts.push({
       stock_item_id: stock ? stock.id : null,
       nama_part: name,
@@ -1305,6 +1311,7 @@
   }
 
   function removeItem(kind, index) {
+    invalidateNotaReview();
     if (kind === 'job') state.jobs.splice(index, 1);
     if (kind === 'part') state.parts.splice(index, 1);
     renderItems();
@@ -1318,6 +1325,7 @@
     const item = list[index];
     if (!item) return;
 
+    invalidateNotaReview();
     item[field] = target.value;
 
     if (field === 'jumlah' || field === 'harga' || field === 'harga_satuan') {
@@ -1476,6 +1484,7 @@
   }
 
   function handlePaymentModeChange() {
+    invalidateNotaReview();
     const transfer = getMetode() === 'TRANSFER';
     $('#bayarInput').disabled = transfer || getJenisBayar() === 'DP';
     $('#bankInfo').classList.toggle('hidden', !transfer);
@@ -1483,6 +1492,7 @@
   }
 
   function updateJenisBayar() {
+    invalidateNotaReview();
     const dpMode = getJenisBayar() === 'DP';
     $('#lunasFields').classList.toggle('hidden', dpMode);
     $('#dpFields').classList.toggle('hidden', !dpMode);
@@ -1556,6 +1566,8 @@
     state.parts = [];
     state.unitType = 'MOBIL';
     state.complaintConfirmed = false;
+    state.notaReviewed = false;
+    showSaveActions(false);
 
     if ($('#customerSearch')) $('#customerSearch').value = '';
     hideCustomerResults();
@@ -1637,29 +1649,40 @@
     };
   }
 
-  async function saveTransaction(printAfter) {
-    if (state.saving) return;
+  function showSaveActions(visible) {
+    ['#btnSavePrint', '#btnSaveOnly'].forEach((selector) => {
+      const button = $(selector);
+      if (button) button.classList.toggle('hidden', !visible);
+    });
+  }
+
+  function invalidateNotaReview() {
+    state.notaReviewed = false;
+    showSaveActions(false);
+  }
+
+  function validatePosForm() {
     if (!state.selectedCustomer) {
       toast('Pilih pelanggan terlebih dahulu.', 'warning');
-      return;
+      return false;
     }
     if (!state.selectedUnit) {
       toast('Pilih unit servis terlebih dahulu.', 'warning');
-      return;
+      return false;
     }
     if (!$('#keluhanInput').value.trim()) {
       toast('Keluhan awal wajib diisi.', 'warning');
       $('#keluhanInput').focus();
-      return;
+      return false;
     }
     if (!state.complaintConfirmed) {
       toast('Simpan keluhan awal terlebih dahulu.', 'warning');
       $('#btnSaveComplaint').focus();
-      return;
+      return false;
     }
     if (!state.jobs.length && !state.parts.length) {
       toast('Tambahkan minimal satu jasa atau sparepart.', 'warning');
-      return;
+      return false;
     }
     if (
       !moneyInputValid($('#diskonInput').value) ||
@@ -1671,14 +1694,161 @@
       state.parts.some((part) => !moneyInputValid(part.harga_satuan))
     ) {
       toast('Angka uang harus rupiah bulat tanpa desimal.', 'warning');
-      return;
+      return false;
     }
-    if (getJenisBayar() === 'DP') {
-      if (parseMoney($('#dpInput').value) <= 0) {
-        toast('Isi DP lebih dari Rp 0.', 'warning');
-        $('#dpInput').focus();
-        return;
-      }
+    if (getJenisBayar() === 'DP' && parseMoney($('#dpInput').value) <= 0) {
+      toast('Isi DP lebih dari Rp 0.', 'warning');
+      $('#dpInput').focus();
+      return false;
+    }
+    return true;
+  }
+
+  function reviewLineHtml(item, line, name) {
+    const qty = Math.max(1, intValue(item.jumlah, 1));
+    const price = name === 'job' ? item.harga : item.harga_satuan;
+    const interval = clampInterval(item.interval_servis_bulan);
+    return (
+      '<div class="review-line">' +
+      '<div class="review-line-main"><strong>' +
+      esc(item.deskripsi || item.nama_part || '-') +
+      '</strong><span>x' +
+      qty +
+      ' · ' +
+      fmtRp(price) +
+      (interval > 0 ? ' · servis tiap ' + interval + ' bulan' : '') +
+      '</span></div>' +
+      '<span class="review-line-total">' +
+      (line ? fmtRp(line.subtotal) : '\u2014') +
+      '</span></div>'
+    );
+  }
+
+  function buildNotaReviewHtml(preview) {
+    const customer = state.selectedCustomer || {};
+    const unit = state.selectedUnit || {};
+    const dpMode = getJenisBayar() === 'DP';
+    const jobs = state.jobs.length
+      ? state.jobs
+          .map((job, index) =>
+            reviewLineHtml(job, (preview.jobs || [])[index], 'job')
+          )
+          .join('')
+      : '<div class="empty-state sm">Belum ada jasa.</div>';
+    const parts = state.parts.length
+      ? state.parts
+          .map((part, index) =>
+            reviewLineHtml(part, (preview.parts || [])[index], 'part')
+          )
+          .join('')
+      : '<div class="empty-state sm">Belum ada sparepart.</div>';
+    const jatuhTempo = $('#jatuhTempoInput').value;
+    const garansiAktif = $('#garansiAktif').checked;
+
+    return (
+      '<div class="nota-review">' +
+      '<div class="review-block"><h4 class="detail-section-title">Pelanggan &amp; unit</h4>' +
+      '<div class="detail-grid">' +
+      detailItem('Nama', esc(customer.nama || '-')) +
+      detailItem('No. HP', esc(customer.nomor_hp || '-')) +
+      detailItem('Unit', esc(describeUnit(unit))) +
+      '</div></div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Keluhan &amp; catatan</h4>' +
+      '<p class="detail-text">' +
+      esc($('#keluhanInput').value.trim()) +
+      '</p>' +
+      ($('#catatanPengerjaan').value.trim()
+        ? '<p class="tiny muted">Catatan: ' +
+          esc($('#catatanPengerjaan').value.trim()) +
+          '</p>'
+        : '') +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Jasa</h4>' +
+      jobs +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Sparepart</h4>' +
+      parts +
+      '</div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Total</h4>' +
+      '<div class="review-total-row"><span>Total jasa</span><strong>' +
+      fmtRp(preview.biaya_jasa) +
+      '</strong></div>' +
+      '<div class="review-total-row"><span>Total part</span><strong>' +
+      fmtRp(preview.total_part) +
+      '</strong></div>' +
+      '<div class="review-total-row"><span>Diskon</span><strong>' +
+      fmtRp(preview.diskon) +
+      '</strong></div>' +
+      '<div class="review-total-row is-grand"><span>Grand total</span><strong>' +
+      fmtRp(preview.total_servis) +
+      '</strong></div></div>' +
+      '<div class="review-block"><h4 class="detail-section-title">Pembayaran &amp; garansi</h4>' +
+      '<div class="detail-grid">' +
+      detailItem(
+        'Metode',
+        esc(getMetode() === 'TRANSFER' ? 'Transfer' : 'Tunai')
+      ) +
+      detailItem('Jenis', esc(dpMode ? 'DP / uang muka' : 'Lunas')) +
+      (dpMode
+        ? detailItem('DP diterima', fmtRp(parseMoney($('#dpInput').value))) +
+          detailItem('Sisa', fmtRp(preview.sisa_bayar)) +
+          detailItem(
+            'Jatuh tempo',
+            esc(jatuhTempo ? fmtDate(jatuhTempo) : 'Tidak ditentukan')
+          )
+        : detailItem('Uang diterima', fmtRp(parseMoney($('#bayarInput').value))) +
+          detailItem('Kembalian', fmtRp(preview.kembalian))) +
+      detailItem('Garansi', esc(garansiAktif ? 'Aktif' : 'Tidak aktif')) +
+      (garansiAktif
+        ? detailItem('Durasi', esc(garansiBulanValue() + ' bulan'))
+        : '') +
+      '</div>' +
+      (garansiAktif && $('#garansiCatatan').value.trim()
+        ? '<p class="tiny muted">Catatan garansi: ' +
+          esc($('#garansiCatatan').value.trim()) +
+          '</p>'
+        : '') +
+      '</div></div>'
+    );
+  }
+
+  async function reviewNota() {
+    if (!validatePosForm()) return false;
+    await refreshPreview();
+    if (state.previewError) {
+      toast(state.previewError, 'warning');
+      return false;
+    }
+    if (!state.preview) {
+      toast('Ringkasan nota belum siap. Coba lagi.', 'warning');
+      return false;
+    }
+    $('#notaReviewBody').innerHTML = buildNotaReviewHtml(state.preview);
+    openModal('#notaReviewModal');
+    return true;
+  }
+
+  function editNotaReview() {
+    closeModal('#notaReviewModal');
+    const target = $('#keluhanInput');
+    if (target) target.focus();
+  }
+
+  function confirmNotaReview() {
+    closeModal('#notaReviewModal');
+    state.notaReviewed = true;
+    showSaveActions(true);
+    const button = $('#btnSavePrint');
+    if (button) button.focus();
+  }
+
+  async function saveTransaction(printAfter) {
+    if (state.saving) return;
+    if (!validatePosForm()) return;
+    if (!state.notaReviewed) {
+      toast('Periksa nota dan tekan Benar sebelum menyimpan.', 'warning');
+      await reviewNota();
+      return;
     }
     if (state.previewError) {
       toast(state.previewError, 'warning');
@@ -6485,6 +6655,16 @@
 
   function handleGlobalInput(event) {
     const target = event.target;
+    if (
+      target.id === 'keluhanInput' ||
+      target.id === 'catatanPengerjaan' ||
+      target.id === 'diskonInput' ||
+      target.id === 'bayarInput' ||
+      target.id === 'dpInput' ||
+      target.id === 'jatuhTempoInput'
+    ) {
+      invalidateNotaReview();
+    }
     if (isMoneyField(target)) {
       formatMoneyField(target);
       if (target.matches('[data-kind][data-field]')) {
@@ -6569,8 +6749,17 @@
     $('#garansiBulanCustom').addEventListener('change', () => {
       $('#garansiBulanCustom').value = String(garansiBulanValue());
     });
+    $('#btnReviewNota').addEventListener('click', reviewNota);
+    $('#btnNotaEdit').addEventListener('click', editNotaReview);
+    $('#notaReviewClose').addEventListener('click', editNotaReview);
+    $('#btnNotaCorrect').addEventListener('click', confirmNotaReview);
     $('#btnSavePrint').addEventListener('click', () => saveTransaction(true));
     $('#btnSaveOnly').addEventListener('click', () => saveTransaction(false));
+    $('#jatuhTempoInput').addEventListener('change', invalidateNotaReview);
+    $('#garansiAktif').addEventListener('change', invalidateNotaReview);
+    $('#garansiBulan').addEventListener('change', invalidateNotaReview);
+    $('#garansiBulanCustom').addEventListener('change', invalidateNotaReview);
+    $('#garansiCatatan').addEventListener('input', invalidateNotaReview);
 
     $('#historySearch').addEventListener(
       'input',

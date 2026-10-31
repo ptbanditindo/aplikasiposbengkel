@@ -1402,6 +1402,40 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.nota-review { display: grid; gap: 18px; }
+.nota-review .detail-grid { margin-bottom: 0; }
+.review-block { min-width: 0; }
+.review-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.review-line:last-child { border-bottom: 0; }
+.review-line-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.review-line-main strong { font-size: 13px; overflow-wrap: anywhere; }
+.review-line-main span { color: var(--muted); font-size: 11.5px; }
+.review-line-total {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.review-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+.review-total-row strong { font-family: var(--mono); }
+.review-total-row.is-grand {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 700;
+}
 .detail-table { font-size: 12.5px; min-width: 0; }
 .detail-table td { height: auto; padding: 9px 10px; }
 .detail-totals {

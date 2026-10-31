@@ -514,8 +514,9 @@
               </div>
 
               <div class="summary-actions">
-                <button type="button" class="btn btn-primary btn-block" id="btnSavePrint">Simpan &amp; cetak struk</button>
-                <button type="button" class="btn btn-outline btn-block" id="btnSaveOnly">Simpan tanpa cetak</button>
+                <button type="button" class="btn btn-primary btn-block" id="btnReviewNota">Periksa nota</button>
+                <button type="button" class="btn btn-primary btn-block hidden" id="btnSavePrint">Simpan &amp; cetak struk</button>
+                <button type="button" class="btn btn-outline btn-block hidden" id="btnSaveOnly">Simpan tanpa cetak</button>
               </div>
             </div>
           </aside>
@@ -1311,6 +1312,24 @@
         <button type="button" class="btn btn-outline" id="btnReceiptWhatsapp">WhatsApp</button>
         <button type="button" class="btn btn-outline" id="btnBrowserPrint">Cetak browser</button>
         <button type="button" class="btn btn-primary" id="btnReceiptPrint">Cetak</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ NOTA REVIEW MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="notaReviewModal" role="dialog" aria-modal="true" aria-labelledby="notaReviewTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="notaReviewTitle">Periksa nota</h3>
+          <p class="muted">Pastikan seluruh isi nota sudah benar sebelum disimpan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="notaReviewClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="notaReviewBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btnNotaEdit">Edit</button>
+        <button type="button" class="btn btn-primary" id="btnNotaCorrect">Benar</button>
       </div>
     </div>
   </div>
