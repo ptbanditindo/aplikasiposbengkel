@@ -3439,6 +3439,11 @@ a.btn { text-decoration: none; }
   text-align: right;
   white-space: nowrap;
 }
+.receivable-actions {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
 
 /* WhatsApp */
 .wa-log-list { display: grid; gap: 6px; }

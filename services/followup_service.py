@@ -25,7 +25,7 @@ from services import payment_service, settings_service, whatsapp_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
-from services.utils import format_rupiah, is_valid_whatsapp, mask_phone
+from services.utils import is_valid_whatsapp, mask_phone
 
 JENIS_PROSPEK = "prospek"
 JENIS_SERVIS = "servis_berkala"
@@ -735,26 +735,12 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
         )
 
     if item.jenis == JENIS_PIUTANG:
-        group = payment_service.receivables(
-            db, today=today, customer_id=customer.id
-        )
-        total_sisa = format_rupiah(group["total_sisa"])
-        group_items = group.get("items") or []
-        records = [row for group_row in group_items for row in group_row["records"]]
-        jumlah_nota = len(records) or 1
-        total_servis = sum(
-            (row["total_neto"] for row in records), Decimal("0.00")
-        )
-        jatuh = (
-            group_items[0]["jatuh_tempo_terdekat"] if group_items else None
-        )
+        if record is not None:
+            return whatsapp_service.completion_wa_text(record, info)
         return (
-            f"Halo Bapak/Ibu {customer.nama}, servis {unit} dengan nota "
-            f"{record.no_nota if record else '-'} sudah selesai. Silakan datang "
-            f"ke {info['nama']} untuk mengambil barangnya. Kekurangan "
-            f"pembayaran {total_sisa} dari total {format_rupiah(total_servis)}"
-            + (f", jatuh tempo {_format_date(jatuh)}" if jatuh else "")
-            + f" ({jumlah_nota} nota). Terima kasih."
+            f"Halo Bapak/Ibu {customer.nama}, kendaraan {unit} sudah selesai "
+            f"dikerjakan dan siap diambil di {info['nama']}. "
+            "Sisa pembayaran dapat diselesaikan saat pengambilan. Terima kasih."
         )
 
     return (

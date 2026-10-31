@@ -36,6 +36,7 @@ def record_whatsapp_attempt(
         payload.status,
         operator,
         catatan=payload.catatan,
+        jenis=payload.jenis,
     )
     return WhatsAppAttemptOut(
         status=log.status,

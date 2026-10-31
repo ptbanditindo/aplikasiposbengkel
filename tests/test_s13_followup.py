@@ -331,7 +331,7 @@ def test_garansi_akan_habis_followup_dan_hilangkan_pengingat(
 def test_piutang_followup_tidak_mengubah_sisa_dan_hanya_lunas_menghapus(
     client, create_customer, create_unit, make_transaction
 ):
-    customer = create_customer(nama="Pelanggan Piutang")
+    customer = create_customer(nama="Pelanggan Sisa")
     unit = create_unit(customer["id"], nopol="B 7007 PIU")
     record_id = _record_id(
         make_transaction(
@@ -352,7 +352,12 @@ def test_piutang_followup_tidak_mengubah_sisa_dan_hanya_lunas_menghapus(
         f"/api/followup/items/{item['id']}/followup",
         json={"status": "DIBUKA"},
     ).json()
-    assert "Kekurangan pembayaran" in body["wa_text"]
+    wa_text = body["wa_text"]
+    assert "sudah selesai dikerjakan" in wa_text
+    assert "siap diambil" in wa_text
+    assert "Sisa pembayaran" in wa_text
+    for kata in ("hutang", "piutang", "tagihan", "kekurangan"):
+        assert kata not in wa_text.lower(), (kata, wa_text)
     assert body["item"]["status"] == "SUDAH_FOLLOWUP"
 
     receivables = client.get("/api/receivables").json()

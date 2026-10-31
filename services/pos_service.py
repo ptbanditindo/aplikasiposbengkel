@@ -5,7 +5,7 @@ Ref: PRD FR-POS-01 s/d FR-POS-08.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -29,7 +29,6 @@ from repositories import service_record_repository as record_repo
 from services import (
     customer_service,
     pricing_service,
-    settings_service,
     warranty_service,
 )
 from services.auth_service import Operator
@@ -237,11 +236,9 @@ def _create_transaction_locked(
             payment = pricing_service.compute_dp_payment(
                 totals["total_servis"], dp_value
             )
+            # Tanggal jatuh tempo opsional; pelunasan dicatat saat selesai.
             jatuh_tempo = getattr(payload, "jatuh_tempo", None)
-            if jatuh_tempo is None:
-                ops = settings_service.get_ops_settings(db)
-                jatuh_tempo = now.date() + timedelta(days=ops["tempo_hari"])
-            if jatuh_tempo < now.date():
+            if jatuh_tempo is not None and jatuh_tempo < now.date():
                 raise BusinessValidationError(
                     "Jatuh tempo tidak boleh di masa lalu."
                 )

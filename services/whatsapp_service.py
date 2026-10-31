@@ -6,6 +6,7 @@ membuat tautan `wa.me`, dan mencatat status upaya yang dilakukan kasir.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
@@ -91,6 +92,35 @@ def record_wa_text(
     return render_template(template, record_values(record, bengkel))
 
 
+def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
+    """Satu-satunya sumber kalimat "kendaraan selesai" untuk pelanggan.
+
+    Tidak memakai kata hutang/piutang/tagihan/kekurangan; sisa pembayaran
+    disebut sebagai informasi pelunasan saat pengambilan.
+    """
+    customer = record.unit.customer
+    unit = describe_unit(record.unit)
+    bengkel_nama = (bengkel.get("nama") or "").strip()
+    text = (
+        f"Halo Bapak/Ibu {customer.nama}, kendaraan {unit} dengan nota "
+        f"{record.no_nota} sudah selesai dikerjakan dan siap diambil"
+        + (f" di {bengkel_nama}" if bengkel_nama else "")
+        + "."
+    )
+    sisa = payment_service.record_sisa(record)
+    if (record.status or "NORMAL") == "VOID" or sisa <= 0:
+        return text + " Terima kasih."
+
+    parts = [text]
+    if Decimal(record.total_dibayar or 0) > 0:
+        parts.append("DP sudah kami terima.")
+    parts.append(
+        f"Sisa pembayaran {format_rupiah(sisa)} dapat diselesaikan saat pengambilan."
+    )
+    parts.append("Terima kasih.")
+    return " ".join(parts)
+
+
 def build_link(nomor: str, message: str) -> str:
     digits = normalize_whatsapp(nomor)
     if not digits:
@@ -172,19 +202,28 @@ def log_attempt(
     operator: Operator,
     catatan: Optional[str] = None,
     now: Optional[datetime] = None,
+    jenis: str = JENIS_STRUK,
 ):
-    """Catat upaya WhatsApp struk. Mengembalikan (log, wa_text, link)."""
+    """Catat upaya WhatsApp nota. Mengembalikan (log, wa_text, link)."""
+    normalized_jenis = (jenis or JENIS_STRUK).strip().lower()
+    if normalized_jenis not in {JENIS_STRUK, JENIS_PIUTANG}:
+        raise BusinessValidationError(
+            "Jenis pesan WhatsApp nota harus struk atau piutang."
+        )
     with db.begin():
         record = db.get(ServiceRecord, record_id)
         if record is None:
             raise NotFoundError("Nota servis tidak ditemukan.")
         info = settings_service.get_bengkel_info(db)
-        template = settings_service.get_ops_settings(db)["wa_template"]
-        message = record_wa_text(record, info, template)
+        if normalized_jenis == JENIS_STRUK:
+            template = settings_service.get_ops_settings(db)["wa_template"]
+            message = record_wa_text(record, info, template)
+        else:
+            message = completion_wa_text(record, info)
         log, link = append_attempt(
             db,
             record.unit.customer,
-            jenis=JENIS_STRUK,
+            jenis=normalized_jenis,
             status=status,
             message=message,
             operator=operator,

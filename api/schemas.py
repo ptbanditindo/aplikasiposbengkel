@@ -424,6 +424,7 @@ class ReceivablesOut(CompatBase):
 class WhatsAppAttemptIn(StrictBase):
     status: str = Field(..., **_pattern("^(DIBUKA|DIBATALKAN|TIDAK_TERSEDIA)$"))
     catatan: Optional[str] = Field(default=None, max_length=500)
+    jenis: str = Field(default="struk", **_pattern("^(struk|piutang)$"))
 
 
 class WhatsAppLogOut(ORMModel):
@@ -593,6 +594,7 @@ class ReceiptOut(ORMModel):
     parts: List[ServicePartOut] = Field(default_factory=list)
     payments: List[PaymentOut] = Field(default_factory=list)
     wa_text: str = ""
+    completion_wa_text: str = ""
     customer_wa: str = ""
     wa_consent: bool = True
     bengkel_nama: str

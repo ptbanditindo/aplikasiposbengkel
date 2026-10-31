@@ -335,6 +335,7 @@ def build_receipt_payload(
         "parts": parts,
         "payments": payments,
         "wa_text": whatsapp_service.record_wa_text(record, info, wa_template),
+        "completion_wa_text": whatsapp_service.completion_wa_text(record, info),
         "customer_wa": normalize_whatsapp(customer.nomor_hp),
         "wa_consent": bool(getattr(customer, "wa_consent", True)),
         "bengkel_nama": info["nama"],

@@ -1490,15 +1490,6 @@
     $$('#jenisBayarSwitch button').forEach((button) => {
       button.classList.toggle('active', button.dataset.jenis === getJenisBayar());
     });
-    if (dpMode && !$('#jatuhTempoInput').value) {
-      const days = intValue(
-        state.config && state.config.ops ? state.config.ops.tempo_hari : 7,
-        7
-      );
-      const target = new Date();
-      target.setDate(target.getDate() + days);
-      $('#jatuhTempoInput').value = toISODate(target);
-    }
     updateSummary();
   }
 
@@ -1686,11 +1677,6 @@
       if (parseMoney($('#dpInput').value) <= 0) {
         toast('Isi DP lebih dari Rp 0.', 'warning');
         $('#dpInput').focus();
-        return;
-      }
-      if (!$('#jatuhTempoInput').value) {
-        toast('Isi tanggal jatuh tempo pelunasan.', 'warning');
-        $('#jatuhTempoInput').focus();
         return;
       }
     }
@@ -1953,6 +1939,56 @@
         }
       },
     });
+  }
+
+  async function openRecordForPayment(id) {
+    await openRecordDetail(id);
+    const input = $('#paymentNominal');
+    if (!input) return;
+    input.focus();
+    if (input.scrollIntoView) {
+      input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  async function openCompletionWhatsapp(id) {
+    try {
+      let receipt = state.detailRecord;
+      if (!receipt || receipt.id !== id) {
+        receipt = await API.receipt(id);
+      }
+      if (!receipt.wa_consent) {
+        toast('Pelanggan belum menyetujui pesan WhatsApp.', 'warning');
+        return;
+      }
+      if (!waDigits(receiptWaNumber(receipt))) {
+        toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
+        return;
+      }
+      if (!(receipt.completion_wa_text || '').trim()) {
+        toast('Pesan kendaraan selesai belum tersedia.', 'warning');
+        return;
+      }
+      openWaPreview({
+        judul: 'Kendaraan selesai · ' + receipt.no_nota,
+        subtitle: 'Periksa pesan untuk ' + receipt.customer_nama + '.',
+        nomor: receiptWaNumber(receipt),
+        text: receipt.completion_wa_text,
+        note: 'Membuka WhatsApp akan mencatat upaya pemberitahuan. Kasir tetap menekan kirim di WhatsApp.',
+        onOpen: async () => {
+          await API.recordWhatsapp(receipt.id, {
+            status: 'DIBUKA',
+            jenis: 'piutang',
+          });
+          toast('Pemberitahuan kendaraan selesai tercatat.', 'success');
+          if (state.detailRecord && state.detailRecord.id === receipt.id) {
+            await loadRecordExtras(receipt.id);
+          }
+        },
+      });
+    } catch (err) {
+      toast('Pesan kendaraan selesai gagal dimuat.', 'error', 6000);
+    }
   }
 
   function maybeOfferWhatsapp(receipt) {
@@ -3838,6 +3874,13 @@
       .join('');
     const sisa = moneyToCents(receipt.sisa_bayar);
     const canPay = receipt.status_bayar === 'BELUM_LUNAS' && sisa > 0;
+    const completion = canPay
+      ? '<div class="form-actions">' +
+        '<button type="button" class="btn btn-outline btn-sm" data-action="record-completion" data-id="' +
+        receipt.id +
+        '">Kendaraan selesai</button>' +
+        '</div>'
+      : '';
     const form = canPay
       ? '<div class="payment-form">' +
         '<div class="form-grid">' +
@@ -3874,6 +3917,7 @@
         ? '<div class="payment-list">' + rows + '</div>'
         : '<div class="empty-state sm">Belum ada pembayaran tercatat.</div>') +
       form +
+      completion +
       '</div>'
     );
   }
@@ -4927,6 +4971,13 @@
                 : '<span class="badge gray">' +
                   esc(record.umur_bucket) +
                   '</span>') +
+              '</td><td class="receivable-actions">' +
+              '<button type="button" class="btn btn-primary btn-xs" data-action="record-payment" data-id="' +
+              record.id +
+              '">Pelunasan</button>' +
+              '<button type="button" class="btn btn-outline btn-xs" data-action="record-completion" data-id="' +
+              record.id +
+              '">Kendaraan selesai</button>' +
               '</td></tr>'
           )
           .join('');
@@ -4944,7 +4995,7 @@
           '</span></div><span class="receivable-total">' +
           fmtRp(customer.total_sisa) +
           '</span></div>' +
-          '<div class="receivable-table-wrap"><table class="receivable-records"><thead><tr><th>Nota</th><th>Tanggal</th><th class="num">Sisa</th><th>Jatuh tempo</th><th>Umur</th></tr></thead><tbody>' +
+          '<div class="receivable-table-wrap"><table class="receivable-records"><thead><tr><th>Nota</th><th>Tanggal</th><th class="num">Sisa</th><th>Jatuh tempo</th><th>Umur</th><th>Aksi</th></tr></thead><tbody>' +
           rows +
           '</tbody></table></div></div>'
         );
@@ -5117,6 +5168,14 @@
     }
     if (action === 'payment-fill-sisa') {
       fillPaymentSisa();
+      return;
+    }
+    if (action === 'record-payment') {
+      await openRecordForPayment(id);
+      return;
+    }
+    if (action === 'record-completion') {
+      await openCompletionWhatsapp(id);
       return;
     }
 
