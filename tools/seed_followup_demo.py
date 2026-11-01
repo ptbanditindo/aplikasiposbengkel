@@ -474,10 +474,6 @@ with SessionLocal() as db:
         reason="Demo: sudah dihubungi, menunggu konfirmasi.",
     )
 
-    items[("piutang", dewi.id)].penanggung_jawab = "Kasir Siti"
-    items[("piutang", fajar.id)].penanggung_jawab = "Kasir Siti"
-    items[("garansi", lina.id)].penanggung_jawab = "Mekanik Andi"
-    items[("servis_berkala", rudi.id)].penanggung_jawab = "Mekanik Andi"
     db.commit()
 
     print("Database dummy:", DB_PATH)

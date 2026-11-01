@@ -38,18 +38,53 @@ build step) di `http://127.0.0.1:8000`.
   membuka WhatsApp dan **Pelunasan** untuk mencatat pembayaran. Pengingat hanya
   aktif pada hari jatuh tempo, terkunci setelah terkirim, dan terbuka lagi
   lewat **Ubah** pada kolom jatuh tempo bila pelanggan minta perpanjangan.
-  Opsi **Unit ditinggal** menandai kendaraan yang masih di bengkel agar dapat
-  dipakai follow-up saat kendaraan selesai.
+  Daftar piutang memakai kartu ringkas per pelanggan; klik nama untuk membuka
+  nota lengkap, sedangkan **Ingatkan**, **Chat**, dan **Pelunasan** tersedia
+  langsung sebagai pintasan di kartu. Pelanggan dengan beberapa nota punya
+  tombol **N nota** untuk membuka daftar notanya; satu klik **Ingatkan**
+  mengirim pesan untuk semua nota sekaligus dan mengunci seluruh tombol
+  pengingat sampai jatuh tempo salah satu nota diubah per nota.
+  Form pembayaran punya tombol **Kredit**: bila aktif, pembayaran boleh
+  sebagian dan sisanya tetap tercatat di Piutang. Opsi **Unit ditinggal**
+  menandai kendaraan yang masih di bengkel agar dapat dipakai follow-up saat
+  kendaraan selesai.
 - **WhatsApp manual** — setelah struk dicetak, aplikasi membuka WhatsApp berisi
   struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
   membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor
   ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
-- **Follow-up & servis berkala** — ringkasan tindak lanjut di dasbor untuk
-  piutang, kendaraan selesai, garansi yang akan habis, servis berkala, dan
-  prospek pelanggan, dengan daftar rincian dan riwayat tindakan. Kartu
+- **Follow-up & servis berkala** — menu **Follow up** tersendiri menampilkan
+  delapan kartu kategori: Piutang, Kendaraan selesai, Prospek, Berkendala,
+  Servis berkala, Garansi akan habis, serta Akan datang untuk garansi dan
+  servis berkala.
+  Setiap kartu membuka daftar atau popup terkait. Kartu follow-up punya
+  pintasan **Ingatkan** (WhatsApp dengan teks pengingat), **WA** (chat tanpa
+  teks), **Detail**, dan **Status**; tombol **Nota** dihapus karena nota
+  lengkap tersedia di Detail. Mengubah status prospek meminta konfirmasi;
+  status **Masih kendala** memindahkan prospek ke kartu **Berkendala**.
+  Pintasan Status pada Prospek hanya berisi **Masih bagus**, **Masih
+  kendala**, dan **Akan datang service** (tanggal wajib); prospek berjadwal
+  tetap di daftar Prospek dan tanggalnya bisa diubah.
+  Di kartu Berkendala, pintasan **Status** hanya berisi **Sudah datang**,
+  **Tidak datang**, dan **Reschedule** (wajib tanggal); reschedule
+  mengembalikan prospek ke daftar Prospek dengan tanggal kunjungan baru.
+  Detail prospek tidak lagi memuat tombol Ingatkan/WA atau form status.
+  Pada servis berkala dan garansi, status **Akan datang** beserta tanggal
+  memindahkan item ke kartu Akan datang, sedangkan **Tidak akan datang**
+  menghapusnya dari kolom follow up. Daftar Akan datang menampilkan pintasan
+  **Status** dan **WA** (chat tanpa teks). Detail item akan datang punya tiga
+  tombol: **Datang**, **Tidak datang**, dan **Reschedule** (wajib tanggal);
+  reschedule memperbarui jadwal tanpa mengeluarkan pelanggan dari kolom.
+  Detail servis berkala dan garansi tidak lagi memuat tombol Ingatkan/WA,
+  petunjuk jeda follow-up, atau form status karena semuanya ada di pintasan
+  kartu; detail menampilkan nota lengkap. Rincian servis berkala hanya
+  memuat baris dari nota yang menjadi sumber follow-up, tidak digabung
+  dengan nota lain. Bila teks pesan WhatsApp diedit
+  sebelum dibuka, tautan dan riwayat memakai teks hasil editan itu. Kartu
   **Kendaraan selesai** membuka unit yang ditandai "Unit ditinggal" saat nota
-  dicatat; kasir dapat mengabari pelanggan lewat WhatsApp lalu menandainya
-  sudah diambil. Setiap tarif jasa dan sparepart
+  dicatat; kasir dapat mengabari pelanggan lewat WhatsApp (tombol terkunci
+  setelah pesan dibuka) lalu menandainya sudah diambil. Bila masih ada sisa
+  tagihan, nota pembayaran dibuka lebih dulu dan unit baru ditandai diambil
+  setelah pembayaran tersimpan. Setiap tarif jasa dan sparepart
   punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
   saat dikerjakan dan menjadi pengingat servis berikutnya.
 - **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, interval servis
@@ -99,7 +134,7 @@ python run.py
 ```
 
 Buka `http://127.0.0.1:8000`. Saat pertama kali dibuka, aplikasi meminta Anda
-membuat PIN kasir 4&ndash;12 angka. Data tersimpan di
+membuat PIN pemilik 4&ndash;12 angka. Data tersimpan di
 `data/bengkel_radiator.db`, backup di `backups/`, dan konfigurasi printer di
 `data/printer_config.json`.
 
@@ -140,7 +175,7 @@ startup bila `APP_HOST` bukan loopback, menolak header `Host` asing, menolak
 permintaan tulis dari `Origin` lain, dan mematikan `/docs`, `/redoc`, serta
 `/openapi.json`.
 
-Akses aplikasi dijaga PIN kasir:
+Akses aplikasi dijaga PIN pemilik:
 
 - PIN dibuat saat aplikasi pertama kali dibuka dan disimpan sebagai hash
   PBKDF2 + salt di database (bukan plaintext).
@@ -236,7 +271,7 @@ Python 3.14.
 
 ## Keamanan dan data
 
-- PIN kasir di-hash PBKDF2-HMAC-SHA256 + salt; sesi ditandatangani HMAC dengan
+- PIN pemilik di-hash PBKDF2-HMAC-SHA256 + salt; sesi ditandatangani HMAC dengan
   rahasia yang tersimpan di database, sehingga reset PIN membatalkan sesi lama.
 - Server hanya mendengar loopback, memvalidasi `Host`, menolak `Origin` asing
   untuk permintaan tulis, dan tidak membuka dokumentasi API otomatis.

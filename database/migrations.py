@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 def get_user_version(conn) -> int:
@@ -586,6 +586,17 @@ def _migrate_016_ingat_piutang(cursor) -> None:
     )
 
 
+def _migrate_017_hapus_penugasan_followup(cursor) -> None:
+    """Bersihkan data penanggung jawab lama; fitur penugasan sudah dihapus."""
+    if "followup_items" not in _tables(cursor):
+        return
+    columns = _columns(cursor, "followup_items")
+    if "penanggung_jawab" in columns:
+        cursor.execute("UPDATE followup_items SET penanggung_jawab = NULL")
+    if "diambil_pada" in columns:
+        cursor.execute("UPDATE followup_items SET diambil_pada = NULL")
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -603,6 +614,7 @@ MIGRATIONS: List[Migration] = [
     (14, _migrate_014_record_credit),
     (15, _migrate_015_pengerjaan_nota),
     (16, _migrate_016_ingat_piutang),
+    (17, _migrate_017_hapus_penugasan_followup),
 ]
 
 

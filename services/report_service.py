@@ -161,6 +161,7 @@ def _ops_snapshot(db: Session) -> Dict[str, Any]:
                     followup_service.STATUS_ARSIP,
                     followup_service.STATUS_TIDAK_DATANG,
                     followup_service.STATUS_AKAN_DATANG,
+                    followup_service.STATUS_SELESAI,
                 ]
             ),
         )

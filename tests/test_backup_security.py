@@ -15,6 +15,7 @@ SENSITIVE_KEYS = (
     "auth.pin_hash",
     "auth.pin_salt",
     "auth.pin_epoch",
+    # Data PIN kasir lama tetap harus redaksi walau role-nya sudah dihapus.
     "auth.kasir_pin_hash",
     "auth.kasir_pin_salt",
     "auth.kasir_pin_epoch",
@@ -120,8 +121,6 @@ def _latest_backup():
 
 def test_backup_meredaksi_rahasia_dan_mempertahankan_data_bisnis(client):
     _configure_telegram(client)
-    kasir = client.put("/api/auth/kasir-pin", json={"pin": "9753"})
-    assert kasir.status_code == 200, kasir.text
     response = client.put(
         "/api/settings/bengkel",
         json={"nama": "BENGKEL BACKUP AMAN", "tagline": "Tetap Ada"},
@@ -194,7 +193,6 @@ def test_restore_meredaksi_backup_lama_dan_memaksa_pin_baru(
     status = anon_client.get("/api/auth/status")
     assert status.status_code == 200, status.text
     assert status.json()["pin_configured"] is False
-    assert status.json()["kasir_configured"] is False
 
     old_login = anon_client.post("/api/auth/login", json={"pin": "2468"})
     assert old_login.status_code != 200

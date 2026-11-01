@@ -47,6 +47,8 @@ MIN_FREE_MARGIN_BYTES = 20 * 1024 * 1024
 
 # Rahasia yang tidak boleh ikut ke berkas backup yang dapat dibagikan.
 # Konfigurasi bisnis (bengkel.*) dan data transaksi tetap disalin apa adanya.
+# Kunci kasir_pin_* adalah data lama yang tetap diredaksi meskipun role kasir
+# sudah dihapus, agar backup lama tidak membocorkan hash yang tidak terpakai.
 SENSITIVE_SETTING_KEYS = (
     "auth.pin_hash",
     "auth.pin_salt",

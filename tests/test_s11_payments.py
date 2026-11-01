@@ -229,6 +229,68 @@ def test_piutang_dikelompokkan_per_pelanggan_dan_kartu_sama(
     assert report["piutang_total"] == receivables["total_sisa"]
 
 
+def test_ingatkan_pelanggan_multi_nota_sekaligus_dan_mengunci_semua(
+    client, create_customer, create_unit
+):
+    customer = create_customer(nama="Multi Piutang", nomor_hp="081200000222")
+    unit = create_unit(customer["id"], nopol="B 1301 MLT")
+    first = _kredit_transaction(
+        client,
+        unit["id"],
+        uang_muka="50000",
+        jatuh_tempo=date.today().isoformat(),
+        request_id="multi-piutang-0001",
+    )
+    second = _kredit_transaction(
+        client,
+        unit["id"],
+        uang_muka="25000",
+        jatuh_tempo=(date.today() + timedelta(days=5)).isoformat(),
+        request_id="multi-piutang-0002",
+    )
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    first_record = first.json()["record"]
+    second_record = second.json()["record"]
+
+    sent = client.post(f"/api/customers/{customer['id']}/remind")
+    assert sent.status_code == 201, sent.text
+    body = sent.json()
+    assert first_record["no_nota"] in body["wa_text"]
+    assert second_record["no_nota"] in body["wa_text"]
+    assert "Total sisa" in body["wa_text"]
+    assert body["link"].startswith("https://wa.me/6281200000222?text=")
+
+    receivables = client.get("/api/receivables").json()
+    assert receivables["jumlah_nota"] == 2
+    for record in receivables["items"][0]["records"]:
+        assert record["sudah_diingatkan"] is True
+        assert record["bisa_diingatkan"] is False
+
+    again = client.post(f"/api/customers/{customer['id']}/remind")
+    assert again.status_code == 409
+    blocked_first = client.post(
+        f"/api/service-records/{first_record['id']}/remind"
+    )
+    blocked_second = client.post(
+        f"/api/service-records/{second_record['id']}/remind"
+    )
+    assert blocked_first.status_code == 409
+    assert blocked_second.status_code == 409
+
+    with SessionLocal() as db:
+        rows = (
+            db.query(ServiceRecord)
+            .filter(
+                ServiceRecord.id.in_(
+                    [first_record["id"], second_record["id"]]
+                )
+            )
+            .all()
+        )
+        assert all(row.diingatkan_pada is not None for row in rows)
+
+
 def test_laporan_memisahkan_nilai_nota_dan_uang_diterima(
     client, create_customer, create_unit
 ):

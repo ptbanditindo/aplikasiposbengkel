@@ -185,6 +185,17 @@ def test_origin_asing_pada_request_tulis_ditolak(anon_client):
     assert allowed.status_code == 200
 
 
+def test_hanya_pin_pemilik_tanpa_role(client, anon_client):
+    status = client.get("/api/auth/status").json()
+    assert status["authenticated"] is True
+    assert status["operator_id"] == "owner"
+    assert "role" not in status
+    assert "kasir_configured" not in status
+    assert anon_client.get("/api/auth/status").json().get("role") is None
+    assert client.put("/api/auth/kasir-pin", json={"pin": "9753"}).status_code == 404
+    assert client.delete("/api/auth/kasir-pin").status_code == 404
+
+
 def test_setup_pin_dan_login_memakai_cookie_sesi(anon_client):
     _clear_pin()
     status = anon_client.get("/api/auth/status").json()

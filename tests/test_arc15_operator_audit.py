@@ -116,61 +116,6 @@ def test_operator_palsu_dari_frontend_ditolak(client):
     assert fake_return.status_code == 422
 
 
-def test_kasir_tidak_boleh_tindakan_owner(
-    client,
-    anon_client,
-    create_customer,
-    create_unit,
-    make_transaction,
-    stock,
-):
-    created = client.put("/api/auth/kasir-pin", json={"pin": "9753"})
-    assert created.status_code == 200, created.text
-
-    status = anon_client.get("/api/auth/status").json()
-    assert status["kasir_configured"] is True
-
-    login = anon_client.post("/api/auth/login", json={"pin": "9753"})
-    assert login.status_code == 200, login.text
-    assert anon_client.get("/api/auth/status").json()["role"] == "kasir"
-
-    assert (
-        anon_client.put(
-            "/api/settings/bengkel", json={"nama": "Diubah Kasir"}
-        ).status_code
-        == 403
-    )
-    assert anon_client.post("/api/admin/backup").status_code == 403
-    assert anon_client.get("/api/audit-events").status_code == 403
-    assert (
-        anon_client.put("/api/auth/kasir-pin", json={"pin": "1111"}).status_code
-        == 403
-    )
-
-    # Kasir tetap boleh melakukan operasi dan tercatat sebagai kasir.
-    body = _sell(
-        client, make_transaction, create_customer, create_unit, stock
-    )
-    record = body["record"]
-    voided = anon_client.post(
-        f"/api/service-records/{record['id']}/void",
-        json={"alasan": "Salah input pelanggan"},
-    )
-    assert voided.status_code == 200, voided.text
-    assert voided.json()["voided_by"] == "Kasir"
-
-    events = _audit(client)
-    assert len(events) == 1
-    event = events[0]
-    assert event["operator_id"] == "kasir"
-    assert event["operator_role"] == "kasir"
-    assert event["action"] == "VOID"
-    assert event["reference_type"] == "SERVICE_RECORD"
-    assert event["reference_id"] == record["no_nota"]
-    assert event["reason"] == "Salah input pelanggan"
-    assert event["created_at"]
-
-
 def test_owner_boleh_mengelola_dan_mencatat_audit_retur(
     client,
     create_customer,

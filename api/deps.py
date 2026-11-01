@@ -1,6 +1,6 @@
 """Dependency FastAPI: autentikasi semua endpoint /api.
 
-Mode `session-pin` (web lokal) memakai cookie sesi dari login PIN kasir.
+Mode `session-pin` (web lokal) memakai cookie sesi dari login PIN pemilik.
 Mode `install-token` (APK) memakai token acak per instalasi yang dikirim lewat
 header `X-Install-Token` dan dibandingkan constant-time. Dependency ini memakai
 sesi database sendiri yang singkat agar tidak membuka transaksi pada sesi
@@ -40,7 +40,7 @@ def require_auth(request: Request) -> Operator:
         if operator is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Silakan masuk dengan PIN kasir terlebih dahulu.",
+                detail="Silakan masuk dengan PIN pemilik terlebih dahulu.",
                 headers={"WWW-Authenticate": "Session"},
             )
         return operator
@@ -64,7 +64,7 @@ def require_auth(request: Request) -> Operator:
 
 
 def require_owner(operator: Operator = Depends(require_auth)) -> Operator:
-    if operator.role != auth_service.OWNER_ROLE:
+    if operator.id != auth_service.OWNER.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tindakan ini hanya untuk pemilik bengkel.",

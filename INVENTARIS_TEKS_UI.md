@@ -24,15 +24,15 @@ Aturan yang dipakai:
 
 | Lokasi | Teks |
 | --- | --- |
-| Judul setup | Buat PIN kasir |
+| Judul setup | Buat PIN pemilik |
 | Keterangan setup | PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu. |
 | Label | PIN baru |
 | Label | Ulangi PIN |
 | Tombol | Simpan PIN |
 | Judul login | Masuk |
-| Keterangan login | Masukkan PIN kasir untuk membuka bengkel. |
+| Keterangan login | Masukkan PIN pemilik untuk membuka bengkel. |
 | Label | PIN |
-| Tombol | Buka kasir |
+| Tombol | Buka aplikasi |
 | Bantuan | Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus. |
 | Kesalahan PIN pendek | PIN minimal 4 angka. |
 | Kesalahan PIN ulang | PIN yang diulang tidak sama. |
@@ -47,7 +47,7 @@ Aturan yang dipakai:
 | Merek | BengkelPOS Radiator |
 | Tagline | Kasir dan servis radiator |
 | Grup navigasi | Operasional |
-| Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Stok, Jasa, Laporan, Pengaturan |
+| Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
 | Versi | BengkelPOS Radiator v2.2.4 |
@@ -61,8 +61,6 @@ Aturan yang dipakai:
 | Keterangan | Servis dan pembayaran yang tercatat hari ini. |
 | Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
-| Label bagian | Follow up |
-| Kartu follow up | Piutang (N nota), Kendaraan selesai (Siap dikabari), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal) |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Tombol | Muat ulang |
@@ -76,8 +74,13 @@ Aturan yang dipakai:
 | Judul | Piutang pelanggan |
 | Keterangan | Nota yang belum lunas. / Nota belum lunas pelanggan ini. |
 | Ringkasan | N pelanggan · N nota · total sisa Rp... |
-| Kolom | Nota, Tanggal, Sisa, Jatuh tempo (+ Ubah/Atur), Umur, Aksi |
-| Tombol aksi | Pelunasan, Ingatkan |
+| Kartu pelanggan | Nama (klik membuka nota lengkap), nomor WA, jatuh tempo terdekat + Ubah/Atur, nomor nota terdekat dan tanggalnya |
+| Pintasan kartu | Ingatkan/Diingatkan, Chat, Pelunasan |
+| Beberapa nota | Tombol "N nota" membuka tabel semua nota pelanggan |
+| Ingatkan beberapa nota | Satu klik mengirim satu pesan berisi semua nota; setelah terkirim semua tombol Ingatkan terkunci sampai jatuh tempo salah satu nota diubah |
+| Ubah tempo beberapa nota | Ubah/Atur hanya tampil di kepala untuk satu nota; pelanggan dengan 2+ nota memakai Ubah per nota di tabel |
+| Kolom (setelah N nota dibuka) | Nota, Tanggal, Sisa, Jatuh tempo (+ Ubah/Atur), Umur, Aksi |
+| Tombol baris nota | Pelunasan, Ingatkan/Diingatkan, Chat |
 | Ingatkan terkunci | Diingatkan (sebelum jatuh tempo: Ingatkan nonaktif dengan keterangan tanggal mulai) |
 | Ubah tempo | Judul: Ubah jatuh tempo / Tanggal jatuh tempo * / Batal, Simpan tanggal |
 | Berhasil ubah tempo | Jatuh tempo diperbarui. Pengingat aktif lagi pada tanggal baru. |
@@ -94,17 +97,20 @@ Aturan yang dipakai:
 | Keterangan daftar | Semua tugas aktif. Pilih item untuk melihat detail. / Pengingat aktif. Pilih item untuk melihat detail. / Jadwal kunjungan yang sudah disepakati. Pilih item untuk melihat detail. |
 | Memuat | Memuat follow-up... |
 | Kosong | Tidak ada item follow-up. |
-| Kartu item | Label jenis, jatuh tempo, nama pelanggan, judul pengingat, unit, nomor nota, penanggung jawab, "Lihat detail" |
-| Belum ditugaskan | Belum ditugaskan |
+| Kartu item | Gaya kartu seperti Kendaraan selesai: nama pelanggan, unit, nomor WA, jatuh tempo/status, judul pengingat, nomor nota, status |
+| Pintasan kartu | WA, Nota (bila ada nota), Detail |
+| Klik nama | Membuka nota lengkap bila ada; bila tidak ada nota, membuka detail follow-up |
 | Gagal muat | Daftar follow-up gagal dimuat. Coba lagi. |
 | Judul detail | Nama pelanggan |
 | Subjudul detail | Jenis · judul · jatuh tempo |
-| Label detail | Pelanggan, Unit, Jatuh tempo, Follow up terakhir, Tanggal service |
+| Label detail | Pelanggan, Domisili, WhatsApp, Unit, Jatuh tempo, Follow up terakhir, Tanggal service |
 | Peringatan jeda | Bisa follow up lagi setelah <waktu>. |
 | Tombol detail | Buka WhatsApp, Buka chat, Buka nota, Simpan status |
-| Bagian detail | Rincian, Riwayat tindakan, Pesan WhatsApp, Ubah status |
-| Pilihan status | Baru, Sudah follow up, Janji bayar, Masih kendala, Selesai, Arsip; servis berkala dan garansi: Akan datang service, Tidak akan datang service |
-| Field status | Status, Janji bayar (untuk JANJI_BAYAR), Tanggal service (wajib bila akan datang), Catatan / alasan arsip |
+| Bagian detail | Rincian, Riwayat tindakan, Pesan WhatsApp, Ubah status; Riwayat tindakan tidak ditampilkan untuk prospek |
+| Detail akan datang | Pelanggan, WhatsApp, Domisili, Unit, Tanggal service, dan isi lengkap nota sumber follow-up (waktu servis, metode/status bayar, garansi, keluhan, rincian jasa, sparepart, total, dibayar, sisa). Bagian Catatan garansi memuat isi catatan lalu keterangan "Garansi … berakhir … · Service …". Tombol Datang, Tidak datang, dan Tutup sejajar di footer; Datang/Tidak datang meminta konfirmasi. Tanpa Buka WhatsApp, Buka chat, Buka nota, Pesan WhatsApp, dan form jadwal. |
+| Konfirmasi datang | Tandai pelanggan datang? / Tandai pelanggan tidak datang? |
+| Pilihan status | Baru, Sudah follow up, Janji bayar, Masih kendala, Selesai, Arsip; prospek: Akan datang service; servis berkala dan garansi: Akan datang service, Selesai (Datang), Tidak akan datang service |
+| Field status | Status, Janji bayar (untuk JANJI_BAYAR), Tanggal service (wajib bila akan datang), Tanggal kunjungan (prospek, wajib bila akan datang), Catatan / alasan arsip |
 | Placeholder arsip | Opsional, wajib untuk arsip |
 | Validasi arsip | Isi alasan arsip minimal 3 karakter. |
 | Tombol tutup | Tutup |
@@ -119,11 +125,25 @@ Aturan yang dipakai:
 | Kosong | Tidak ada kendaraan yang menunggu diambil. |
 | Ringkasan | N nota · unit masih di bengkel |
 | Kolom | Nota, Tanggal, Pelanggan / unit, Sisa, Aksi |
+| Klik kartu | Seluruh kartu membuka nota; tombol aksi tetap terpisah |
 | Tombol aksi | Kabari WA, Sudah diambil |
-| Konfirmasi ambil | Tandai unit sudah diambil pelanggan? |
+| Sudah dikabari | Tombol Kabari WA berubah menjadi Sudah dikabari (nonaktif) setelah WhatsApp kendaraan selesai dibuka. |
+| Konfirmasi ambil | Tandai unit sudah diambil pelanggan? / Nota masih memiliki sisa Rp… Unit baru ditandai diambil setelah pembayaran dicatat. Buka nota sekarang? |
 | Berhasil | Unit ditandai sudah diambil. |
+| Nota otomatis | Bila masih ada sisa tagihan, nota dan form pembayaran dibuka lebih dulu; unit baru ditandai diambil setelah pembayaran tersimpan. Menutup nota tanpa pembayaran membuat unit tetap di daftar. |
 | Gagal muat | Daftar kendaraan gagal dimuat. Coba lagi. |
 | Tombol tutup | Tutup |
+
+### 3.4 Halaman Follow up
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Follow up |
+| Keterangan | Pengingat aktif pelanggan: piutang, kendaraan selesai, prospek, servis berkala, dan garansi. |
+| Kartu | Piutang (Rp total, N nota · N pelanggan), Kendaraan selesai (Siap dikabari), Prospek (Tanya service), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal), Akan datang — Hasil prospek (Sudah ada tanggal) |
+| Tombol kartu | Membuka daftar piutang, kendaraan selesai, atau daftar follow-up sesuai kategori |
+| Tombol | Muat ulang |
+| Gagal muat | Follow up gagal dimuat. Coba muat ulang. |
 
 ## 4. Kasir
 
@@ -196,6 +216,8 @@ Aturan yang dipakai:
 | Kolom | Jasa, Qty, Harga, Subtotal, Barang, Harga deal |
 | Total | Total jasa, Total part, Diskon, Bayar, Kembalian, Total servis, Retur, Total neto |
 | Info | Waktu servis, Metode bayar, Status garansi, Garansi sampai |
+| Pembayaran | Kredit (bayar sebagian), Nominal pembayaran, Metode, Catatan, Setengah, Isi sisa, Catat pembayaran |
+| Bantuan kredit bayar | Kredit aktif: boleh membayar sebagian, sisa tetap di Piutang. Kredit nonaktif: pembayaran harus penuh. |
 | Kosong | Tidak ada rincian jasa. Tidak ada sparepart. |
 | Label modal | Laba <nominal>, modal belum diisi, modal estimasi |
 
@@ -403,21 +425,10 @@ Aturan yang dipakai:
 | Sukses simpan | Pengaturan Telegram tersimpan. |
 | Gagal simpan | Pengaturan Telegram gagal disimpan. Coba lagi. |
 
-### 12.6 PIN kasir dan keamanan
+### 12.6 Keamanan aplikasi
 
 | Lokasi | Teks |
 | --- | --- |
-| Judul | PIN kasir |
-| Status | PIN kasir aktif. Kasir dapat masuk memakai PIN-nya sendiri. Belum diatur. Hanya pemilik yang dapat membuat PIN kasir. |
-| Keterangan | Kasir dapat membuat transaksi, membatalkan nota, dan mencatat retur. Pengaturan, backup, dan pemulihan data tetap khusus pemilik. |
-| Kolom | PIN kasir (4 sampai 12 angka) |
-| Tombol | Hapus PIN kasir, Simpan PIN kasir |
-| Validasi | PIN kasir minimal 4 angka. |
-| Sukses | PIN kasir tersimpan. |
-| Gagal | PIN kasir gagal disimpan. Coba lagi. |
-| Hapus | Hapus PIN kasir? Kasir tidak dapat masuk lagi sampai PIN baru dibuat. |
-| Sukses hapus | PIN kasir dihapus. |
-| Gagal hapus | PIN kasir gagal dihapus. Coba lagi. |
 | Judul keamanan | Keamanan aplikasi |
 | Keterangan | PIN diminta setiap aplikasi dibuka dan setelah aplikasi lama di latar belakang. |
 | Pilihan kunci | Kunci otomatis setelah di latar belakang, 1 menit, 2 menit, 5 menit, 10 menit, 30 menit |
@@ -574,9 +585,9 @@ HTTP diganti dengan kalimat umum di atas.
 12. Tombol cetak kini mencetak struk lalu membuka WhatsApp berisi struk lengkap.
     Tidak ada lagi tombol WhatsApp terpisah setelah transaksi, template pesan
     WhatsApp, atau pilihan kirim otomatis setelah cetak.
-13. Halaman Follow-up mandiri dihapus dari navigasi. Pengingat tampil di
-    Ringkasan sebagai bagian Follow up dengan kartu piutang, kendaraan selesai,
-    servis berkala, dan garansi, lalu dibuka lewat daftar dan detail follow-up.
+13. Pengingat tidak lagi tampil di Ringkasan. Menu Follow up mandiri berisi
+    kartu piutang, kendaraan selesai, servis berkala, garansi, prospek, dan
+    jadwal akan datang, lalu dibuka lewat daftar dan detail follow-up.
 14. Tarif jasa dan sparepart punya interval servis berkala 0 sampai 120 bulan.
     Nilainya tampil di kasir, daftar stok, daftar jasa, dan pratinjau nota, serta
     menjadi sumber pengingat servis berkala. Interval 0 berarti nonaktif.
@@ -585,5 +596,66 @@ HTTP diganti dengan kalimat umum di atas.
     jatuh tempo atau setelahnya, dan terkunci setelah satu pengingat terkirim.
     Tombol Ubah/Atur pada kolom Jatuh tempo memindahkan tanggal pembayaran
     (reschedule); tanggal baru membuka lagi kesempatan mengingatkan. Tombol
+    Chat pada kepala pelanggan langsung membuka wa.me tanpa teks. Tombol
     Kendaraan selesai di piutang dan daftar riwayat WhatsApp pada detail nota
     dihapus.
+16. Menu Follow up tersendiri memakai delapan kartu kategori: Piutang,
+    Kendaraan selesai, Prospek, Servis berkala, Garansi akan habis, Akan
+    datang — Garansi, Akan datang — Servis berkala, dan Akan datang — Hasil
+    prospek. Setiap kartu membuka daftar atau popup terkait, dan bagian
+    Follow up di Ringkasan dihapus.
+17. Popup pratinjau WhatsApp hanya punya tombol Tutup dan Buka WhatsApp;
+    tombol Salin teks dihapus. Kabari WA pada Kendaraan selesai terkunci
+    setelah WhatsApp dibuka agar pesan tidak terkirim berulang.
+18. Pengingat piutang dari daftar Piutang, follow-up WhatsApp pada detail
+    piutang, dan pemberitahuan kendaraan selesai memakai penanda yang sama:
+    item piutang menjadi Sudah follow up dan tombol Ingatkan terkunci sampai
+    jatuh tempo diubah.
+19. Role kasir dihapus. Aplikasi hanya memiliki PIN pemilik; pengaturan PIN
+    kasir dan endpoint terkait dihapus. Login, reset PIN, dan pengamanan
+    endpoint pengelolaan tetap memakai pemilik.
+20. Kartu piutang memakai pintasan Ingatkan/Diingatkan, Chat, dan Pelunasan.
+    Kartu Prospek, Servis berkala, Garansi, dan Akan datang memakai pintasan
+    WA, Nota (bila ada), dan Detail; klik nama membuka nota lengkap.
+21. Fitur penugasan dan penanggung jawab follow-up dihapus. Tidak ada label
+    petugas, filter belum ditugaskan/milik saya, atau endpoint assign.
+22. Pelanggan dengan dua nota atau lebih memakai satu tombol Ingatkan untuk
+    mengirim pengingat semua nota sekaligus. Setelah terkirim, semua tombol
+    Ingatkan terkunci sampai jatuh tempo salah satu nota diubah per nota.
+    Kepala kartu tidak menampilkan Ubah untuk pelanggan multi-nota.
+    Klik nama pelanggan membuka nota lengkap seperti Kendaraan selesai;
+    pelanggan dengan beberapa nota memakai tombol N nota untuk membuka
+    tabelnya. Daftar follow-up lain juga memakai gaya kartu Kendaraan selesai.
+23. Kartu Prospek, Servis berkala, dan Garansi memakai pintasan Ingatkan,
+    WA, Detail, dan Status; tombol Nota dihapus. WA membuka chat tanpa teks,
+    Ingatkan membuka pratinjau WhatsApp berisi teks pengingat. Status servis
+    berkala/garansi memindahkan item ke Akan datang bila diisi tanggal, atau
+    menghapusnya dari kolom follow up bila tidak datang. Pintasan "Akan
+    datang — Hasil prospek" dihapus; prospek berjadwal tetap tampil di daftar
+    Prospek beserta statusnya.
+24. Perubahan status prospek memakai konfirmasi ya/tidak. Status "Masih
+    kendala" memindahkan prospek dari kartu Prospek ke kartu baru
+    "Berkendala". Daftar Akan datang — Garansi/Servis berkala hanya
+    menampilkan pintasan Status (Datang/Tidak datang).
+25. Detail Servis berkala dan Garansi tidak lagi menampilkan petunjuk
+    "Bisa follow up lagi...", tombol Ingatkan/WA, atau form status karena
+    sudah tersedia sebagai pintasan kartu. Detail menampilkan nota lengkap
+    (jasa, sparepart, total). Teks WhatsApp yang diedit di kotak pratinjau
+    dipakai untuk tautan wa.me dan disimpan sebagai pesan terakhir di detail.
+26. Item Akan datang — Garansi/Servis berkala punya shortcut Status dan WA.
+    Detailnya menyediakan tombol Datang, Tidak datang, dan Reschedule
+    (wajib tanggal). Reschedule memperbarui tanggal service dan pelanggan
+    tetap berada di kolom Akan datang.
+27. Rincian pada detail Servis berkala hanya memuat baris dari nota yang
+    menjadi sumber follow-up. Baris jasa/sparepart dari nota lain tidak
+    digabungkan lagi ke rincian.
+28. Detail prospek (termasuk Berkendala) tidak lagi memuat tombol
+    Ingatkan/WA maupun form "Ubah status". Status Berkendala lewat pintasan
+    hanya berisi tiga pilihan: Sudah datang, Tidak datang, dan Reschedule
+    (wajib tanggal). Reschedule mengembalikan item ke daftar Prospek dengan
+    status Akan datang service dan tanggal kunjungan baru.
+29. Status Prospek lewat pintasan hanya berisi Masih bagus (status BARU),
+    Masih kendala, dan Akan datang service (wajib tanggal). Label BARU untuk
+    prospek ditampilkan sebagai "Masih bagus". Prospek berjadwal tetap di
+    daftar Prospek dan tanggalnya bisa diubah lewat pilihan Akan datang
+    service.

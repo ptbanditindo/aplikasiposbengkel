@@ -10,10 +10,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from database.models import PengerjaanNota, ServiceRecord, VehicleOrUnit
+from database.models import (
+    PengerjaanNota,
+    ServiceRecord,
+    VehicleOrUnit,
+    WhatsAppLog,
+)
 from services import payment_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
@@ -65,7 +70,35 @@ def list_items(db: Session) -> Dict[str, Any]:
     markers = list(
         db.scalars(_statement().order_by(PengerjaanNota.dibuat_pada.asc())).unique()
     )
-    items = [serialize_item(marker) for marker in markers]
+    record_ids = [marker.service_record_id for marker in markers]
+    notified: Dict[int, datetime] = {}
+    if record_ids:
+        rows = db.execute(
+            select(
+                WhatsAppLog.service_record_id,
+                func.max(WhatsAppLog.created_at),
+            )
+            .where(
+                WhatsAppLog.service_record_id.in_(record_ids),
+                WhatsAppLog.jenis == "piutang",
+                WhatsAppLog.status == "DIBUKA",
+            )
+            .group_by(WhatsAppLog.service_record_id)
+        ).all()
+        notified = {row[0]: row[1] for row in rows}
+    items = []
+    for marker in markers:
+        item = serialize_item(marker)
+        dikabari_pada = notified.get(marker.service_record_id)
+        if (
+            dikabari_pada is not None
+            and marker.dibuat_pada is not None
+            and dikabari_pada < marker.dibuat_pada
+        ):
+            dikabari_pada = None
+        item["dikabari_pada"] = dikabari_pada
+        item["sudah_dikabari"] = dikabari_pada is not None
+        items.append(item)
     return {"items": items, "jumlah": len(items)}
 
 

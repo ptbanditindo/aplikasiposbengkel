@@ -127,6 +127,8 @@ def record_payment(
             record.status_bayar = (
                 "LUNAS" if record_sisa(record) <= 0 else "BELUM_LUNAS"
             )
+            if record.status_bayar == "BELUM_LUNAS":
+                record.jenis_bayar = "KREDIT"
 
             audit_service.record_event(
                 db,

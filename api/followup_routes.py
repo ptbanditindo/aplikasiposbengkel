@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from api.deps import require_auth
 from api.schemas import (
     FollowupActionResultOut,
-    FollowupAssignIn,
     FollowupCountsOut,
     FollowupDetailOut,
     FollowupItemOut,
@@ -90,7 +89,12 @@ def record_followup(
     operator: Operator = Depends(require_auth),
 ):
     result = followup_service.follow_up(
-        db, item_id, payload.status, operator, catatan=payload.catatan
+        db,
+        item_id,
+        payload.status,
+        operator,
+        catatan=payload.catatan,
+        pesan=payload.pesan,
     )
     return FollowupActionResultOut(
         item=_item_out(db, result["item"]),
@@ -118,25 +122,5 @@ def change_followup_status(
         alasan=payload.alasan,
         janji_bayar=payload.janji_bayar,
         tanggal_service=payload.tanggal_service,
-    )
-    return _item_out(db, item)
-
-
-@router.post(
-    "/followup/items/{item_id}/assign",
-    response_model=FollowupItemOut,
-)
-def assign_followup(
-    item_id: int,
-    payload: FollowupAssignIn,
-    db: Session = Depends(get_db),
-    operator: Operator = Depends(require_auth),
-):
-    item = followup_service.assign(
-        db,
-        item_id,
-        operator,
-        release=payload.release,
-        alasan=payload.alasan,
     )
     return _item_out(db, item)

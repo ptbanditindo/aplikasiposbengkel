@@ -20,12 +20,13 @@ from database.models import (
     FollowupItem,
     ServiceRecord,
     VehicleOrUnit,
+    WhatsAppLog,
 )
 from services import payment_service, settings_service, whatsapp_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
-from services.utils import is_valid_whatsapp, mask_phone
+from services.utils import is_valid_whatsapp, mask_phone, money
 
 JENIS_PROSPEK = "prospek"
 JENIS_SERVIS = "servis_berkala"
@@ -109,6 +110,12 @@ def _sisa(record: ServiceRecord) -> Decimal:
     return payment_service.record_sisa(record)
 
 
+def _fully_returned(record: ServiceRecord) -> bool:
+    return money(
+        Decimal(record.total_servis or 0) - Decimal(record.total_retur or 0)
+    ) <= 0
+
+
 def _load_records(db: Session) -> List[ServiceRecord]:
     statement = (
         select(ServiceRecord)
@@ -184,6 +191,8 @@ def _collect_sources(
         # --- Garansi akan habis ---
         garansi_record: Optional[ServiceRecord] = None
         for record in customer_records:
+            if _fully_returned(record):
+                continue
             if not record.bergaransi or record.garansi_sampai is None:
                 continue
             if record.status_klaim == "Sudah claim":
@@ -216,6 +225,8 @@ def _collect_sources(
         seen_rows: set = set()
         servis_rows: List[Dict[str, Any]] = []
         for record in customer_records:
+            if _fully_returned(record):
+                continue
             for job in record.jobs:
                 interval = int(getattr(job, "interval_servis_bulan", 0) or 0)
                 if interval <= 0:
@@ -295,6 +306,7 @@ def _collect_sources(
                     for row in sorted(
                         servis_rows, key=lambda row: row["jatuh_tempo"]
                     )
+                    if row["record"].id == record.id
                 ],
             )
 
@@ -389,8 +401,6 @@ def _update_item(
     if new_cycle:
         previous = item.status
         item.status = STATUS_BARU
-        item.penanggung_jawab = None
-        item.diambil_pada = None
         item.followup_terakhir = None
         item.janji_bayar = None
         item.tanggal_service = None
@@ -508,6 +518,9 @@ def _serialize(
         and valid_number
         and not on_cooldown
     )
+    status_label = STATUS_LABELS.get(item.status, item.status)
+    if item.jenis == JENIS_PROSPEK and item.status == STATUS_BARU:
+        status_label = "Masih bagus"
     return {
         "id": item.id,
         "jenis": item.jenis,
@@ -530,9 +543,7 @@ def _serialize(
             and sisa_hari < 0
         ),
         "status": item.status,
-        "status_label": STATUS_LABELS.get(item.status, item.status),
-        "penanggung_jawab": item.penanggung_jawab,
-        "diambil_pada": item.diambil_pada,
+        "status_label": status_label,
         "followup_terakhir": item.followup_terakhir,
         "sudah_followup": item.followup_terakhir is not None,
         "janji_bayar": item.janji_bayar,
@@ -633,24 +644,9 @@ def list_items(
             and item.jatuh_tempo < day
             and item.status in OPEN_STATUSES
         ]
-    elif filter == "belum_ditugaskan":
-        items = [
-            item
-            for item in items
-            if item.penanggung_jawab is None
-            and item.status in OPEN_STATUSES
-        ]
-    elif filter == "milik_saya":
-        items = [
-            item
-            for item in items
-            if item.penanggung_jawab is not None
-            and item.status in OPEN_STATUSES
-        ]
     elif filter not in {"semua", ""}:
         raise BusinessValidationError(
-            "Filter tugas harus semua, hari_ini, terlambat, "
-            "belum_ditugaskan, milik_saya, atau arsip."
+            "Filter tugas harus semua, hari_ini, terlambat, atau arsip."
         )
 
     items.sort(
@@ -681,10 +677,12 @@ def counts(
     ).all()
     servis_due = 0
     prospek = 0
+    berkendala_prospek = 0
     hari_ini = 0
     aktif = 0
     akan_datang_servis = 0
     akan_datang_garansi = 0
+    akan_datang_prospek = 0
     for jenis, jatuh_tempo, status in rows:
         if status in {STATUS_SELESAI, STATUS_TIDAK_DATANG}:
             continue
@@ -694,20 +692,28 @@ def counts(
                 akan_datang_servis += 1
             elif jenis == JENIS_GARANSI:
                 akan_datang_garansi += 1
+            elif jenis == JENIS_PROSPEK:
+                akan_datang_prospek += 1
+                prospek += 1
             continue
         if jenis == JENIS_SERVIS:
             servis_due += 1
         if jenis == JENIS_PROSPEK:
-            prospek += 1
+            if status == STATUS_KENDALA:
+                berkendala_prospek += 1
+            else:
+                prospek += 1
         if jatuh_tempo is not None and jatuh_tempo <= day:
             hari_ini += 1
     return {
         "servis_berkala_due": servis_due,
         "prospek_count": prospek,
+        "berkendala_prospek": berkendala_prospek,
         "followup_hari_ini": hari_ini,
         "followup_aktif": aktif,
         "akan_datang_servis": akan_datang_servis,
         "akan_datang_garansi": akan_datang_garansi,
+        "akan_datang_prospek": akan_datang_prospek,
     }
 
 
@@ -822,6 +828,7 @@ def follow_up(
     status: str,
     operator: Operator,
     catatan: Optional[str] = None,
+    pesan: Optional[str] = None,
     today: Optional[date] = None,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
@@ -850,7 +857,7 @@ def follow_up(
                     f"{until.strftime('%d/%m/%Y %H:%M')}."
                 )
 
-        message = _message(db, item, day)
+        message = (pesan or "").strip() or _message(db, item, day)
         log, link = whatsapp_service.append_attempt(
             db,
             item.customer,
@@ -863,6 +870,18 @@ def follow_up(
             now=moment,
         )
         item.followup_terakhir = moment
+        if (
+            normalized == whatsapp_service.STATUS_OPENED
+            and item.jenis == JENIS_PIUTANG
+        ):
+            record = item.service_record
+            if (
+                record is not None
+                and (record.status or "NORMAL") == "NORMAL"
+                and (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
+                and _sisa(record) > 0
+            ):
+                record.diingatkan_pada = moment
         if item.status in {STATUS_BARU, STATUS_SUDAH}:
             previous = item.status
             item.status = STATUS_SUDAH
@@ -879,6 +898,35 @@ def follow_up(
 
     db.refresh(item)
     return {"item": item, "wa_text": message, "link": link, "log": log}
+
+
+def mark_piutang_followed(
+    db: Session,
+    customer_id: int,
+    moment: datetime,
+    operator_label: str,
+    reason: str,
+) -> Optional[FollowupItem]:
+    """Samakan item piutang dengan pengingat yang dikirim dari jalur lain."""
+    item = db.scalar(
+        select(FollowupItem)
+        .where(
+            FollowupItem.jenis == JENIS_PIUTANG,
+            FollowupItem.customer_id == customer_id,
+            FollowupItem.status != STATUS_ARSIP,
+        )
+        .order_by(FollowupItem.id.desc())
+        .limit(1)
+    )
+    if item is None:
+        return None
+    item.followup_terakhir = moment
+    if item.status in {STATUS_BARU, STATUS_SUDAH}:
+        previous = item.status
+        item.status = STATUS_SUDAH
+        _add_event(db, item, previous, STATUS_SUDAH, reason, operator_label, moment)
+    db.flush()
+    return item
 
 
 def change_status(
@@ -904,11 +952,13 @@ def change_status(
             if target not in {
                 STATUS_AKAN_DATANG,
                 STATUS_TIDAK_DATANG,
+                STATUS_SELESAI,
                 STATUS_ARSIP,
             }:
                 raise BusinessValidationError(
                     "Status servis berkala dan garansi hanya akan datang "
-                    "service, tidak akan datang service, atau dihapus dari daftar."
+                    "service, datang, tidak akan datang service, atau dihapus "
+                    "dari daftar."
                 )
             if target == STATUS_AKAN_DATANG and tanggal_service is None:
                 raise BusinessValidationError("Tanggal service wajib diisi.")
@@ -916,13 +966,21 @@ def change_status(
                 raise ConflictError(
                     "Lakukan follow up WhatsApp dulu sebelum mengubah status."
                 )
+        elif item.jenis == JENIS_PROSPEK and target == STATUS_AKAN_DATANG:
+            if tanggal_service is None:
+                raise BusinessValidationError("Tanggal kunjungan wajib diisi.")
         elif target in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
             raise BusinessValidationError(
-                "Status akan/tidak datang service hanya untuk servis berkala "
-                "dan garansi."
+                "Status akan/tidak datang service hanya untuk prospek, "
+                "servis berkala, dan garansi."
             )
         if target == item.status and item.jenis not in JADWAL_JENIS:
-            raise BusinessValidationError("Status item sudah sama.")
+            if not (
+                item.jenis == JENIS_PROSPEK
+                and target == STATUS_AKAN_DATANG
+                and tanggal_service is not None
+            ):
+                raise BusinessValidationError("Status item sudah sama.")
         if item.jenis == JENIS_PIUTANG and target in {STATUS_SELESAI, STATUS_ARSIP}:
             raise BusinessValidationError(
                 "Piutang hanya keluar dari daftar lewat pelunasan penuh atau void."
@@ -953,41 +1011,20 @@ def change_status(
     return item
 
 
-def assign(
-    db: Session,
-    item_id: int,
-    operator: Operator,
-    release: bool = False,
-    alasan: Optional[str] = None,
-    now: Optional[datetime] = None,
-) -> FollowupItem:
-    moment = now or datetime.now()
-    with db.begin():
-        item = _get_item(db, item_id)
-        if item.status in {STATUS_ARSIP, STATUS_SELESAI}:
-            raise ConflictError("Item yang sudah selesai/arsip tidak ditugaskan.")
-        previous = item.penanggung_jawab
-        if release:
-            if previous is None:
-                raise BusinessValidationError("Item belum punya penanggung jawab.")
-            item.penanggung_jawab = None
-            item.diambil_pada = None
-            reason = "Penanggung jawab dilepas" + (f": {alasan}" if alasan else "")
-        else:
-            if previous == operator.label:
-                raise BusinessValidationError("Anda sudah memegang tugas ini.")
-            item.penanggung_jawab = operator.label
-            item.diambil_pada = moment
-            reason = (
-                f"Penanggung jawab diganti dari {previous}"
-                if previous
-                else "Tugas diambil"
-            ) + (f": {alasan}" if alasan else "")
-        _add_event(db, item, item.status, item.status, reason, operator.label, moment)
-        db.flush()
-
-    db.refresh(item)
-    return item
+def _last_sent_message(db: Session, item: FollowupItem) -> str:
+    jenis = WA_JENIS.get(item.jenis, whatsapp_service.JENIS_FOLLOWUP)
+    log = db.scalar(
+        select(WhatsAppLog)
+        .where(
+            WhatsAppLog.customer_id == item.customer_id,
+            WhatsAppLog.jenis == jenis,
+            WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
+            WhatsAppLog.created_at >= item.created_at,
+        )
+        .order_by(WhatsAppLog.created_at.desc(), WhatsAppLog.id.desc())
+        .limit(1)
+    )
+    return (log.pesan or "").strip() if log is not None else ""
 
 
 def detail(
@@ -1013,5 +1050,5 @@ def detail(
             item, sources.get((item.jenis, item.customer_id)), ops, day, moment
         ),
         "events": event_rows,
-        "pesan": _message(db, item, day),
+        "pesan": _last_sent_message(db, item) or _message(db, item, day),
     }

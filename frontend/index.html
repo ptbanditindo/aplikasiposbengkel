@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261107">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261145">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -38,7 +38,7 @@
       </div>
 
       <section id="authSetup" class="hidden">
-        <h1 class="auth-title" id="authTitle">Buat PIN kasir</h1>
+        <h1 class="auth-title" id="authTitle">Buat PIN pemilik</h1>
         <p class="muted auth-lead">PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu.</p>
         <form id="authSetupForm" autocomplete="off">
           <label class="field">
@@ -56,14 +56,14 @@
 
       <section id="authLogin" class="hidden">
         <h1 class="auth-title">Masuk</h1>
-        <p class="muted auth-lead">Masukkan PIN kasir untuk membuka bengkel.</p>
+        <p class="muted auth-lead">Masukkan PIN pemilik untuk membuka bengkel.</p>
         <form id="authLoginForm" autocomplete="off">
           <label class="field">
             <span>PIN</span>
             <input class="input" type="password" id="authLoginPin" inputmode="numeric" autocomplete="current-password" maxlength="12" required>
           </label>
           <p class="auth-error hidden" id="authLoginError" role="alert"></p>
-          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka kasir</button>
+          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka aplikasi</button>
         </form>
         <p class="auth-help">Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.</p>
       </section>
@@ -103,6 +103,10 @@
         <button type="button" class="nav-tab" data-view="customers">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 19v-1a5 5 0 0 1 10 0v1"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M14 18v-.5a4 4 0 0 1 7 0V18"></path></svg>
           Pelanggan
+        </button>
+        <button type="button" class="nav-tab" data-view="followup">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 3h16z"></path><path d="M10 22h4"></path></svg>
+          Follow up
         </button>
         <button type="button" class="nav-tab" data-view="stock">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4z"></path><path d="M4 7l3-3h10l3 3"></path><path d="M9 11h6"></path></svg>
@@ -172,45 +176,6 @@
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="dashboard-notas" data-filter="warranty">
             <span class="stat-label">Garansi aktif</span>
             <strong id="statWarranty">0</strong>
-          </article>
-        </div>
-
-        <h2 class="section-label">Follow up</h2>
-        <div class="stats-grid stats-grid--secondary">
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
-            <span class="stat-label">Piutang</span>
-            <strong id="statReceivable">Rp 0</strong>
-            <span class="stat-sub" id="statReceivableSub">0 nota</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka kendaraan yang masih di bengkel" data-action="open-pengerjaan">
-            <span class="stat-label">Kendaraan selesai</span>
-            <strong id="statPengerjaan">0</strong>
-            <span class="stat-sub">Siap dikabari</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka prospek pelanggan" data-action="open-followup" data-jenis="prospek">
-            <span class="stat-label">Prospek</span>
-            <strong id="statProspek">0</strong>
-            <span class="stat-sub">Tanya service</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-exclude-status="AKAN_DATANG">
-            <span class="stat-label">Servis berkala</span>
-            <strong id="statDueService">0</strong>
-            <span class="stat-sub">Jatuh tempo dekat</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka garansi akan habis" data-action="open-followup" data-jenis="garansi" data-exclude-status="AKAN_DATANG">
-            <span class="stat-label">Garansi akan habis</span>
-            <strong id="statWarrantyEnding">0</strong>
-            <span class="stat-sub">Ingatkan pelanggan</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang garansi" data-action="open-followup" data-jenis="garansi" data-status="AKAN_DATANG">
-            <span class="stat-label">Akan datang — Garansi</span>
-            <strong id="statAkanGaransi">0</strong>
-            <span class="stat-sub">Sudah ada tanggal</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-status="AKAN_DATANG">
-            <span class="stat-label">Akan datang — Servis berkala</span>
-            <strong id="statAkanServis">0</strong>
-            <span class="stat-sub">Sudah ada tanggal</span>
           </article>
         </div>
 
@@ -989,27 +954,6 @@
           </div>
         </form>
 
-        <form class="card" id="kasirPinForm">
-          <div class="card-head">
-            <div>
-              <h2>PIN kasir</h2>
-              <p class="muted" id="kasirPinStatus">Belum diatur. Hanya pemilik yang dapat membuat PIN kasir.</p>
-            </div>
-          </div>
-          <p class="tiny muted">
-            Kasir dapat membuat transaksi, membatalkan nota, dan mencatat retur. Pengaturan,
-            backup, dan pemulihan data tetap khusus pemilik.
-          </p>
-          <label class="field">
-            <span>PIN kasir (4 sampai 12 angka)</span>
-            <input type="password" class="input" id="kasirPinInput" inputmode="numeric" autocomplete="new-password" maxlength="12" placeholder="PIN baru untuk kasir">
-          </label>
-          <div class="form-actions">
-            <button type="button" class="btn btn-outline" id="kasirPinHapus">Hapus PIN kasir</button>
-            <button type="submit" class="btn btn-primary" id="kasirPinSimpan">Simpan PIN kasir</button>
-          </div>
-        </form>
-
         <section class="card hidden" id="pinSecurityCard">
           <div class="card-head">
             <div>
@@ -1073,6 +1017,61 @@
           <div class="customer-grid" id="customerDirectoryGrid"></div>
           <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat unit servis.</div>
         </section>
+      </section>
+
+      <section class="view hidden" id="view-followup">
+        <div class="page-head">
+          <div>
+            <h1>Follow up</h1>
+            <p class="muted">Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.</p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-ghost" id="btnFollowupRefresh">Muat ulang</button>
+          </div>
+        </div>
+
+        <div class="stats-grid stats-grid--secondary">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
+            <span class="stat-label">Piutang</span>
+            <strong id="followupStatReceivable">Rp 0</strong>
+            <span class="stat-sub" id="followupStatReceivableSub">0 nota</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka kendaraan yang masih di bengkel" data-action="open-pengerjaan">
+            <span class="stat-label">Kendaraan selesai</span>
+            <strong id="followupStatPengerjaan">0</strong>
+            <span class="stat-sub">Siap dikabari</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka prospek pelanggan" data-action="open-followup" data-jenis="prospek" data-exclude-status="MASIH_KENDALA">
+            <span class="stat-label">Prospek</span>
+            <strong id="followupStatProspek">0</strong>
+            <span class="stat-sub">Tanya service</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka prospek yang masih berkendala" data-action="open-followup" data-jenis="prospek" data-status="MASIH_KENDALA">
+            <span class="stat-label">Berkendala</span>
+            <strong id="followupStatBerkendala">0</strong>
+            <span class="stat-sub">Masih terkendala</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-exclude-status="AKAN_DATANG">
+            <span class="stat-label">Servis berkala</span>
+            <strong id="followupStatDueService">0</strong>
+            <span class="stat-sub">Jatuh tempo dekat</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka garansi akan habis" data-action="open-followup" data-jenis="garansi" data-exclude-status="AKAN_DATANG">
+            <span class="stat-label">Garansi akan habis</span>
+            <strong id="followupStatWarrantyEnding">0</strong>
+            <span class="stat-sub">Ingatkan pelanggan</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang garansi" data-action="open-followup" data-jenis="garansi" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Garansi</span>
+            <strong id="followupStatAkanGaransi">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang — Servis berkala</span>
+            <strong id="followupStatAkanServis">0</strong>
+            <span class="stat-sub">Sudah ada tanggal</span>
+          </article>
+        </div>
       </section>
 
     </main>
@@ -1469,7 +1468,6 @@
       <p class="tiny muted" id="waModalNote">Pesan dibuka di WhatsApp. Pengiriman tetap dilakukan oleh kasir.</p>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="waModalCancel">Tutup</button>
-        <button type="button" class="btn btn-outline" id="waModalCopy">Salin teks</button>
         <a class="btn btn-primary" id="waModalOpen" href="#" target="_blank" rel="noopener">Buka WhatsApp</a>
       </div>
     </div>
@@ -1505,7 +1503,55 @@
       </div>
       <div id="followupDetailBody"></div>
       <div class="modal-actions">
+        <button type="button" class="btn btn-primary hidden" id="followupDatang" data-action="followup-datang">Datang</button>
+        <button type="button" class="btn btn-outline hidden" id="followupTidakDatang" data-action="followup-tidak-datang">Tidak datang</button>
+        <button type="button" class="btn btn-outline hidden" id="followupReschedule" data-action="followup-reschedule">Reschedule</button>
         <button type="button" class="btn btn-ghost" id="followupModalDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ FOLLOW-UP STATUS MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="followupStatusModal" role="dialog" aria-modal="true" aria-labelledby="followupStatusTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="followupStatusTitle">Status follow-up</h3>
+          <p class="muted" id="followupStatusSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="followupStatusClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="followupStatusBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="followupStatusDismiss">Tutup</button>
+        <button type="button" class="btn btn-primary" id="followupStatusSave" data-action="followup-status-shortcut-save">Simpan status</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ FOLLOW-UP RESCHEDULE MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="followupRescheduleModal" role="dialog" aria-modal="true" aria-labelledby="followupRescheduleTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="followupRescheduleTitle">Reschedule service</h3>
+          <p class="muted" id="followupRescheduleSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="followupRescheduleClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="followupRescheduleBody">
+        <label class="field">
+          <span>Tanggal service baru <em>*</em></span>
+          <input type="date" class="input" id="followupRescheduleDate" required>
+        </label>
+        <label class="field">
+          <span>Catatan</span>
+          <input type="text" class="input" id="followupRescheduleNote" maxlength="500" placeholder="Contoh: pelanggan ada urusan mendadak">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="followupRescheduleDismiss">Tutup</button>
+        <button type="button" class="btn btn-primary" id="followupRescheduleSave" data-action="followup-reschedule-save">Simpan jadwal</button>
       </div>
     </div>
   </div>
@@ -1570,15 +1616,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261107"></script>
-  <script src="/static/js/api-client.js?v=20261107"></script>
-  <script src="/static/js/printer-manager.js?v=20261107"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261107"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261107"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261107"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261107"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261107"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261107"></script>
-  <script src="/static/js/app.js?v=20261107"></script>
+  <script src="/static/js/native-bridge.js?v=20261145"></script>
+  <script src="/static/js/api-client.js?v=20261145"></script>
+  <script src="/static/js/printer-manager.js?v=20261145"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261145"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261145"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261145"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261145"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261145"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261145"></script>
+  <script src="/static/js/app.js?v=20261145"></script>
 </body>
 </html>

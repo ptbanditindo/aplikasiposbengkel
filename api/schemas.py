@@ -435,6 +435,7 @@ class ReceivablesOut(CompatBase):
 class WhatsAppAttemptIn(StrictBase):
     status: str = Field(..., **_pattern("^(DIBUKA|DIBATALKAN|TIDAK_TERSEDIA)$"))
     catatan: Optional[str] = Field(default=None, max_length=500)
+    pesan: Optional[str] = Field(default=None, max_length=4000)
     jenis: str = Field(default="struk", **_pattern("^(struk|piutang)$"))
 
 
@@ -491,8 +492,6 @@ class FollowupItemOut(CompatBase):
     terlambat: bool = False
     status: str
     status_label: str
-    penanggung_jawab: Optional[str] = None
-    diambil_pada: Optional[datetime] = None
     followup_terakhir: Optional[datetime] = None
     sudah_followup: bool = False
     janji_bayar: Optional[date] = None
@@ -523,6 +522,8 @@ class PengerjaanItemOut(CompatBase):
     janji_ambil: Optional[date] = None
     dibuat_pada: datetime
     diambil_pada: Optional[datetime] = None
+    dikabari_pada: Optional[datetime] = None
+    sudah_dikabari: bool = False
 
 
 class PengerjaanListOut(CompatBase):
@@ -533,10 +534,12 @@ class PengerjaanListOut(CompatBase):
 class FollowupCountsOut(CompatBase):
     servis_berkala_due: int = 0
     prospek_count: int = 0
+    berkendala_prospek: int = 0
     followup_hari_ini: int = 0
     followup_aktif: int = 0
     akan_datang_servis: int = 0
     akan_datang_garansi: int = 0
+    akan_datang_prospek: int = 0
     garansi_akan_habis: int = 0
     piutang_count: int = 0
     piutang_customers: int = 0
@@ -561,11 +564,6 @@ class FollowupStatusIn(StrictBase):
     alasan: Optional[str] = Field(default=None, max_length=500)
     janji_bayar: Optional[date] = None
     tanggal_service: Optional[date] = None
-
-
-class FollowupAssignIn(StrictBase):
-    release: bool = False
-    alasan: Optional[str] = Field(default=None, max_length=500)
 
 
 class FollowupEventOut(ORMModel):
@@ -695,8 +693,10 @@ class DailySummaryOut(CompatBase):
     followup_hari_ini: int = 0
     followup_aktif: int = 0
     prospek_count: int = 0
+    berkendala_prospek: int = 0
     akan_datang_servis: int = 0
     akan_datang_garansi: int = 0
+    akan_datang_prospek: int = 0
     kendaraan_selesai: int = 0
 
 
@@ -893,9 +893,7 @@ class AuthStatusOut(CompatBase):
     pin_configured: bool
     authenticated: bool
     locked_seconds: int = 0
-    kasir_configured: bool = False
     operator_id: Optional[str] = None
-    role: Optional[str] = None
     operator_label: Optional[str] = None
 
 

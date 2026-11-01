@@ -384,8 +384,6 @@ class FollowupItem(Base):
     status: Mapped[str] = mapped_column(
         String(24), default="BARU", nullable=False, index=True
     )
-    penanggung_jawab: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    diambil_pada: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     followup_terakhir: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True
     )

@@ -1,4 +1,4 @@
-"""Reset PIN kasir web lokal (tanpa menghapus data bengkel).
+"""Reset PIN pemilik web lokal (tanpa menghapus data bengkel).
 
 Jalankan langsung di PC kasir saat server berhenti:
 
@@ -55,7 +55,7 @@ def clear_pin(db_path: Path) -> int:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Hapus PIN kasir web lokal agar dapat dibuat ulang."
+        description="Hapus PIN pemilik web lokal agar dapat dibuat ulang."
     )
     parser.add_argument(
         "--db",

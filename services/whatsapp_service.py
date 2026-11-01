@@ -5,7 +5,7 @@ membuat tautan `wa.me`, dan mencatat status upaya yang dilakukan kasir.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Dict, List, Optional
 from urllib.parse import quote
@@ -13,7 +13,7 @@ from urllib.parse import quote
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.models import ServiceRecord, WhatsAppLog
+from database.models import Customer, ServiceRecord, VehicleOrUnit, WhatsAppLog
 from services import audit_service, payment_service, settings_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
@@ -63,6 +63,47 @@ def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
     )
     parts.append("Terima kasih.")
     return " ".join(parts)
+
+
+def completion_wa_text_multi(
+    records: List[ServiceRecord], bengkel: Dict[str, str]
+) -> str:
+    """Pesan satu kali untuk semua nota piutang pelanggan yang sama."""
+    if not records:
+        return ""
+    ordered = sorted(
+        records, key=lambda record: (record.jatuh_tempo or date.max, record.waktu_service)
+    )
+    customer = ordered[0].unit.customer
+    bengkel_nama = (bengkel.get("nama") or "").strip()
+    labels = [
+        f"{describe_unit(record.unit)} (nota {record.no_nota})"
+        for record in ordered
+    ]
+    if len(labels) == 2:
+        kendaraan = f"{labels[0]} dan {labels[1]}"
+    else:
+        kendaraan = ", ".join(labels[:-1]) + ", dan " + labels[-1]
+    text = (
+        f"Halo Bapak/Ibu {customer.nama}, kendaraan {kendaraan} sudah selesai "
+        "dikerjakan dan siap diambil"
+        + (f" di {bengkel_nama}" if bengkel_nama else "")
+        + "."
+    )
+    if any(Decimal(record.total_dibayar or 0) > 0 for record in ordered):
+        text += " Pembayaran awal sudah kami terima."
+    total = Decimal("0.00")
+    rincian = []
+    for record in ordered:
+        sisa = payment_service.record_sisa(record)
+        total += sisa
+        rincian.append(f"nota {record.no_nota} {format_rupiah(sisa)}")
+    text += " Rincian sisa pembayaran: " + "; ".join(rincian) + "."
+    text += (
+        f" Total sisa {format_rupiah(total)} dapat diselesaikan saat pengambilan."
+        " Terima kasih."
+    )
+    return text
 
 
 def build_link(nomor: str, message: str) -> str:
@@ -148,10 +189,12 @@ def log_attempt(
 ):
     """Catat upaya WhatsApp nota. Mengembalikan (log, wa_text, link)."""
     normalized_jenis = (jenis or JENIS_STRUK).strip().lower()
+    normalized_status = (status or "").strip().upper()
     if normalized_jenis not in {JENIS_STRUK, JENIS_PIUTANG}:
         raise BusinessValidationError(
             "Jenis pesan WhatsApp nota harus struk atau piutang."
         )
+    moment = now or datetime.now()
     with db.begin():
         record = db.get(ServiceRecord, record_id)
         if record is None:
@@ -168,13 +211,31 @@ def log_attempt(
             db,
             record.unit.customer,
             jenis=normalized_jenis,
-            status=status,
+            status=normalized_status,
             message=message,
             operator=operator,
             record=record,
             catatan=catatan,
-            now=now,
+            now=moment,
         )
+        if (
+            normalized_jenis == JENIS_PIUTANG
+            and normalized_status == STATUS_OPENED
+            and (record.status or "NORMAL") == "NORMAL"
+            and (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
+            and payment_service.record_sisa(record) > 0
+        ):
+            record.diingatkan_pada = moment
+            from services import followup_service
+
+            followup_service.sync_items(db, commit=False)
+            followup_service.mark_piutang_followed(
+                db,
+                record.unit.customer.id,
+                moment,
+                operator.label,
+                "Pemberitahuan kendaraan selesai lewat WhatsApp.",
+            )
 
     db.refresh(log)
     return log, message, link
@@ -226,6 +287,105 @@ def remind_receivable(
             now=moment,
         )
         record.diingatkan_pada = moment
+        from services import followup_service
+
+        followup_service.sync_items(db, commit=False)
+        followup_service.mark_piutang_followed(
+            db,
+            record.unit.customer.id,
+            moment,
+            operator.label,
+            "Pengingat piutang dari daftar piutang.",
+        )
+
+    db.refresh(log)
+    return log, message, link
+
+
+def remind_customer_receivables(
+    db: Session,
+    customer_id: int,
+    operator: Operator,
+    now: Optional[datetime] = None,
+):
+    """Kirim satu pengingat untuk semua nota piutang pelanggan."""
+    moment = now or datetime.now()
+    with db.begin():
+        customer = db.get(Customer, customer_id)
+        if customer is None:
+            raise NotFoundError("Pelanggan tidak ditemukan.")
+        rows = list(
+            db.scalars(
+                select(ServiceRecord)
+                .join(VehicleOrUnit, ServiceRecord.unit_id == VehicleOrUnit.id)
+                .where(
+                    VehicleOrUnit.customer_id == customer_id,
+                    ServiceRecord.status == "NORMAL",
+                )
+                .order_by(
+                    ServiceRecord.jatuh_tempo.asc(),
+                    ServiceRecord.waktu_service.asc(),
+                )
+            )
+            .unique()
+            .all()
+        )
+        records = [
+            record
+            for record in rows
+            if (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
+            and payment_service.record_sisa(record) > 0
+        ]
+        if not records:
+            raise ConflictError("Tidak ada piutang berjalan.")
+        pending = [record for record in records if record.diingatkan_pada is None]
+        if not pending:
+            raise ConflictError(
+                "Pengingat pelanggan ini sudah dikirim. Ubah jatuh tempo per "
+                "nota untuk mengingatkan lagi."
+            )
+        today = moment.date()
+        eligible = [
+            record
+            for record in pending
+            if record.jatuh_tempo is None or record.jatuh_tempo <= today
+        ]
+        if not eligible:
+            earliest = min(
+                record.jatuh_tempo
+                for record in pending
+                if record.jatuh_tempo is not None
+            )
+            raise BusinessValidationError(
+                "Pengingat bisa dikirim mulai "
+                f"{earliest.strftime('%d-%m-%Y')}."
+            )
+        info = settings_service.get_bengkel_info(db)
+        message = completion_wa_text_multi(records, info)
+        log = None
+        link = ""
+        for record in records:
+            log, link = append_attempt(
+                db,
+                customer,
+                jenis=JENIS_PIUTANG,
+                status=STATUS_OPENED,
+                message=message,
+                operator=operator,
+                record=record,
+                now=moment,
+            )
+            record.diingatkan_pada = moment
+        from services import followup_service
+
+        followup_service.sync_items(db, commit=False)
+        followup_service.mark_piutang_followed(
+            db,
+            customer.id,
+            moment,
+            operator.label,
+            "Pengingat piutang pelanggan.",
+        )
 
     db.refresh(log)
     return log, message, link

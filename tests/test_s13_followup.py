@@ -234,6 +234,57 @@ def test_servis_berkala_muncul_dari_jasa_nota_dan_batas_h14(
     assert far["id"] not in customer_ids
 
 
+def test_rincian_servis_hanya_dari_nota_followup(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    jasa_lama = _create_jasa(client, nama="Cuci Radiator", interval=3, harga="100000")
+    jasa_baru = _create_jasa(client, nama="Ganti Oli", interval=6, harga="75000")
+    customer = create_customer(nama="Pelanggan Satu Nota")
+    unit = create_unit(customer["id"], nopol="B 7017 NOT")
+
+    record_lama = _record_id(
+        make_transaction(
+            unit["id"],
+            jobs=[
+                {
+                    "harga_jasa_id": jasa_lama["id"],
+                    "deskripsi": "Cuci Radiator",
+                    "jumlah": 1,
+                    "harga": "100000",
+                }
+            ],
+        )
+    )
+    record_baru = _record_id(
+        make_transaction(
+            unit["id"],
+            jobs=[
+                {
+                    "harga_jasa_id": jasa_baru["id"],
+                    "deskripsi": "Ganti Oli",
+                    "jumlah": 1,
+                    "harga": "75000",
+                }
+            ],
+        )
+    )
+    _shift_record(db_session, record_lama, days_ago=120)
+    _shift_record(db_session, record_baru, days_ago=30)
+    note_lama = db_session.get(ServiceRecord, record_lama).no_nota
+    note_baru = db_session.get(ServiceRecord, record_baru).no_nota
+
+    item = next(
+        row
+        for row in _items(client, jenis="servis_berkala")
+        if row["customer_id"] == customer["id"]
+    )
+    assert item["no_nota"] == note_lama
+    assert item["rincian"]
+    assert {row["no_nota"] for row in item["rincian"]} == {note_lama}
+    assert all(row["no_nota"] != note_baru for row in item["rincian"])
+    assert all(row["pekerjaan"] != "Ganti Oli" for row in item["rincian"])
+
+
 def test_prospek_batas_hari_cooldown_dan_arsip(
     client, create_customer, create_unit, make_transaction, db_session
 ):
@@ -249,6 +300,7 @@ def test_prospek_batas_hari_cooldown_dan_arsip(
     assert len(items) == 1
     item = items[0]
     assert item["status"] == "BARU"
+    assert item["status_label"] == "Masih bagus"
     assert item["sisa_hari"] == 0
     assert item["bisa_followup"] is True
 
@@ -326,6 +378,32 @@ def test_garansi_akan_habis_followup_dan_hilangkan_pengingat(
     assert archived.status_code == 200, archived.text
     assert _items(client, jenis="garansi") == []
     assert _items(client, jenis="garansi") == []
+
+
+def test_pesan_followup_yang_diedit_tersimpan_dan_tampil_di_detail(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Pesan")
+    unit = create_unit(customer["id"], nopol="B 7014 PSN")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(
+        db_session,
+        record_id,
+        days_ago=20,
+        garansi_sampai=date.today() + timedelta(days=5),
+    )
+
+    item = _items(client, jenis="garansi")[0]
+    edited = "Halo Pak, garansi radiator segera berakhir. Silakan mampir minggu ini."
+    response = client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA", "pesan": edited},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["wa_text"] == edited
+
+    detail = client.get(f"/api/followup/items/{item['id']}").json()
+    assert detail["pesan"] == edited
 
 
 def test_piutang_followup_tidak_mengubah_sisa_dan_hanya_lunas_menghapus(
@@ -472,35 +550,6 @@ def test_satu_pelanggan_beberapa_unit_tetap_satu_item(
     assert len(item["rincian"]) == 3
 
 
-def test_ambil_tugas_dan_lepas_tercatat(client, create_customer, create_unit, make_transaction, db_session):
-    customer = create_customer(nama="Pelanggan Tugas")
-    unit = create_unit(customer["id"], nopol="B 7009 TGS")
-    record_id = _record_id(make_transaction(unit["id"]))
-    _shift_record(db_session, record_id, days_ago=10)
-
-    item = _items(client, jenis="prospek")[0]
-    assigned = client.post(f"/api/followup/items/{item['id']}/assign", json={})
-    assert assigned.status_code == 200, assigned.text
-    assert assigned.json()["penanggung_jawab"]
-    assert assigned.json()["diambil_pada"]
-
-    again = client.post(f"/api/followup/items/{item['id']}/assign", json={})
-    assert again.status_code == 400
-
-    released = client.post(
-        f"/api/followup/items/{item['id']}/assign",
-        json={"release": True, "alasan": "Shift selesai"},
-    )
-    assert released.status_code == 200, released.text
-    assert released.json()["penanggung_jawab"] is None
-
-    detail = client.get(f"/api/followup/items/{item['id']}").json()
-    assert any("Shift selesai" in (row["alasan"] or "") for row in detail["events"])
-
-    tasks = client.get("/api/followup/items", params={"filter": "terlambat"}).json()
-    assert tasks["jumlah"] >= 1
-
-
 def test_jadwal_wajib_followup_dulu_dan_tidak_datang(
     client, create_customer, create_unit, make_transaction, db_session
 ):
@@ -598,6 +647,82 @@ def test_jadwal_wajib_followup_dulu_dan_tidak_datang(
     dashboard = client.get("/api/reports/daily-cash").json()
     assert dashboard["garansi_akan_habis"] == 0
     assert dashboard["akan_datang_garansi"] == len(scheduled_only)
+
+
+def test_reschedule_akan_datang_tetap_di_kolom(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Reschedule")
+    unit = create_unit(customer["id"], nopol="B 7015 RSC")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(
+        db_session,
+        record_id,
+        days_ago=20,
+        garansi_sampai=date.today() + timedelta(days=5),
+    )
+
+    item = _items(client, jenis="garansi")[0]
+    client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    first = date.today() + timedelta(days=3)
+    scheduled = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": first.isoformat()},
+    )
+    assert scheduled.status_code == 200, scheduled.text
+
+    moved = date.today() + timedelta(days=10)
+    rescheduled = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": moved.isoformat()},
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    body = rescheduled.json()
+    assert body["status"] == "AKAN_DATANG"
+    assert body["tanggal_service"] == moved.isoformat()
+
+    still_scheduled = _items(client, jenis="garansi", status="AKAN_DATANG")
+    assert [row["id"] for row in still_scheduled] == [item["id"]]
+    assert still_scheduled[0]["tanggal_service"] == moved.isoformat()
+
+
+def test_prospek_akan_datang_bisa_reschedule(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Prospek Jadwal")
+    unit = create_unit(customer["id"], nopol="B 7018 PSJ")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(db_session, record_id, days_ago=7)
+
+    item = _items(client, jenis="prospek")[0]
+    client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    first = date.today() + timedelta(days=3)
+    scheduled = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": first.isoformat()},
+    )
+    assert scheduled.status_code == 200, scheduled.text
+
+    moved = date.today() + timedelta(days=10)
+    rescheduled = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": moved.isoformat()},
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    body = rescheduled.json()
+    assert body["status"] == "AKAN_DATANG"
+    assert body["tanggal_service"] == moved.isoformat()
+
+    still_listed = _items(client, jenis="prospek")
+    row = next(row for row in still_listed if row["id"] == item["id"])
+    assert row["status"] == "AKAN_DATANG"
+    assert row["tanggal_service"] == moved.isoformat()
 
 
 def test_dashboard_menampilkan_kartu_followup(

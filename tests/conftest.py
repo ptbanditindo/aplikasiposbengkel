@@ -66,7 +66,7 @@ def anon_client():
 
 @pytest.fixture(autouse=True)
 def reset_database(client):
-    """Skema bersih + seed standar + PIN kasir untuk setiap skenario uji."""
+    """Skema bersih + seed standar + PIN pemilik untuk setiap skenario uji."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     if TEST_PRINTER_CONFIG.exists():
