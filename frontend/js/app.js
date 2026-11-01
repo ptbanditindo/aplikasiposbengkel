@@ -1156,6 +1156,95 @@
     grid.innerHTML = customers.map(customerCardHtml).join('');
   }
 
+  function openCustomerStatList(kind) {
+    const customers = state.customerDirectory || [];
+    const units = [];
+    customers.forEach((customer) => {
+      (customer.units || []).forEach((unit) => {
+        units.push({ unit: unit, customer: customer });
+      });
+    });
+
+    const config = {
+      customers: {
+        title: 'Total pelanggan',
+        subtitle: customers.length + ' pelanggan terdaftar',
+        empty: 'Belum ada pelanggan terdaftar.',
+        head: '<tr><th>Nama</th><th>No. HP</th><th class="text-right">Unit</th></tr>',
+      },
+      units: {
+        title: 'Total unit terdaftar',
+        subtitle: units.length + ' unit dari ' + customers.length + ' pelanggan',
+        empty: 'Belum ada unit terdaftar.',
+        head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
+      },
+      mobil: {
+        title: 'Unit mobil',
+        subtitle:
+          units.filter((row) => row.unit.unit_type === 'MOBIL').length +
+          ' unit mobil terdaftar',
+        empty: 'Belum ada unit mobil terdaftar.',
+        head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
+      },
+      radiator: {
+        title: 'Radiator copotan',
+        subtitle:
+          units.filter((row) => row.unit.unit_type === 'RADIATOR_ONLY').length +
+          ' radiator terdaftar',
+        empty: 'Belum ada radiator terdaftar.',
+        head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
+      },
+    }[kind];
+    if (!config) return;
+
+    let rows = [];
+    if (kind === 'customers') {
+      rows = customers.map(
+        (customer) =>
+          '<tr>' +
+          '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
+          customer.id + '">' + esc(customer.nama) + '</button></td>' +
+          '<td>' + esc(customer.nomor_hp || '-') + '</td>' +
+          '<td class="text-right">' + customer.total_unit + '</td>' +
+          '</tr>'
+      );
+    } else {
+      const filtered = units.filter((row) => {
+        if (kind === 'mobil') return row.unit.unit_type === 'MOBIL';
+        if (kind === 'radiator') return row.unit.unit_type === 'RADIATOR_ONLY';
+        return true;
+      });
+      rows = filtered.map((row) => {
+        const isCar = row.unit.unit_type === 'MOBIL';
+        return (
+          '<tr>' +
+          '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
+          row.customer.id + '">' + esc(row.customer.nama) + '</button>' +
+          '<span class="cell-sub">' + esc(row.customer.nomor_hp || '-') + '</span></td>' +
+          '<td>' + esc(describeUnit(row.unit)) + '</td>' +
+          '<td><span class="unit-tag' + (isCar ? '' : ' radiator') + '">' +
+          (isCar ? 'Mobil' : 'Radiator') + '</span></td>' +
+          '</tr>'
+        );
+      });
+    }
+
+    $('#customerStatTitle').textContent = config.title;
+    $('#customerStatSubtitle').textContent = config.subtitle;
+    $('#customerStatHead').innerHTML = config.head;
+    const body = $('#customerStatBody');
+    const empty = $('#customerStatEmpty');
+    if (!rows.length) {
+      body.innerHTML = '';
+      empty.textContent = config.empty;
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      body.innerHTML = rows.join('');
+    }
+    openModal('#customerStatModal');
+  }
+
   /* ------------------------------- Items ---------------------------------- */
   function populatePickers() {
     const jasaPicker = $('#jasaPicker');
@@ -6806,6 +6895,15 @@
       removeSupplierItem(id);
       return;
     }
+    if (
+      action === 'customer-stat-customers' ||
+      action === 'customer-stat-units' ||
+      action === 'customer-stat-mobil' ||
+      action === 'customer-stat-radiator'
+    ) {
+      openCustomerStatList(action.replace('customer-stat-', ''));
+      return;
+    }
     if (action === 'customer-warranties') {
       openNotaList(
         'Nota bergaransi aktif',
@@ -10274,6 +10372,12 @@
     );
     $('#customerDetailClose').addEventListener('click', () =>
       closeModal('#customerDetailModal')
+    );
+    $('#customerStatClose').addEventListener('click', () =>
+      closeModal('#customerStatModal')
+    );
+    $('#customerStatDismiss').addEventListener('click', () =>
+      closeModal('#customerStatModal')
     );
     $('#customerDetailDismiss').addEventListener('click', () =>
       closeModal('#customerDetailModal')

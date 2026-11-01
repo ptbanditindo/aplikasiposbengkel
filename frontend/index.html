@@ -1132,21 +1132,25 @@
         </div>
 
         <div class="stats-grid">
-          <article class="stat-card">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat daftar pelanggan" data-action="customer-stat-customers">
             <span class="stat-label">Total pelanggan</span>
             <strong id="customerStatTotal">0</strong>
+            <span class="stat-sub">Pelanggan terdaftar</span>
           </article>
-          <article class="stat-card">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua unit terdaftar" data-action="customer-stat-units">
             <span class="stat-label">Total unit terdaftar</span>
             <strong id="customerStatUnits">0</strong>
+            <span class="stat-sub">Mobil dan radiator</span>
           </article>
-          <article class="stat-card">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat unit mobil" data-action="customer-stat-mobil">
             <span class="stat-label">Unit mobil</span>
             <strong id="customerStatMobil">0</strong>
+            <span class="stat-sub">Unit dengan nomor polisi</span>
           </article>
-          <article class="stat-card">
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat radiator copotan" data-action="customer-stat-radiator">
             <span class="stat-label">Radiator copotan</span>
             <strong id="customerStatRadiator">0</strong>
+            <span class="stat-sub">Radiator berlabel</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="customer-warranties">
             <span class="stat-label">Garansi aktif</span>
@@ -1649,6 +1653,29 @@
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="customerDetailDismiss">Tutup</button>
         <button type="button" class="btn btn-primary" id="btnCustomerDetailService">Buat servis</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== CUSTOMER STAT LIST MODAL ===================== -->
+  <div class="modal-backdrop hidden" id="customerStatModal" role="dialog" aria-modal="true" aria-labelledby="customerStatTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="customerStatTitle">Daftar pelanggan</h3>
+          <p class="muted" id="customerStatSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="customerStatClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead id="customerStatHead"></thead>
+          <tbody id="customerStatBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="customerStatEmpty">Belum ada data.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="customerStatDismiss">Tutup</button>
       </div>
     </div>
   </div>
