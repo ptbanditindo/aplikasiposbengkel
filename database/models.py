@@ -168,7 +168,7 @@ class ServiceRecord(Base):
     status_bayar: Mapped[str] = mapped_column(
         String(16), default="LUNAS", nullable=False, index=True
     )
-    # LUNAS | DP | KREDIT (jenis kesepakatan pembayaran saat nota dibuat).
+    # LUNAS | KREDIT (DP hanya pada nota lama sebelum jenis ini dihapus).
     jenis_bayar: Mapped[str] = mapped_column(
         String(16), default="LUNAS", nullable=False
     )
@@ -237,7 +237,7 @@ class ServiceRecord(Base):
 
 
 class ServicePayment(Base):
-    """Buku pembayaran nota: DP, pelunasan, dan refund (append-only)."""
+    """Buku pembayaran nota: uang muka, pelunasan, dan refund (append-only)."""
 
     __tablename__ = "service_payments"
 
@@ -245,7 +245,7 @@ class ServicePayment(Base):
     service_record_id: Mapped[int] = mapped_column(
         ForeignKey("service_records.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # DP | PELUNASAN | REFUND (refund bernilai negatif)
+    # UANG_MUKA | PELUNASAN | REFUND (DP hanya pada nota lama)
     jenis: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     metode: Mapped[str] = mapped_column(String(16), nullable=False)  # CASH | TRANSFER
     nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
@@ -260,6 +260,57 @@ class ServicePayment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="payments")
+
+
+class PengerjaanNota(Base):
+    """Penanda unit masih di bengkel untuk follow-up kendaraan selesai.
+
+    Satu baris per nota. Dibuat saat kasir menyalakan opsi "Unit ditinggal"
+    pada pencatatan servis, dan ditutup saat unit sudah diambil pelanggan.
+    """
+
+    __tablename__ = "pengerjaan_nota"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[int] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    unit_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vehicle_or_units.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    customer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # SEDANG_DIKERJAKAN | MENUNGGU_SPAREPART | MENUNGGU_PERSETUJUAN |
+    # SELESAI_SIAP_DIAMBIL | SUDAH_DIAMBIL
+    status_pengerjaan: Mapped[str] = mapped_column(
+        String(24),
+        default="SEDANG_DIKERJAKAN",
+        nullable=False,
+        index=True,
+    )
+    janji_ambil: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    diambil_pada: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    dibuat_pada: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False
+    )
+    diubah_pada: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+    diubah_oleh: Mapped[str] = mapped_column(
+        String(64), default="Kasir", nullable=False
+    )
+
+    service_record: Mapped["ServiceRecord"] = relationship()
+    unit: Mapped[Optional["VehicleOrUnit"]] = relationship()
+    customer: Mapped[Optional["Customer"]] = relationship()
 
 
 class WhatsAppLog(Base):

@@ -133,6 +133,11 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 ## Hasil build terakhir
 
+> Catatan: setelah build 2.2.4, jenis bayar DP dihapus dari POS dan API; nota
+> baru hanya memakai LUNAS atau KREDIT (uang muka opsional di KREDIT). Build
+> 2.2.4 di bawah masih memuat DP sampai APK dibangun ulang dengan versionCode
+> yang lebih tinggi.
+
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
 - Ukuran: 45.329.642 byte
 - SHA-256: `a6feb95031eb6af46fb6621b87a5d00aa0772aa3af11cc8e64f44df261e52094`

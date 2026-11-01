@@ -57,7 +57,7 @@ def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
 
     parts = [text]
     if Decimal(record.total_dibayar or 0) > 0:
-        parts.append("DP sudah kami terima.")
+        parts.append("Pembayaran awal sudah kami terima.")
     parts.append(
         f"Sisa pembayaran {format_rupiah(sisa)} dapat diselesaikan saat pengambilan."
     )

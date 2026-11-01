@@ -3482,6 +3482,18 @@ a.btn { text-decoration: none; }
   white-space: nowrap;
 }
 
+/* Kendaraan selesai */
+.pengerjaan-info { display: grid; gap: 2px; }
+.pengerjaan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.pengerjaan-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.pengerjaan-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
 /* WhatsApp */
 .wa-log-list { display: grid; gap: 6px; }
 .wa-log-row {

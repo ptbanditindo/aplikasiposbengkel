@@ -31,16 +31,22 @@ build step) di `http://127.0.0.1:8000`.
   stok, bukan dengan menyunting angka stok manual.
 - **Garansi** — masa garansi per nota (bulan bebas), status aktif/kadaluarsa,
   catatan klaim, dan klaim yang hanya bisa dilakukan sekali.
-- **DP & piutang** — nota bisa dibayar sebagian sebagai DP, dengan atau tanpa
-  jatuh tempo, lalu dilunasi kapan saja dari detail nota. Daftar piutang per
-  pelanggan menampilkan sisa, umur piutang, dan nota yang belum lunas.
+- **Kredit & piutang** — nota bisa disimpan sebagai KREDIT dengan uang muka
+  opsional, dengan atau tanpa tanggal rencana pembayaran, lalu dilunasi kapan
+  saja dari detail nota. Daftar piutang per pelanggan menampilkan sisa, umur
+  piutang, dan nota yang belum lunas. Opsi **Unit ditinggal** menandai
+  kendaraan yang masih di bengkel agar dapat dipakai follow-up saat kendaraan
+  selesai.
 - **WhatsApp manual** — setelah struk dicetak, aplikasi membuka WhatsApp berisi
   struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
   membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor
   ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
 - **Follow-up & servis berkala** — ringkasan tindak lanjut di dasbor untuk
-  piutang, garansi yang akan habis, servis berkala, dan prospek pelanggan,
-  dengan daftar rincian dan riwayat tindakan. Setiap tarif jasa dan sparepart
+  piutang, kendaraan selesai, garansi yang akan habis, servis berkala, dan
+  prospek pelanggan, dengan daftar rincian dan riwayat tindakan. Kartu
+  **Kendaraan selesai** membuka unit yang ditandai "Unit ditinggal" saat nota
+  dicatat; kasir dapat mengabari pelanggan lewat WhatsApp lalu menandainya
+  sudah diambil. Setiap tarif jasa dan sparepart
   punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
   saat dikerjakan dan menjadi pengingat servis berikutnya.
 - **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, interval servis
@@ -205,7 +211,7 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-288 test mencakup transaksi, DP/pelunasan/piutang, WhatsApp, follow-up dan
+288 test mencakup transaksi, kredit/pelunasan/piutang, WhatsApp, follow-up dan
 servis berkala (jasa dan sparepart), void/retur, stok, garansi, laporan,
 pengaturan, label barang, printer, backup/restore, Telegram, serta pemeriksaan
 keamanan akses (PIN, sesi, token instalasi, loopback, host/origin). Jalur

@@ -514,6 +514,7 @@ def _serialize(
         "jenis_label": JENIS_LABELS.get(item.jenis, item.jenis),
         "customer_id": item.customer_id,
         "customer_nama": customer.nama,
+        "customer_alamat": customer.alamat,
         "nomor_hp": customer.nomor_hp,
         "nomor_masked": mask_phone(customer.nomor_hp),
         "unit_id": item.unit_id,
@@ -562,7 +563,9 @@ def _active_items(
     customer_id: Optional[int] = None,
 ) -> List[FollowupItem]:
     statement = _item_statement(jenis, customer_id).where(
-        FollowupItem.status.notin_([STATUS_ARSIP, STATUS_TIDAK_DATANG])
+        FollowupItem.status.notin_(
+            [STATUS_ARSIP, STATUS_TIDAK_DATANG, STATUS_SELESAI]
+        )
     )
     return list(db.scalars(statement).unique().all())
 
@@ -584,6 +587,7 @@ def list_items(
     jenis: Optional[str] = None,
     customer_id: Optional[int] = None,
     status: Optional[str] = None,
+    exclude_status: Optional[str] = None,
     today: Optional[date] = None,
     now: Optional[datetime] = None,
     sync: bool = True,
@@ -611,6 +615,8 @@ def list_items(
     items = _active_items(db, jenis, customer_id)
     if status:
         items = [item for item in items if item.status == status]
+    if exclude_status:
+        items = [item for item in items if item.status != exclude_status]
     if filter == "hari_ini":
         items = [
             item
@@ -895,13 +901,21 @@ def change_status(
         if item.status == STATUS_ARSIP:
             raise ConflictError("Item arsip tidak dapat diubah.")
         if item.jenis in JADWAL_JENIS:
-            if target not in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
+            if target not in {
+                STATUS_AKAN_DATANG,
+                STATUS_TIDAK_DATANG,
+                STATUS_ARSIP,
+            }:
                 raise BusinessValidationError(
-                    "Status servis berkala dan garansi hanya "
-                    "akan datang service atau tidak akan datang service."
+                    "Status servis berkala dan garansi hanya akan datang "
+                    "service, tidak akan datang service, atau dihapus dari daftar."
                 )
             if target == STATUS_AKAN_DATANG and tanggal_service is None:
                 raise BusinessValidationError("Tanggal service wajib diisi.")
+            if target != STATUS_ARSIP and item.followup_terakhir is None:
+                raise ConflictError(
+                    "Lakukan follow up WhatsApp dulu sebelum mengubah status."
+                )
         elif target in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
             raise BusinessValidationError(
                 "Status akan/tidak datang service hanya untuk servis berkala "

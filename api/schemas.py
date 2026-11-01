@@ -211,10 +211,11 @@ class CreateServiceTransactionRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
-    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP|KREDIT)$"))
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|KREDIT)$"))
     dp: Decimal = Field(default=Decimal("0.00"), ge=0)
     rencana_bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     jatuh_tempo: Optional[date] = None
+    unit_ditinggal: bool = False
     bergaransi: bool = True
     garansi_bulan: int = Field(default=1, ge=1, le=120)
     garansi_sampai: Optional[date] = None
@@ -228,7 +229,7 @@ class TransactionPreviewRequest(CompatBase):
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
-    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|DP|KREDIT)$"))
+    jenis_bayar: str = Field(default="LUNAS", **_pattern("^(LUNAS|KREDIT)$"))
     dp: Decimal = Field(default=Decimal("0.00"), ge=0)
     rencana_bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     jobs: List[ServiceJobInput] = Field(default_factory=list)
@@ -470,6 +471,7 @@ class FollowupItemOut(CompatBase):
     jenis_label: str
     customer_id: int
     customer_nama: str
+    customer_alamat: Optional[str] = None
     nomor_hp: str
     nomor_masked: str
     unit_id: Optional[int] = None
@@ -496,6 +498,28 @@ class FollowupItemOut(CompatBase):
 
 class FollowupListOut(CompatBase):
     items: List[FollowupItemOut] = Field(default_factory=list)
+    jumlah: int = 0
+
+
+class PengerjaanItemOut(CompatBase):
+    id: int
+    record_id: int
+    no_nota: str
+    waktu_service: datetime
+    customer_id: int
+    customer_nama: str
+    nomor_hp: Optional[str] = None
+    unit_deskripsi: str
+    total_servis: Money = ZERO_MONEY
+    sisa_bayar: Money = ZERO_MONEY
+    status_pengerjaan: str
+    janji_ambil: Optional[date] = None
+    dibuat_pada: datetime
+    diambil_pada: Optional[datetime] = None
+
+
+class PengerjaanListOut(CompatBase):
+    items: List[PengerjaanItemOut] = Field(default_factory=list)
     jumlah: int = 0
 
 
@@ -666,6 +690,7 @@ class DailySummaryOut(CompatBase):
     prospek_count: int = 0
     akan_datang_servis: int = 0
     akan_datang_garansi: int = 0
+    kendaraan_selesai: int = 0
 
 
 class DailyReportOut(DailySummaryOut):

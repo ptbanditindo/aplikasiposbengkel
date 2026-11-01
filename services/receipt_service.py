@@ -40,8 +40,8 @@ def _sisa_bayar(record: ServiceRecord):
 
 
 def _payment_label(payment) -> str:
-    if payment.jenis == "DP":
-        return "DP"
+    if payment.jenis in {"DP", "UANG_MUKA"}:
+        return "Uang muka"
     if payment.jenis == "REFUND":
         return "Refund"
     return "Pembayaran"
@@ -189,7 +189,7 @@ def _build(
     if sisa > 0:
         b.divider("-")
         b.kv("Status Bayar", "BELUM LUNAS", bold=True)
-        b.kv("DP / Dibayar", format_rupiah(record.total_dibayar or 0))
+        b.kv("Uang Muka / Dibayar", format_rupiah(record.total_dibayar or 0))
         b.kv("Sisa", format_rupiah(sisa), bold=True)
         if record.jatuh_tempo:
             b.kv("Jatuh Tempo", record.jatuh_tempo.strftime("%d/%m/%Y"))
@@ -322,7 +322,7 @@ def build_receipt_payload(
         "kembalian": record.kembalian,
         "status_bayar": "LUNAS" if _is_void(record) else (record.status_bayar or "LUNAS"),
         "jenis_bayar": record.jenis_bayar
-        or ("DP" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
+        or ("KREDIT" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
         "jatuh_tempo": record.jatuh_tempo,
         "rencana_bayar": money(record.rencana_bayar or 0),
         "total_dibayar": money(record.total_dibayar or 0),
@@ -405,7 +405,7 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "kembalian": record.kembalian,
         "status_bayar": "LUNAS" if status == "VOID" else (record.status_bayar or "LUNAS"),
         "jenis_bayar": record.jenis_bayar
-        or ("DP" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
+        or ("KREDIT" if record.status_bayar == "BELUM_LUNAS" else "LUNAS"),
         "jatuh_tempo": record.jatuh_tempo,
         "rencana_bayar": money(record.rencana_bayar or 0),
         "total_dibayar": money(record.total_dibayar or 0),

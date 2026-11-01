@@ -15,11 +15,13 @@ from api.schemas import (
     FollowupItemOut,
     FollowupListOut,
     FollowupStatusIn,
+    PengerjaanItemOut,
+    PengerjaanListOut,
     WhatsAppAttemptIn,
     WhatsAppLogOut,
 )
 from database.session import get_db
-from services import followup_service
+from services import followup_service, pengerjaan_service
 from services.auth_service import Operator
 
 router = APIRouter(tags=["Follow-up"], dependencies=[Depends(require_auth)])
@@ -37,6 +39,7 @@ def list_followup_items(
     jenis: Optional[str] = Query(default=None, max_length=24),
     customer_id: Optional[int] = Query(default=None, gt=0),
     status: Optional[str] = Query(default=None, max_length=24),
+    exclude_status: Optional[str] = Query(default=None, max_length=24),
     db: Session = Depends(get_db),
 ):
     return FollowupListOut.model_validate(
@@ -46,6 +49,7 @@ def list_followup_items(
             jenis=jenis,
             customer_id=customer_id,
             status=status,
+            exclude_status=exclude_status,
         )
     )
 
@@ -53,6 +57,21 @@ def list_followup_items(
 @router.get("/followup/counts", response_model=FollowupCountsOut)
 def followup_counts(db: Session = Depends(get_db)):
     return FollowupCountsOut(**followup_service.counts(db))
+
+
+@router.get("/pengerjaan", response_model=PengerjaanListOut)
+def list_pengerjaan(db: Session = Depends(get_db)):
+    return PengerjaanListOut.model_validate(pengerjaan_service.list_items(db))
+
+
+@router.post("/pengerjaan/{marker_id}/diambil", response_model=PengerjaanItemOut)
+def mark_pengerjaan_taken(
+    marker_id: int,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    marker = pengerjaan_service.mark_taken(db, marker_id, operator)
+    return PengerjaanItemOut.model_validate(pengerjaan_service.serialize_item(marker))
 
 
 @router.get("/followup/items/{item_id}", response_model=FollowupDetailOut)

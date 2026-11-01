@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def get_user_version(conn) -> int:
@@ -537,6 +537,45 @@ def _migrate_014_record_credit(cursor) -> None:
     )
 
 
+def _migrate_015_pengerjaan_nota(cursor) -> None:
+    """Penanda unit ditinggal untuk follow-up kendaraan selesai."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS pengerjaan_nota ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER NOT NULL, "
+        "unit_id INTEGER, "
+        "customer_id INTEGER, "
+        "status_pengerjaan VARCHAR(24) NOT NULL DEFAULT 'SEDANG_DIKERJAKAN', "
+        "janji_ambil DATE, "
+        "diambil_pada DATETIME, "
+        "dibuat_pada DATETIME NOT NULL, "
+        "diubah_pada DATETIME NOT NULL, "
+        "diubah_oleh VARCHAR(64) NOT NULL DEFAULT 'Kasir', "
+        "FOREIGN KEY(service_record_id) REFERENCES service_records (id) "
+        "ON DELETE CASCADE, "
+        "FOREIGN KEY(unit_id) REFERENCES vehicle_or_units (id) "
+        "ON DELETE SET NULL, "
+        "FOREIGN KEY(customer_id) REFERENCES customers (id) "
+        "ON DELETE SET NULL)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_pengerjaan_nota_service_record_id "
+        "ON pengerjaan_nota (service_record_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_pengerjaan_nota_unit_id "
+        "ON pengerjaan_nota (unit_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_pengerjaan_nota_customer_id "
+        "ON pengerjaan_nota (customer_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_pengerjaan_nota_status_pengerjaan "
+        "ON pengerjaan_nota (status_pengerjaan)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -552,6 +591,7 @@ MIGRATIONS: List[Migration] = [
     (12, _migrate_012_part_interval),
     (13, _migrate_013_followup_service_date),
     (14, _migrate_014_record_credit),
+    (15, _migrate_015_pengerjaan_nota),
 ]
 
 

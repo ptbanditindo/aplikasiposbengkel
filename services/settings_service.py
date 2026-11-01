@@ -111,7 +111,7 @@ OPS_INT_KEYS = {
 
 
 def get_ops_settings(db: Session) -> Dict[str, Any]:
-    """Pengaturan operasional Tahap 11-13 (DP, follow-up, WhatsApp)."""
+    """Pengaturan operasional Tahap 11-13 (pembayaran, follow-up, WhatsApp)."""
     stored = {
         row.key[len(OPS_PREFIX):]: row.value
         for row in db.scalars(

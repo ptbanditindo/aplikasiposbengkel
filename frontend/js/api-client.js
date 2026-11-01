@@ -250,13 +250,14 @@
     updateOpsSettings: (data) =>
       request('/api/settings/ops', { method: 'PUT', body: data }),
 
-    followupItems: (filter, jenis, customerId, status) =>
+    followupItems: (filter, jenis, customerId, status, excludeStatus) =>
       request(
         '/api/followup/items?filter=' +
           qs(filter || 'semua') +
           (jenis ? '&jenis=' + qs(jenis) : '') +
           (customerId ? '&customer_id=' + qs(customerId) : '') +
-          (status ? '&status=' + qs(status) : '')
+          (status ? '&status=' + qs(status) : '') +
+          (excludeStatus ? '&exclude_status=' + qs(excludeStatus) : '')
       ),
     followupCounts: () => request('/api/followup/counts'),
     followupDetail: (id) => request('/api/followup/items/' + id),
@@ -270,6 +271,10 @@
         method: 'POST',
         body: data,
       }),
+
+    pengerjaan: () => request('/api/pengerjaan'),
+    pengerjaanTaken: (id) =>
+      request('/api/pengerjaan/' + id + '/diambil', { method: 'POST' }),
 
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),

@@ -74,24 +74,7 @@ def preview_transaction(payload: TransactionPreviewRequest):
         job_lines, part_lines, payload.diskon
     )
     jenis_bayar = (payload.jenis_bayar or "LUNAS").strip().upper()
-    if jenis_bayar == "DP":
-        dp_value = payload.dp if payload.dp is not None else payload.bayar
-        if Decimal(str(dp_value or 0)) <= 0:
-            # Pratinjau tetap menampilkan total saat DP belum diisi; simpan
-            # transaksi tetap memakai aturan DP yang ketat.
-            payment = {
-                "bayar": Decimal("0.00"),
-                "kembalian": Decimal("0.00"),
-                "sisa": totals["total_servis"],
-            }
-        else:
-            payment = pricing_service.compute_dp_payment(
-                totals["total_servis"], dp_value
-            )
-        payment["kekurangan"] = Decimal("0.00")
-        status_bayar = "BELUM_LUNAS"
-        sisa_bayar = payment["sisa"]
-    elif jenis_bayar == "KREDIT":
+    if jenis_bayar == "KREDIT":
         total = Decimal(str(totals["total_servis"]))
         uang_muka = Decimal(str(payload.dp or 0))
         # Pratinjau toleran: saat isian belum lengkap, tampilkan sisa apa adanya.

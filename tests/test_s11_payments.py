@@ -1,4 +1,4 @@
-"""Tahap 11: DP, pelunasan bertahap, piutang, dan struk DP/lunas."""
+"""Tahap 11: kredit, pelunasan bertahap, piutang, dan struk kredit/lunas."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -12,12 +12,12 @@ def _receipt_text(receipt) -> str:
     return "\n".join(receipt["struk_58"])
 
 
-def _dp_transaction(client, unit_id, dp="100000", metode="CASH", **overrides):
+def _kredit_transaction(client, unit_id, uang_muka="100000", metode="CASH", **overrides):
     payload = {
         "unit_id": unit_id,
         "keluhan_awal": "Servis radiator",
-        "jenis_bayar": "DP",
-        "dp": dp,
+        "jenis_bayar": "KREDIT",
+        "dp": uang_muka,
         "metode_bayar": metode,
         "jobs": [{"deskripsi": "Korok Radiator", "jumlah": 1, "harga": "150000"}],
         "parts": [],
@@ -51,15 +51,15 @@ def test_nota_lunas_biasa_tetap_perilaku_lama(client, create_customer, create_un
     assert "LUNAS" in _receipt_text(receipt)
 
 
-def test_dp_menyimpan_nota_dan_struk_dp_langsung_dicetak(
+def test_kredit_menyimpan_nota_dan_struk_kredit_langsung_dicetak(
     client, create_customer, create_unit
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
     jatuh_tempo = date.today() + timedelta(days=7)
 
-    response = _dp_transaction(
-        client, unit["id"], dp="100000", jatuh_tempo=jatuh_tempo.isoformat()
+    response = _kredit_transaction(
+        client, unit["id"], uang_muka="100000", jatuh_tempo=jatuh_tempo.isoformat()
     )
     assert response.status_code == 201, response.text
     body = response.json()
@@ -77,7 +77,7 @@ def test_dp_menyimpan_nota_dan_struk_dp_langsung_dicetak(
 
     text = _receipt_text(receipt)
     assert "BELUM LUNAS" in text
-    assert "DP" in text
+    assert "Uang Muka / Dibayar" in text
     assert "Sisa" in text
     assert "Jatuh Tempo" in text
     assert jatuh_tempo.strftime("%d/%m/%Y") in text
@@ -85,21 +85,42 @@ def test_dp_menyimpan_nota_dan_struk_dp_langsung_dicetak(
     with SessionLocal() as db:
         payments = db.query(ServicePayment).all()
         assert len(payments) == 1
-        assert payments[0].jenis == "DP"
+        assert payments[0].jenis == "UANG_MUKA"
         assert payments[0].nominal == Decimal("100000.00")
 
 
-def test_dp_uang_muka_tidak_valid_ditolak(client, create_customer, create_unit):
+def test_uang_muka_kredit_tidak_valid_ditolak(client, create_customer, create_unit):
     customer = create_customer()
     unit = create_unit(customer["id"])
 
-    for invalid in ("0", "150000", "200000"):
-        response = _dp_transaction(client, unit["id"], dp=invalid)
+    for invalid in ("150000", "200000"):
+        response = _kredit_transaction(client, unit["id"], uang_muka=invalid)
         assert response.status_code == 400, (invalid, response.text)
 
     lewat = (date.today() - timedelta(days=1)).isoformat()
-    response = _dp_transaction(client, unit["id"], jatuh_tempo=lewat)
+    response = _kredit_transaction(client, unit["id"], jatuh_tempo=lewat)
     assert response.status_code == 400, response.text
+    assert client.get("/api/service-records").json() == []
+
+
+def test_jenis_bayar_dp_tidak_diterima_lagi(client, create_customer, create_unit):
+    customer = create_customer()
+    unit = create_unit(customer["id"])
+    payload = {
+        "unit_id": unit["id"],
+        "keluhan_awal": "Servis radiator",
+        "jenis_bayar": "DP",
+        "dp": "50000",
+        "metode_bayar": "CASH",
+        "jobs": [{"deskripsi": "Korok Radiator", "jumlah": 1, "harga": "150000"}],
+        "parts": [],
+    }
+
+    preview = client.post("/api/pos/preview", json=payload)
+    assert preview.status_code == 422, preview.text
+
+    created = client.post("/api/pos/transaction", json=payload)
+    assert created.status_code == 422, created.text
     assert client.get("/api/service-records").json() == []
 
 
@@ -108,7 +129,7 @@ def test_pelunasan_bertahap_sampai_lunas_dan_struk_lunas(
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    created = _dp_transaction(client, unit["id"], dp="50000").json()
+    created = _kredit_transaction(client, unit["id"], uang_muka="50000").json()
     record_id = created["record"]["id"]
 
     first = _pay(client, record_id, "40000", metode="TRANSFER")
@@ -132,7 +153,7 @@ def test_pelunasan_bertahap_sampai_lunas_dan_struk_lunas(
     assert "0" in text
 
     payments = client.get(f"/api/service-records/{record_id}/payments").json()
-    assert [row["jenis"] for row in payments] == ["DP", "PELUNASAN", "PELUNASAN"]
+    assert [row["jenis"] for row in payments] == ["UANG_MUKA", "PELUNASAN", "PELUNASAN"]
 
     # Nota lunas keluar dari daftar piutang.
     receivables = client.get("/api/receivables").json()
@@ -145,7 +166,7 @@ def test_kelebihan_bayar_ditolak_tanpa_mengubah_sisa(
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    record_id = _dp_transaction(client, unit["id"], dp="100000").json()["record"]["id"]
+    record_id = _kredit_transaction(client, unit["id"], uang_muka="100000").json()["record"]["id"]
 
     rejected = _pay(client, record_id, "60000")
     assert rejected.status_code == 400, rejected.text
@@ -162,7 +183,7 @@ def test_kelebihan_bayar_ditolak_tanpa_mengubah_sisa(
 def test_pelunasan_idempoten_dengan_request_id(client, create_customer, create_unit):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    record_id = _dp_transaction(client, unit["id"], dp="100000").json()["record"]["id"]
+    record_id = _kredit_transaction(client, unit["id"], uang_muka="100000").json()["record"]["id"]
 
     payload = {"nominal": "20000", "metode": "CASH", "request_id": "pay-request-0001"}
     first = client.post(f"/api/service-records/{record_id}/payments", json=payload)
@@ -181,12 +202,12 @@ def test_piutang_dikelompokkan_per_pelanggan_dan_kartu_sama(
 ):
     budi = create_customer(nama="Budi Piutang", nomor_hp="081200000111")
     unit_budi = create_unit(budi["id"], nopol="B 1101 PYT")
-    _dp_transaction(client, unit_budi["id"], dp="50000")
-    _dp_transaction(client, unit_budi["id"], dp="25000")
+    _kredit_transaction(client, unit_budi["id"], uang_muka="50000")
+    _kredit_transaction(client, unit_budi["id"], uang_muka="25000")
 
     sari = create_customer(nama="Sari Lunas", nomor_hp="081200000112")
     unit_sari = create_unit(sari["id"], nopol="B 1102 PYT")
-    created = _dp_transaction(client, unit_sari["id"], dp="100000").json()
+    created = _kredit_transaction(client, unit_sari["id"], uang_muka="100000").json()
     partial = _pay(client, created["record"]["id"], "30000")
     assert partial.status_code == 201, partial.text
 
@@ -213,7 +234,7 @@ def test_laporan_memisahkan_nilai_nota_dan_uang_diterima(
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    created = _dp_transaction(client, unit["id"], dp="100000", metode="CASH").json()
+    created = _kredit_transaction(client, unit["id"], uang_muka="100000", metode="CASH").json()
     record_id = created["record"]["id"]
 
     report_dp = client.get(
@@ -235,12 +256,12 @@ def test_laporan_memisahkan_nilai_nota_dan_uang_diterima(
     assert report_full["penerimaan_transfer"] == "50000.00"
 
 
-def test_void_nota_dp_mengembalikan_dp_tanpa_saldo_negatif(
+def test_void_nota_kredit_mengembalikan_uang_muka_tanpa_saldo_negatif(
     client, create_customer, create_unit
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    record_id = _dp_transaction(client, unit["id"], dp="100000").json()["record"]["id"]
+    record_id = _kredit_transaction(client, unit["id"], uang_muka="100000").json()["record"]["id"]
 
     voided = client.post(
         f"/api/service-records/{record_id}/void", json={"alasan": "Pelanggan batal servis"}
@@ -253,20 +274,20 @@ def test_void_nota_dp_mengembalikan_dp_tanpa_saldo_negatif(
     assert record["status_bayar"] == "LUNAS"
 
     payments = client.get(f"/api/service-records/{record_id}/payments").json()
-    assert [row["jenis"] for row in payments] == ["DP", "REFUND"]
+    assert [row["jenis"] for row in payments] == ["UANG_MUKA", "REFUND"]
     assert payments[1]["nominal"] == "-100000.00"
     assert client.get("/api/receivables").json()["jumlah_nota"] == 0
 
 
-def test_retur_nota_dp_mengembalikan_kelebihan_bayar(
+def test_retur_nota_kredit_mengembalikan_kelebihan_bayar(
     client, create_customer, create_unit
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    body = _dp_transaction(
+    body = _kredit_transaction(
         client,
         unit["id"],
-        dp="100000",
+        uang_muka="100000",
         jobs=[{"deskripsi": "Korok Radiator", "jumlah": 1, "harga": "150000"}],
     ).json()
     record_id = body["record"]["id"]

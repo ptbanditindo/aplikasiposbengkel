@@ -337,7 +337,7 @@ def test_piutang_followup_tidak_mengubah_sisa_dan_hanya_lunas_menghapus(
         make_transaction(
             unit["id"],
             jobs=[{"deskripsi": "Servis Radiator", "jumlah": 1, "harga": "150000"}],
-            jenis_bayar="DP",
+            jenis_bayar="KREDIT",
             dp="50000",
             bayar="50000",
         )
@@ -408,7 +408,7 @@ def test_filter_customer_dan_filter_arsip(
     second_unit = create_unit(second["id"], nopol="B 7102 BBB")
     _record_id(
         make_transaction(
-            first_unit["id"], jenis_bayar="DP", dp="20000", bayar="20000"
+            first_unit["id"], jenis_bayar="KREDIT", dp="20000", bayar="20000"
         )
     )
     garansi_record = _record_id(make_transaction(second_unit["id"]))
@@ -459,7 +459,7 @@ def test_satu_pelanggan_beberapa_unit_tetap_satu_item(
             make_transaction(
                 unit["id"],
                 jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "80000"}],
-                jenis_bayar="DP",
+                jenis_bayar="KREDIT",
                 dp="30000",
                 bayar="30000",
             )
@@ -501,6 +501,105 @@ def test_ambil_tugas_dan_lepas_tercatat(client, create_customer, create_unit, ma
     assert tasks["jumlah"] >= 1
 
 
+def test_jadwal_wajib_followup_dulu_dan_tidak_datang(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Jadwal")
+    unit = create_unit(customer["id"], nopol="B 7011 JDW")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(
+        db_session,
+        record_id,
+        days_ago=20,
+        garansi_sampai=date.today() + timedelta(days=5),
+    )
+
+    item = _items(client, jenis="garansi")[0]
+    blocked = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": date.today().isoformat()},
+    )
+    assert blocked.status_code == 409
+    assert "follow up" in blocked.json()["detail"].lower()
+
+    blocked_removed = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "TIDAK_DATANG"},
+    )
+    assert blocked_removed.status_code == 409
+    assert "follow up" in blocked_removed.json()["detail"].lower()
+
+    archived = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "ARSIP", "alasan": "Dihapus dari daftar follow-up"},
+    )
+    assert archived.status_code == 200, archived.text
+    assert _items(client, jenis="garansi") == []
+
+    other = create_customer(nama="Pelanggan Jadwal Dua")
+    other_unit = create_unit(other["id"], nopol="B 7012 JDW")
+    other_record = _record_id(make_transaction(other_unit["id"]))
+    _shift_record(
+        db_session,
+        other_record,
+        days_ago=20,
+        garansi_sampai=date.today() + timedelta(days=5),
+    )
+    other_item = _items(client, jenis="garansi")[0]
+    client.post(
+        f"/api/followup/items/{other_item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    scheduled = client.post(
+        f"/api/followup/items/{other_item['id']}/status",
+        json={"status": "AKAN_DATANG", "tanggal_service": date.today().isoformat()},
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    assert scheduled.json()["status"] == "AKAN_DATANG"
+
+    third = create_customer(nama="Pelanggan Jadwal Tiga")
+    third_unit = create_unit(third["id"], nopol="B 7013 JDW")
+    third_record = _record_id(make_transaction(third_unit["id"]))
+    _shift_record(
+        db_session,
+        third_record,
+        days_ago=20,
+        garansi_sampai=date.today() + timedelta(days=5),
+    )
+
+    active = _items(client, jenis="garansi")
+    pending = _items(
+        client, jenis="garansi", exclude_status="AKAN_DATANG"
+    )
+    scheduled_only = _items(client, jenis="garansi", status="AKAN_DATANG")
+    assert len(active) == 2
+    assert len(pending) == 1
+    assert pending[0]["customer_id"] == third["id"]
+    assert [row["id"] for row in scheduled_only] == [other_item["id"]]
+
+    dashboard = client.get("/api/reports/daily-cash").json()
+    assert dashboard["garansi_akan_habis"] == len(pending)
+    assert dashboard["akan_datang_garansi"] == len(scheduled_only)
+
+    third_item = pending[0]
+    assert third_item["customer_id"] == third["id"]
+    client.post(
+        f"/api/followup/items/{third_item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    not_coming = client.post(
+        f"/api/followup/items/{third_item['id']}/status",
+        json={"status": "TIDAK_DATANG"},
+    )
+    assert not_coming.status_code == 200, not_coming.text
+    assert not_coming.json()["status"] == "TIDAK_DATANG"
+    assert [row["id"] for row in _items(client, jenis="garansi")] == [other_item["id"]]
+    assert _items(client, jenis="garansi", exclude_status="AKAN_DATANG") == []
+    dashboard = client.get("/api/reports/daily-cash").json()
+    assert dashboard["garansi_akan_habis"] == 0
+    assert dashboard["akan_datang_garansi"] == len(scheduled_only)
+
+
 def test_dashboard_menampilkan_kartu_followup(
     client, create_customer, create_unit, make_transaction, db_session
 ):
@@ -510,7 +609,7 @@ def test_dashboard_menampilkan_kartu_followup(
         make_transaction(
             unit["id"],
             jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "100000"}],
-            jenis_bayar="DP",
+            jenis_bayar="KREDIT",
             dp="40000",
             bayar="40000",
         )

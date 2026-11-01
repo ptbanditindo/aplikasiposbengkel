@@ -1,4 +1,4 @@
-"""Endpoint DP, pelunasan, dan piutang pelanggan (Tahap 11)."""
+"""Endpoint pelunasan dan piutang pelanggan (Tahap 11)."""
 from __future__ import annotations
 
 from typing import List, Optional

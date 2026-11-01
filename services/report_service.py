@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from database.models import FollowupItem, ServicePayment, ServiceRecord, VehicleOrUnit
 from repositories import service_record_repository as record_repo
-from services import followup_service, settings_service, warranty_service
+from services import followup_service, pengerjaan_service, warranty_service
 from services.customer_service import describe_unit
 from services.receipt_service import record_summary
 from services.utils import money
@@ -88,7 +88,7 @@ def _summarize_records(
         total_void += record.total_servis
         jumlah_void += 1
 
-    # Uang diterima berasal dari buku pembayaran (DP/pelunasan/refund), bukan
+    # Uang diterima berasal dari buku pembayaran (uang muka/pelunasan/refund), bukan
     # dari nilai nota, agar pendapatan tidak dihitung dua kali.
     for payment in payments or []:
         nominal = Decimal(payment.nominal or 0)
@@ -132,7 +132,7 @@ def _payments_between(
     return list(db.scalars(statement).all())
 
 
-def _ops_snapshot(db: Session, today: date) -> Dict[str, Any]:
+def _ops_snapshot(db: Session) -> Dict[str, Any]:
     """Kartu operasional dasbor (kondisi saat ini, bukan periode laporan)."""
     sisa = func.max(
         ServiceRecord.total_servis
@@ -153,31 +153,23 @@ def _ops_snapshot(db: Session, today: date) -> Dict[str, Any]:
             sisa > 0,
         )
     ).one()
-    ops = settings_service.get_ops_settings(db)
-    batas_garansi = today + timedelta(days=int(ops["garansi_akan_habis_hari"]))
     garansi_akan_habis = db.scalar(
-        select(func.count(ServiceRecord.id)).where(
-            ServiceRecord.status == "NORMAL",
-            ServiceRecord.bergaransi.is_(True),
-            ServiceRecord.status_klaim != "Sudah claim",
-            ServiceRecord.garansi_sampai.is_not(None),
-            ServiceRecord.garansi_sampai >= today,
-            ServiceRecord.garansi_sampai <= batas_garansi,
-        )
-    )
-    terjadwal = db.scalar(
         select(func.count(FollowupItem.id)).where(
             FollowupItem.jenis == followup_service.JENIS_GARANSI,
-            FollowupItem.status == followup_service.STATUS_AKAN_DATANG,
+            FollowupItem.status.notin_(
+                [
+                    followup_service.STATUS_ARSIP,
+                    followup_service.STATUS_TIDAK_DATANG,
+                    followup_service.STATUS_AKAN_DATANG,
+                ]
+            ),
         )
     )
     return {
         "piutang_count": int(piutang[0] or 0),
         "piutang_customers": int(piutang[1] or 0),
         "piutang_total": money(piutang[2] or 0),
-        "garansi_akan_habis": max(
-            0, int(garansi_akan_habis or 0) - int(terjadwal or 0)
-        ),
+        "garansi_akan_habis": int(garansi_akan_habis or 0),
     }
 
 
@@ -191,7 +183,8 @@ def daily_report(db: Session, day: date | None = None) -> Dict[str, Any]:
     summary["tanggal"] = target
     # Sinkronkan item follow-up dulu agar kartu garansi memakai status terbaru.
     summary.update(followup_service.counts(db, date.today()))
-    summary.update(_ops_snapshot(db, date.today()))
+    summary.update(pengerjaan_service.counts(db))
+    summary.update(_ops_snapshot(db))
     return summary
 
 
@@ -223,7 +216,7 @@ def period_report(db: Session, start_day: date, end_day: date) -> Dict[str, Any]
     summary["start"] = start_day
     summary["end"] = end_day
     summary["harian"] = daily
-    summary.update(_ops_snapshot(db, date.today()))
+    summary.update(_ops_snapshot(db))
     return summary
 
 
@@ -236,7 +229,7 @@ def all_time_report(db: Session) -> Dict[str, Any]:
         summary["start"] = today
         summary["end"] = today
         summary["harian"] = []
-        summary.update(_ops_snapshot(db, today))
+        summary.update(_ops_snapshot(db))
         return summary
     return period_report(db, oldest.date(), today)
 

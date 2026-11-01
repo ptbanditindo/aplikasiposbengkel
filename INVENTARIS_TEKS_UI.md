@@ -62,7 +62,7 @@ Aturan yang dipakai:
 | Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
 | Label bagian | Follow up |
-| Kartu follow up | Piutang (N nota), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal), Tugas follow-up (Belum selesai) |
+| Kartu follow up | Piutang (N nota), Kendaraan selesai (Siap dikabari), Servis berkala (Jatuh tempo dekat), Garansi akan habis (Ingatkan pelanggan), Akan datang — Garansi (Sudah ada tanggal), Akan datang — Servis berkala (Sudah ada tanggal) |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Tombol | Muat ulang |
@@ -90,6 +90,22 @@ Aturan yang dipakai:
 | Field status | Status, Janji bayar (untuk JANJI_BAYAR), Tanggal service (wajib bila akan datang), Catatan / alasan arsip |
 | Placeholder arsip | Opsional, wajib untuk arsip |
 | Validasi arsip | Isi alasan arsip minimal 3 karakter. |
+| Tombol tutup | Tutup |
+
+### 3.2 Kendaraan selesai
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Kendaraan selesai |
+| Keterangan | Nota dengan unit ditinggal. Kabari pelanggan saat pengerjaan selesai. |
+| Memuat | Memuat kendaraan... |
+| Kosong | Tidak ada kendaraan yang menunggu diambil. |
+| Ringkasan | N nota · unit masih di bengkel |
+| Kolom | Nota, Tanggal, Pelanggan / unit, Sisa, Aksi |
+| Tombol aksi | Kabari WA, Sudah diambil |
+| Konfirmasi ambil | Tandai unit sudah diambil pelanggan? |
+| Berhasil | Unit ditandai sudah diambil. |
+| Gagal muat | Daftar kendaraan gagal dimuat. Coba lagi. |
 | Tombol tutup | Tutup |
 
 ## 4. Kasir
@@ -120,9 +136,9 @@ Aturan yang dipakai:
 | Kosong | Belum ada jasa ditambahkan. Belum ada sparepart ditambahkan. |
 | Ringkasan | Ringkasan nota, Subtotal jasa, Subtotal sparepart, Total nota, Diskon (Rp) |
 | Catatan | Perkiraan sementara. Nilai final dicatat saat nota disimpan. |
-| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian, Jenis pembayaran, Lunas, DP / uang muka, Kredit, DP diterima (Rp), Jatuh tempo (opsional), Sisa tagihan |
-| Bantuan DP | Boleh dikosongkan. Pelunasan dicatat saat pekerjaan selesai. |
+| Pembayaran | Metode pembayaran, Tunai, Hitung kembalian, Transfer, Uang pas, Rekening tujuan transfer, Uang diterima (Rp), Kembalian, Jenis pembayaran, Lunas, Kredit, Sisa tagihan, Unit ditinggal |
 | Kolom kredit | Rencana pembayaran (Rp), Tanggal rencana pembayaran (opsional), Ada penambahan uang (uang muka), Uang muka diterima (Rp) |
+| Bantuan unit ditinggal | Aktifkan bila kendaraan tetap di bengkel. Dipakai untuk follow-up saat kendaraan selesai. |
 | Bantuan kredit | Nominal yang dijanjikan pelanggan. Boleh dikosongkan. / Dipakai sebagai pengingat piutang. / Sisanya menjadi tagihan kredit. |
 | Garansi | Garansi servis, Durasi garansi, 1 bulan (30 hari), 2 bulan (60 hari), 3 bulan (90 hari), 6 bulan (180 hari), 12 bulan (360 hari), Atur sendiri, Jumlah bulan (1 sampai 120), Catatan garansi |
 | Tombol | Periksa nota, Simpan dan cetak struk, Simpan tanpa cetak |
@@ -146,7 +162,7 @@ Aturan yang dipakai:
 | Jumlah | N nota |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode, Garansi, Aksi |
 | Tombol baris | Cetak ulang, Klaim garansi |
-| Lencana | Tunai, Transfer, Lunas, DP, Kredit, Belum bayar, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
+| Lencana | Tunai, Transfer, Lunas, Kredit, Dibatalkan, Tanpa garansi, Sudah diklaim, Aktif s/d <tanggal>, Kedaluwarsa |
 | Kosong | Belum ada riwayat servis. |
 | Gagal muat | Riwayat servis gagal dimuat. Coba muat ulang. |
 | Klaim | Proses klaim garansi untuk nota ini? |
@@ -530,8 +546,9 @@ HTTP diganti dengan kalimat umum di atas.
 9. Kartu keluhan awal punya warna sendiri dan tombol Simpan keluhan. Rincian
    pengerjaan baru muncul setelah keluhan disimpan, dan keluhan masih bisa
    diedit sebelum transaksi disimpan.
-10. DP boleh disimpan tanpa tanggal jatuh tempo. Pelunasan dicatat dari tombol
-    Pelunasan setelah pekerjaan selesai, tanpa menunggu tanggal. Pesan WhatsApp
+10. Kredit boleh disimpan tanpa tanggal rencana pembayaran dan dengan uang muka
+    0. Pelunasan dicatat dari tombol Pelunasan setelah pekerjaan selesai, tanpa
+    menunggu tanggal. Pesan WhatsApp
     "Kendaraan selesai" memakai kalimat "siap diambil" tanpa kata hutang atau
     piutang.
 11. Sebelum transaksi disimpan, kasir melihat popup Periksa nota berisi
@@ -541,8 +558,8 @@ HTTP diganti dengan kalimat umum di atas.
     Tidak ada lagi tombol WhatsApp terpisah setelah transaksi, template pesan
     WhatsApp, atau pilihan kirim otomatis setelah cetak.
 13. Halaman Follow-up mandiri dihapus dari navigasi. Pengingat tampil di
-    Ringkasan sebagai bagian Follow up dengan kartu piutang, servis berkala,
-    garansi, dan tugas hari ini, lalu dibuka lewat daftar dan detail follow-up.
+    Ringkasan sebagai bagian Follow up dengan kartu piutang, kendaraan selesai,
+    servis berkala, dan garansi, lalu dibuka lewat daftar dan detail follow-up.
 14. Tarif jasa dan sparepart punya interval servis berkala 0 sampai 120 bulan.
     Nilainya tampil di kasir, daftar stok, daftar jasa, dan pratinjau nota, serta
     menjadi sumber pengingat servis berkala. Interval 0 berarti nonaktif.

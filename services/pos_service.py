@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database.models import (
     HargaJasa,
+    PengerjaanNota,
     ServiceJob,
     ServicePart,
     ServicePayment,
@@ -240,22 +241,7 @@ def _create_transaction_locked(
         jenis_bayar = (getattr(payload, "jenis_bayar", "LUNAS") or "LUNAS").strip().upper()
         jatuh_tempo: date | None = None
         rencana_bayar: Decimal | None = None
-        if jenis_bayar == "DP":
-            dp_value = getattr(payload, "dp", None)
-            if dp_value is None or money(dp_value) <= 0:
-                dp_value = payload.bayar
-            payment = pricing_service.compute_dp_payment(
-                totals["total_servis"], dp_value
-            )
-            # Tanggal jatuh tempo opsional; pelunasan dicatat saat selesai.
-            jatuh_tempo = getattr(payload, "jatuh_tempo", None)
-            if jatuh_tempo is not None and jatuh_tempo < now.date():
-                raise BusinessValidationError(
-                    "Jatuh tempo tidak boleh di masa lalu."
-                )
-            status_bayar = "BELUM_LUNAS"
-            total_dibayar = payment["bayar"]
-        elif jenis_bayar == "KREDIT":
+        if jenis_bayar == "KREDIT":
             uang_muka = getattr(payload, "dp", None) or Decimal("0.00")
             jatuh_tempo = getattr(payload, "jatuh_tempo", None)
             if jatuh_tempo is not None and jatuh_tempo < now.date():
@@ -279,7 +265,7 @@ def _create_transaction_locked(
             total_dibayar = totals["total_servis"]
         else:
             raise BusinessValidationError(
-                "Jenis bayar harus LUNAS, DP, atau KREDIT."
+                "Jenis bayar harus LUNAS atau KREDIT."
             )
 
         garansi_sampai: date | None = None
@@ -327,16 +313,32 @@ def _create_transaction_locked(
         db.flush()
 
         operator_label = operator.label if operator is not None else "Kasir"
+        if bool(getattr(payload, "unit_ditinggal", False)):
+            db.add(
+                PengerjaanNota(
+                    service_record_id=record.id,
+                    unit_id=unit.id,
+                    customer_id=unit.customer_id,
+                    status_pengerjaan="SEDANG_DIKERJAKAN",
+                    dibuat_pada=now,
+                    diubah_pada=now,
+                    diubah_oleh=operator_label,
+                )
+            )
         if money(total_dibayar) > 0:
             db.add(
                 ServicePayment(
                     service_record_id=record.id,
-                    jenis="DP" if status_bayar == "BELUM_LUNAS" else "PELUNASAN",
+                    jenis=(
+                        "UANG_MUKA"
+                        if status_bayar == "BELUM_LUNAS"
+                        else "PELUNASAN"
+                    ),
                     metode=payload.metode_bayar.strip().upper(),
                     nominal=money(total_dibayar),
                     waktu=now,
                     operator=operator_label,
-                    catatan="DP saat nota dibuat"
+                    catatan="Uang muka saat nota dibuat"
                     if status_bayar == "BELUM_LUNAS"
                     else "Pembayaran nota",
                 )

@@ -236,6 +236,7 @@
     followupDetail: null,
     receivables: null,
     receivablesCustomerId: null,
+    pengerjaan: null,
     waPreview: null,
   };
 
@@ -386,14 +387,8 @@
     if (record.status_bayar === 'LUNAS') {
       return '<span class="badge green">Lunas</span>';
     }
-    if (record.jenis_bayar === 'KREDIT') {
-      return '<span class="badge amber">Kredit</span>';
-    }
     if (record.status_bayar === 'BELUM_LUNAS') {
-      const paid = moneyToCents(record.total_dibayar);
-      return paid > 0
-        ? '<span class="badge amber">DP</span>'
-        : '<span class="badge red">Belum bayar</span>';
+      return '<span class="badge amber">Kredit</span>';
     }
     return '';
   }
@@ -1369,9 +1364,7 @@
   }
 
   function getJenisBayar() {
-    return ['DP', 'KREDIT'].indexOf(state.jenisBayar) >= 0
-      ? state.jenisBayar
-      : 'LUNAS';
+    return state.jenisBayar === 'KREDIT' ? 'KREDIT' : 'LUNAS';
   }
 
   function isKreditMode() {
@@ -1385,7 +1378,6 @@
 
   function buildPreviewPayload() {
     const metode = getMetode();
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
     const uangMuka = kreditUangMukaAktif()
       ? String(parseMoney($('#kreditUangMukaInput').value))
@@ -1394,11 +1386,11 @@
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
       bayar:
-        !dpMode && !kreditMode && metode === 'CASH'
+        !kreditMode && metode === 'CASH'
           ? String(parseMoney($('#bayarInput').value))
           : '0',
       jenis_bayar: getJenisBayar(),
-      dp: dpMode ? String(parseMoney($('#dpInput').value)) : uangMuka,
+      dp: uangMuka,
       rencana_bayar: kreditMode
         ? String(parseMoney($('#rencanaBayarInput').value))
         : '0',
@@ -1432,9 +1424,8 @@
 
   function renderPreview(preview, error) {
     const transfer = getMetode() === 'TRANSFER';
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
-    const installment = dpMode || kreditMode;
+    const installment = kreditMode;
     const paidInput = $('#bayarInput');
     paidInput.disabled = transfer || installment;
     $('#bankInfo').classList.toggle('hidden', !transfer);
@@ -1509,15 +1500,12 @@
   function updateSummary() {
     const diskonInput = $('#diskonInput');
     const bayarInput = $('#bayarInput');
-    const dpInput = $('#dpInput');
     const cash = getMetode() === 'CASH';
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
     const uangMukaAktif = kreditUangMukaAktif();
     if (
       !moneyInputValid(diskonInput.value) ||
-      (cash && !dpMode && !kreditMode && !moneyInputValid(bayarInput.value)) ||
-      (dpMode && !moneyInputValid(dpInput.value)) ||
+      (cash && !kreditMode && !moneyInputValid(bayarInput.value)) ||
       (kreditMode && !moneyInputValid($('#rencanaBayarInput').value)) ||
       (uangMukaAktif && !moneyInputValid($('#kreditUangMukaInput').value))
     ) {
@@ -1549,13 +1537,11 @@
 
   function updateJenisBayar() {
     invalidateNotaReview();
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
-    $('#lunasFields').classList.toggle('hidden', dpMode || kreditMode);
-    $('#dpFields').classList.toggle('hidden', !dpMode);
+    $('#lunasFields').classList.toggle('hidden', kreditMode);
     $('#kreditFields').classList.toggle('hidden', !kreditMode);
-    $('#dpSummaryRow').classList.toggle('hidden', !(dpMode || kreditMode));
-    $('#bayarInput').disabled = getMetode() === 'TRANSFER' || dpMode || kreditMode;
+    $('#dpSummaryRow').classList.toggle('hidden', !kreditMode);
+    $('#bayarInput').disabled = getMetode() === 'TRANSFER' || kreditMode;
     $$('#jenisBayarSwitch button').forEach((button) => {
       button.classList.toggle('active', button.dataset.jenis === getJenisBayar());
     });
@@ -1638,12 +1624,11 @@
     $('#catatanPengerjaan').value = '';
     $('#diskonInput').value = '0';
     $('#bayarInput').value = '';
-    $('#dpInput').value = '';
-    $('#jatuhTempoInput').value = '';
     $('#rencanaBayarInput').value = '';
     $('#rencanaTanggalInput').value = '';
     $('#kreditUangMukaAktif').checked = false;
     $('#kreditUangMukaInput').value = '';
+    $('#unitDitinggalAktif').checked = false;
     $('#metodeCash').checked = true;
     $('#metodeTransfer').checked = false;
     state.jenisBayar = 'LUNAS';
@@ -1676,11 +1661,10 @@
   /* ---------------------------- Transaction ------------------------------- */
   function buildTransactionPayload() {
     const metode = getMetode();
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
     // Server menghitung nilai final; frontend hanya mengirim angka mentah.
     const paid =
-      !dpMode && !kreditMode && metode === 'CASH'
+      !kreditMode && metode === 'CASH'
         ? parseMoney($('#bayarInput').value)
         : 0;
     const uangMuka = kreditUangMukaAktif()
@@ -1695,15 +1679,14 @@
       metode_bayar: metode,
       bayar: String(paid),
       jenis_bayar: getJenisBayar(),
-      dp: dpMode ? String(parseMoney($('#dpInput').value)) : uangMuka,
+      dp: uangMuka,
       rencana_bayar: kreditMode
         ? String(parseMoney($('#rencanaBayarInput').value))
         : '0',
-      jatuh_tempo: dpMode
-        ? $('#jatuhTempoInput').value || null
-        : kreditMode
-          ? $('#rencanaTanggalInput').value || null
-          : null,
+      jatuh_tempo: kreditMode
+        ? $('#rencanaTanggalInput').value || null
+        : null,
+      unit_ditinggal: $('#unitDitinggalAktif').checked,
       bergaransi: $('#garansiAktif').checked,
       garansi_bulan: garansiBulanValue(),
       catatan_garansi: $('#garansiCatatan').value.trim() || null,
@@ -1768,7 +1751,6 @@
       (getMetode() === 'CASH' &&
         getJenisBayar() === 'LUNAS' &&
         !moneyInputValid($('#bayarInput').value)) ||
-      (getJenisBayar() === 'DP' && !moneyInputValid($('#dpInput').value)) ||
       (isKreditMode() &&
         (!moneyInputValid($('#rencanaBayarInput').value) ||
           (kreditUangMukaAktif() &&
@@ -1777,11 +1759,6 @@
       state.parts.some((part) => !moneyInputValid(part.harga_satuan))
     ) {
       toast('Angka uang harus rupiah bulat tanpa desimal.', 'warning');
-      return false;
-    }
-    if (getJenisBayar() === 'DP' && parseMoney($('#dpInput').value) <= 0) {
-      toast('Isi DP lebih dari Rp 0.', 'warning');
-      $('#dpInput').focus();
       return false;
     }
     if (kreditUangMukaAktif() && parseMoney($('#kreditUangMukaInput').value) <= 0) {
@@ -1815,14 +1792,9 @@
   function buildNotaReviewHtml(preview) {
     const customer = state.selectedCustomer || {};
     const unit = state.selectedUnit || {};
-    const dpMode = getJenisBayar() === 'DP';
     const kreditMode = isKreditMode();
     const kreditTanggal = $('#rencanaTanggalInput').value;
-    const jenisLabel = dpMode
-      ? 'DP / uang muka'
-      : kreditMode
-        ? 'Kredit'
-        : 'Lunas';
+    const jenisLabel = kreditMode ? 'Kredit' : 'Lunas';
     const jobs = state.jobs.length
       ? state.jobs
           .map((job, index) =>
@@ -1837,8 +1809,8 @@
           )
           .join('')
       : '<div class="empty-state sm">Belum ada sparepart.</div>';
-    const jatuhTempo = $('#jatuhTempoInput').value;
     const garansiAktif = $('#garansiAktif').checked;
+    const unitDitinggal = $('#unitDitinggalAktif').checked;
 
     return (
       '<div class="nota-review">' +
@@ -1884,33 +1856,27 @@
         esc(getMetode() === 'TRANSFER' ? 'Transfer' : 'Tunai')
       ) +
       detailItem('Jenis', esc(jenisLabel)) +
-      (dpMode
-        ? detailItem('DP diterima', fmtRp(parseMoney($('#dpInput').value))) +
-          detailItem('Sisa', fmtRp(preview.sisa_bayar)) +
+      (kreditMode
+        ? detailItem(
+            'Rencana pembayaran',
+            fmtRp(parseMoney($('#rencanaBayarInput').value))
+          ) +
           detailItem(
-            'Jatuh tempo',
-            esc(jatuhTempo ? fmtDate(jatuhTempo) : 'Tidak ditentukan')
-          )
-        : kreditMode
-          ? detailItem(
-              'Rencana pembayaran',
-              fmtRp(parseMoney($('#rencanaBayarInput').value))
-            ) +
-            detailItem(
-              'Tanggal rencana',
-              esc(kreditTanggal ? fmtDate(kreditTanggal) : 'Tidak ditentukan')
-            ) +
-            detailItem(
-              'Uang muka',
-              fmtRp(
-                kreditUangMukaAktif()
-                  ? parseMoney($('#kreditUangMukaInput').value)
-                  : 0
-              )
-            ) +
-            detailItem('Sisa tagihan', fmtRp(preview.sisa_bayar))
-          : detailItem('Uang diterima', fmtRp(parseMoney($('#bayarInput').value))) +
-            detailItem('Kembalian', fmtRp(preview.kembalian))) +
+            'Tanggal rencana',
+            esc(kreditTanggal ? fmtDate(kreditTanggal) : 'Tidak ditentukan')
+          ) +
+          detailItem(
+            'Uang muka',
+            fmtRp(
+              kreditUangMukaAktif()
+                ? parseMoney($('#kreditUangMukaInput').value)
+                : 0
+            )
+          ) +
+          detailItem('Sisa tagihan', fmtRp(preview.sisa_bayar))
+        : detailItem('Uang diterima', fmtRp(parseMoney($('#bayarInput').value))) +
+          detailItem('Kembalian', fmtRp(preview.kembalian))) +
+      detailItem('Unit ditinggal', unitDitinggal ? 'Ya' : 'Tidak') +
       detailItem('Garansi', esc(garansiAktif ? 'Aktif' : 'Tidak aktif')) +
       (garansiAktif
         ? detailItem('Durasi', esc(garansiBulanValue() + ' bulan'))
@@ -3748,13 +3714,16 @@
         ' nota · ' +
         (daily.piutang_customers || 0) +
         ' pelanggan';
+      const prospekEl = $('#statProspek');
+      if (prospekEl) prospekEl.textContent = daily.prospek_count || 0;
       $('#statDueService').textContent = daily.servis_berkala_due || 0;
       $('#statWarrantyEnding').textContent = daily.garansi_akan_habis || 0;
       const akanGaransi = $('#statAkanGaransi');
       const akanServis = $('#statAkanServis');
       if (akanGaransi) akanGaransi.textContent = daily.akan_datang_garansi || 0;
       if (akanServis) akanServis.textContent = daily.akan_datang_servis || 0;
-      $('#statFollowupToday').textContent = daily.followup_aktif || 0;
+      const pengerjaanEl = $('#statPengerjaan');
+      if (pengerjaanEl) pengerjaanEl.textContent = daily.kendaraan_selesai || 0;
 
       renderRecent(records.slice(0, 6));
     } catch (err) {
@@ -4692,49 +4661,34 @@
       item.status !== 'SELESAI' &&
       item.status !== 'ARSIP' &&
       item.status !== 'TIDAK_DATANG';
-    const assignee = item.penanggung_jawab
-      ? '<span class="badge blue">' + esc(item.penanggung_jawab) + '</span>'
-      : '<span class="badge amber">Belum ditugaskan</span>';
     return (
       '<div class="followup-card' +
       (late ? ' is-late' : '') +
       '" role="button" tabindex="0" data-action="followup-detail" data-id="' +
       item.id +
       '">' +
-      '<div class="followup-card-top"><span class="badge ' +
-      jenisTone(item.jenis) +
-      '">' +
-      esc(item.jenis_label) +
+      '<div class="followup-card-top"><span class="followup-card-title">' +
+      esc(item.customer_nama) +
       '</span><span class="cell-sub">' +
       esc(dueLabel(item)) +
       '</span></div>' +
-      '<div class="followup-card-title">' +
-      esc(item.customer_nama) +
-      '</div>' +
-      '<div class="followup-card-meta"><strong>' +
-      esc(item.judul) +
-      '</strong><br>' +
-      esc(item.unit_deskripsi || '-') +
-      '</div>' +
-      '<div class="followup-card-badges">' +
-      (item.status === 'BARU'
-        ? ''
-        : '<span class="badge gray">' + esc(item.status_label) + '</span>') +
-      (item.no_nota
-        ? '<span class="badge gray">' + esc(item.no_nota) + '</span>'
-        : '') +
-      assignee +
-      '</div><span class="followup-card-link">Lihat detail</span></div>'
+      '<div class="followup-card-meta">' +
+      esc(item.customer_alamat || 'Domisili belum diisi') +
+      '<br>WA ' +
+      esc(item.nomor_hp || '-') +
+      '</div></div>'
     );
   }
 
-  function openFollowupList(jenis, status) {
+  function openFollowupList(jenis, status, excludeStatus) {
     const type = jenis || '';
     const itemStatus = status || '';
+    const excluded = excludeStatus || '';
     state.followupList = {
       filter: 'semua',
       jenis: type,
       status: itemStatus,
+      excludeStatus: excluded,
       items: [],
     };
     const title = $('#followupListTitle');
@@ -4743,14 +4697,12 @@
       title.textContent =
         (itemStatus === 'AKAN_DATANG' && FOLLOWUP_AKAN_DATANG_TITLES[type]) ||
         FOLLOWUP_LIST_TITLES[type] ||
-        'Tugas follow-up';
+        'Follow-up';
     }
     if (subtitle) {
       subtitle.textContent = itemStatus === 'AKAN_DATANG'
         ? 'Jadwal kunjungan yang sudah disepakati. Pilih item untuk melihat detail.'
-        : type
-          ? 'Pengingat aktif. Pilih item untuk melihat detail.'
-          : 'Semua tugas aktif. Pilih item untuk melihat detail.';
+        : 'Pengingat aktif. Pilih item untuk melihat detail.';
     }
     const body = $('#followupListBody');
     if (body) body.innerHTML = '<div class="empty-state sm">Memuat follow-up...</div>';
@@ -4770,7 +4722,8 @@
         current.filter,
         current.jenis || null,
         null,
-        current.status || null
+        current.status || null,
+        current.excludeStatus || null
       );
       if (state.followupList !== current) return;
       current.items = result.items || [];
@@ -4849,8 +4802,14 @@
     );
   }
 
-  function followupStatusOptions(current) {
-    return FOLLOWUP_STATUS_CHOICES.map(
+  function followupStatusOptions(current, jenis) {
+    return FOLLOWUP_STATUS_CHOICES.filter((choice) => {
+      if (choice.value === 'JANJI_BAYAR') return jenis === 'piutang';
+      if (choice.value === 'SELESAI' || choice.value === 'ARSIP') {
+        return jenis !== 'piutang';
+      }
+      return true;
+    }).map(
       (choice) =>
         '<option value="' +
         choice.value +
@@ -4863,55 +4822,64 @@
   }
 
   function followupStatusFormHtml(item) {
-    const alasanField =
-      '<label class="field"><span>Catatan / alasan arsip</span>' +
-      '<input type="text" class="input" id="followupAlasan" maxlength="500" placeholder="Opsional, wajib untuk arsip"></label>';
+    const followed = !!item.followup_terakhir;
+    const lockedHint = followed
+      ? ''
+      : '<p class="tiny muted">Lakukan follow up WhatsApp dulu sebelum mengubah status.</p>';
     let fields;
     if (FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0) {
-      const current =
-        item.status === 'AKAN_DATANG' || item.status === 'TIDAK_DATANG'
-          ? item.status
-          : '';
+      const lockAttr = followed ? '' : ' disabled';
       fields =
         '<div class="form-grid">' +
         '<label class="field"><span>Status</span>' +
-        '<select class="input" id="followupStatusSelect">' +
+        '<select class="input" id="followupStatusSelect"' +
+        lockAttr +
+        '>' +
         '<option value="">Pilih status</option>' +
         '<option value="AKAN_DATANG"' +
-        (current === 'AKAN_DATANG' ? ' selected' : '') +
+        (item.status === 'AKAN_DATANG' ? ' selected' : '') +
         '>Akan datang service</option>' +
         '<option value="TIDAK_DATANG"' +
-        (current === 'TIDAK_DATANG' ? ' selected' : '') +
+        (item.status === 'TIDAK_DATANG' ? ' selected' : '') +
         '>Tidak akan datang service</option>' +
         '</select></label>' +
         '<label class="field"><span>Tanggal service (wajib bila akan datang)</span>' +
         '<input type="date" class="input" id="followupTanggalService" value="' +
         esc(item.tanggal_service || '') +
-        '"></label>' +
+        '"' +
+        lockAttr +
+        '></label>' +
         '</div>' +
-        alasanField;
+        '<label class="field"><span>Catatan</span>' +
+        '<input type="text" class="input" id="followupAlasan" maxlength="500" placeholder="Opsional"></label>' +
+        lockedHint +
+        '<div class="form-actions">' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="followup-status-save" data-id="' +
+        item.id +
+        '"' +
+        lockAttr +
+        '>Simpan status</button>' +
+        '</div>';
     } else {
       fields =
         '<div class="form-grid">' +
         '<label class="field"><span>Status</span><select class="input" id="followupStatusSelect">' +
-        followupStatusOptions(item.status) +
+        followupStatusOptions(item.status, item.jenis) +
         '</select></label>' +
         '<label class="field"><span>Janji bayar (untuk JANJI_BAYAR)</span>' +
         '<input type="date" class="input" id="followupJanji" value="' +
         esc(item.janji_bayar || '') +
         '"></label>' +
         '</div>' +
-        alasanField;
+        '<label class="field"><span>Catatan / alasan arsip</span>' +
+        '<input type="text" class="input" id="followupAlasan" maxlength="500" placeholder="Opsional, wajib untuk arsip"></label>' +
+        '<div class="form-actions">' +
+        '<button type="button" class="btn btn-primary btn-sm" data-action="followup-status-save" data-id="' +
+        item.id +
+        '">Simpan status</button>' +
+        '</div>';
     }
-    return (
-      '<div class="followup-form">' +
-      fields +
-      '<div class="form-actions">' +
-      '<button type="button" class="btn btn-primary btn-sm" data-action="followup-status-save" data-id="' +
-      item.id +
-      '">Simpan status</button>' +
-      '</div></div>'
-    );
+    return '<div class="followup-form">' + fields + '</div>';
   }
 
   function renderFollowupDetail(detail) {
@@ -4945,7 +4913,9 @@
         : '<span class="badge amber">Belum ditugaskan</span>') +
       '</div>' +
       '<div class="detail-grid">' +
-      detailItem('Pelanggan', esc(item.customer_nama + ' · ' + item.nomor_masked)) +
+      detailItem('Pelanggan', esc(item.customer_nama)) +
+      detailItem('Domisili', esc(item.customer_alamat || '-')) +
+      detailItem('WhatsApp', esc(item.nomor_hp || '-')) +
       detailItem('Unit', esc(item.unit_deskripsi || '-')) +
       detailItem('Jatuh tempo', esc(item.jatuh_tempo ? fmtDate(item.jatuh_tempo) : '-')) +
       detailItem(
@@ -4984,10 +4954,12 @@
       esc(detail.pesan || '-') +
       '</p></div>' +
       '<div class="detail-section">' +
-      '<h4 class="detail-section-title">Ubah status</h4>' +
+      '<h4 class="detail-section-title">' +
+      (jadwal ? 'Jadwalkan service' : 'Ubah status') +
+      '</h4>' +
       followupStatusFormHtml(item) +
       '</div>' +
-      followupEventsHtml(events);
+      (jadwal ? '' : followupEventsHtml(events));
   }
 
   async function openFollowupDetail(id) {
@@ -5201,6 +5173,93 @@
     body.innerHTML = summary + '<div class="receivable-list">' + groups + '</div>';
   }
 
+  /* --------------------------- Kendaraan selesai --------------------------- */
+  function openPengerjaanList() {
+    state.pengerjaan = null;
+    const body = $('#pengerjaanBody');
+    if (body) body.innerHTML = '<div class="empty-state sm">Memuat kendaraan...</div>';
+    openModal('#pengerjaanModal');
+    loadPengerjaan();
+  }
+
+  async function loadPengerjaan() {
+    const body = $('#pengerjaanBody');
+    if (!body) return;
+    try {
+      const data = await API.pengerjaan();
+      state.pengerjaan = data;
+      renderPengerjaan();
+    } catch (err) {
+      body.innerHTML =
+        '<div class="empty-state sm">Daftar kendaraan gagal dimuat. Coba lagi.</div>';
+    }
+  }
+
+  function renderPengerjaan() {
+    const body = $('#pengerjaanBody');
+    if (!body) return;
+    const data = state.pengerjaan;
+    const items = (data && data.items) || [];
+    if (!items.length) {
+      body.innerHTML =
+        '<div class="empty-state sm">Tidak ada kendaraan yang menunggu diambil.</div>';
+      return;
+    }
+    const summary = '<p class="muted">' + items.length + ' nota · unit masih di bengkel</p>';
+    const rows = items
+      .map((item) => {
+        const sisaHtml =
+          moneyToCents(item.sisa_bayar) > 0
+            ? '<span class="receivable-total">' + fmtRp(item.sisa_bayar) + '</span>'
+            : '<span class="badge gray">Lunas</span>';
+        return (
+          '<div class="receivable-group"><div class="receivable-head"><div class="pengerjaan-info"><strong>' +
+          esc(item.customer_nama) +
+          '</strong><span>' +
+          esc(item.unit_deskripsi) +
+          ' · ' +
+          esc(item.nomor_hp || '-') +
+          '</span></div>' +
+          sisaHtml +
+          '</div><div class="pengerjaan-row"><div class="pengerjaan-meta">' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="record-detail" data-id="' +
+          item.record_id +
+          '">' +
+          esc(item.no_nota) +
+          '</button><span class="cell-sub">' +
+          esc(fmtDate(item.waktu_service)) +
+          '</span></div><div class="pengerjaan-actions">' +
+          '<button type="button" class="btn btn-primary btn-xs" data-action="record-completion" data-id="' +
+          item.record_id +
+          '">Kabari WA</button>' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="pengerjaan-taken" data-id="' +
+          item.id +
+          '">Sudah diambil</button>' +
+          '</div></div></div>'
+        );
+      })
+      .join('');
+    body.innerHTML = summary + '<div class="receivable-list">' + rows + '</div>';
+  }
+
+  async function markPengerjaanTaken(id) {
+    if (!window.confirm('Tandai unit sudah diambil pelanggan?')) return;
+    const button = $(
+      '[data-action="pengerjaan-taken"][data-id="' + id + '"]'
+    );
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.pengerjaanTaken(id);
+      toast('Unit ditandai sudah diambil.', 'success');
+      await loadPengerjaan();
+      loadDashboard();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
   function openDashboardNotas(filter) {
     const today = state.dashboardToday || [];
     let list = today;
@@ -5283,11 +5342,19 @@
       return;
     }
     if (action === 'open-followup') {
-      openFollowupList(data.jenis || '', data.status || '');
+      openFollowupList(
+        data.jenis || '',
+        data.status || '',
+        data.excludeStatus || ''
+      );
       return;
     }
     if (action === 'open-receivables') {
       openReceivables(null);
+      return;
+    }
+    if (action === 'open-pengerjaan') {
+      openPengerjaanList();
       return;
     }
     if (action === 'payment-fill-sisa') {
@@ -5304,6 +5371,11 @@
     }
 
     if (!id) return;
+
+    if (action === 'pengerjaan-taken') {
+      await markPengerjaanTaken(id);
+      return;
+    }
 
     if (action === 'followup-detail') {
       openFollowupDetail(id);
@@ -6579,8 +6651,6 @@
       target.id === 'catatanPengerjaan' ||
       target.id === 'diskonInput' ||
       target.id === 'bayarInput' ||
-      target.id === 'dpInput' ||
-      target.id === 'jatuhTempoInput' ||
       target.id === 'rencanaBayarInput' ||
       target.id === 'rencanaTanggalInput' ||
       target.id === 'kreditUangMukaInput'
@@ -6596,7 +6666,6 @@
       if (
         target.id === 'diskonInput' ||
         target.id === 'bayarInput' ||
-        target.id === 'dpInput' ||
         target.id === 'rencanaBayarInput' ||
         target.id === 'kreditUangMukaInput'
       ) {
@@ -6609,9 +6678,6 @@
       return;
     }
     if (target.id === 'diskonInput' || target.id === 'bayarInput') {
-      updateSummary();
-    }
-    if (target.id === 'dpInput') {
       updateSummary();
     }
   }
@@ -6661,13 +6727,13 @@
     );
     $$('#jenisBayarSwitch button').forEach((button) =>
       button.addEventListener('click', () => {
-        state.jenisBayar = ['DP', 'KREDIT'].indexOf(button.dataset.jenis) >= 0
-          ? button.dataset.jenis
-          : 'LUNAS';
+        state.jenisBayar =
+          button.dataset.jenis === 'KREDIT' ? 'KREDIT' : 'LUNAS';
         updateJenisBayar();
       })
     );
     $('#kreditUangMukaAktif').addEventListener('change', updateKreditUangMuka);
+    $('#unitDitinggalAktif').addEventListener('change', invalidateNotaReview);
     $('#rencanaTanggalInput').addEventListener('change', invalidateNotaReview);
     $('#garansiAktif').addEventListener('change', updateGaransiFields);
     $('#garansiBulan').addEventListener('change', updateGaransiFields);
@@ -6680,7 +6746,6 @@
     $('#btnNotaCorrect').addEventListener('click', confirmNotaReview);
     $('#btnSavePrint').addEventListener('click', () => saveTransaction(true));
     $('#btnSaveOnly').addEventListener('click', () => saveTransaction(false));
-    $('#jatuhTempoInput').addEventListener('change', invalidateNotaReview);
     $('#garansiAktif').addEventListener('change', invalidateNotaReview);
     $('#garansiBulan').addEventListener('change', invalidateNotaReview);
     $('#garansiBulanCustom').addEventListener('change', invalidateNotaReview);
@@ -6759,6 +6824,12 @@
     );
     $('#receivablesDismiss').addEventListener('click', () =>
       closeModal('#receivablesModal')
+    );
+    $('#pengerjaanClose').addEventListener('click', () =>
+      closeModal('#pengerjaanModal')
+    );
+    $('#pengerjaanDismiss').addEventListener('click', () =>
+      closeModal('#pengerjaanModal')
     );
 
     $('#receiptClose').addEventListener('click', () => closeModal('#receiptModal'));

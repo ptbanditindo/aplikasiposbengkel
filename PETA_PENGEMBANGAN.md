@@ -765,6 +765,12 @@ dengan token baru.
 
 ## Tahap 11 — DP, pelunasan, dan piutang pelanggan
 
+> **Pembaruan setelah Tahap 11:** jenis bayar DP dihapus. Nota baru hanya
+> memakai **LUNAS** atau **KREDIT**; KREDIT tetap mendukung uang muka opsional
+> dan tanggal rencana pembayaran. Bagian di bawah disimpan sebagai catatan
+> sejarah perencanaan. Nota lama berjenis DP tetap terbaca dan dihitung sebagai
+> kredit.
+
 **Masalah.** Nota hanya mengenal pembayaran `CASH` dan `TRANSFER`
 (`database/models.py:141`). Uang tunai kurang dari total ditolak
 (`services/pricing_service.py:61`), sedangkan transfer selalu dianggap pas.

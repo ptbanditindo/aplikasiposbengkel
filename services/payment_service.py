@@ -1,4 +1,4 @@
-"""DP, pelunasan bertahap, refund, dan daftar piutang (Tahap 11)."""
+"""Pelunasan bertahap, refund, dan daftar piutang (Tahap 11)."""
 from __future__ import annotations
 
 from datetime import date, datetime

@@ -1,4 +1,4 @@
-"""P-05: DP tanpa jatuh tempo, pelunasan kapan saja, pesan kendaraan selesai."""
+"""P-05: kredit tanpa jatuh tempo, pelunasan kapan saja, pesan kendaraan selesai."""
 from __future__ import annotations
 
 from decimal import Decimal
@@ -9,14 +9,14 @@ from database.session import SessionLocal
 KATA_TERLARANG = ("hutang", "piutang", "tagihan", "kekurangan")
 
 
-def _dp(client, unit_id, dp="100000"):
+def _kredit(client, unit_id, uang_muka="100000"):
     return client.post(
         "/api/pos/transaction",
         json={
             "unit_id": unit_id,
             "keluhan_awal": "Servis radiator",
-            "jenis_bayar": "DP",
-            "dp": dp,
+            "jenis_bayar": "KREDIT",
+            "dp": uang_muka,
             "metode_bayar": "CASH",
             "jobs": [{"deskripsi": "Korok Radiator", "jumlah": 1, "harga": "150000"}],
             "parts": [],
@@ -34,13 +34,13 @@ def _assert_pesan_pelanggan(text: str) -> None:
         assert kata not in lower, (kata, text)
 
 
-def test_dp_tanpa_jatuh_tempo_tersimpan_dan_muncul_di_piutang(
+def test_kredit_tanpa_jatuh_tempo_tersimpan_dan_muncul_di_piutang(
     client, create_customer, create_unit
 ):
-    customer = create_customer(nama="Dewi DP")
-    unit = create_unit(customer["id"], nopol="B 5501 DPX")
+    customer = create_customer(nama="Dewi Kredit")
+    unit = create_unit(customer["id"], nopol="B 5501 KRX")
 
-    response = _dp(client, unit["id"])
+    response = _kredit(client, unit["id"])
     assert response.status_code == 201, response.text
     body = response.json()
     record = body["record"]
@@ -69,13 +69,13 @@ def test_dp_tanpa_jatuh_tempo_tersimpan_dan_muncul_di_piutang(
     completion = receipt["completion_wa_text"]
     assert "sudah selesai dikerjakan" in completion
     assert "siap diambil" in completion
-    assert "DP sudah kami terima." in completion
+    assert "Pembayaran awal sudah kami terima." in completion
     assert "Sisa pembayaran Rp 50.000" in completion
     _assert_pesan_pelanggan(completion)
 
     with SessionLocal() as db:
         payment = db.query(ServicePayment).one()
-        assert payment.jenis == "DP"
+        assert payment.jenis == "UANG_MUKA"
         assert payment.nominal == Decimal("100000.00")
 
 
@@ -84,7 +84,7 @@ def test_pelunasan_tanpa_jatuh_tempo_sampai_lunas(
 ):
     customer = create_customer(nama="Eko Lunas")
     unit = create_unit(customer["id"], nopol="B 5502 LNS")
-    record_id = _dp(client, unit["id"], dp="50000").json()["record"]["id"]
+    record_id = _kredit(client, unit["id"], uang_muka="50000").json()["record"]["id"]
 
     partial = client.post(
         f"/api/service-records/{record_id}/payments",
@@ -109,7 +109,7 @@ def test_pelunasan_tanpa_jatuh_tempo_sampai_lunas(
     assert "sudah selesai dikerjakan" in completion
     assert "siap diambil" in completion
     assert "Sisa pembayaran" not in completion
-    assert "DP sudah kami terima" not in completion
+    assert "Pembayaran awal" not in completion
     _assert_pesan_pelanggan(completion)
 
 
@@ -118,7 +118,7 @@ def test_whatsapp_jenis_piutang_memakai_teks_kendaraan_selesai(
 ):
     customer = create_customer(nama="Fitri Selesai", nomor_hp="0812-9999-0001")
     unit = create_unit(customer["id"], nopol="B 5503 SEL")
-    body = _dp(client, unit["id"]).json()
+    body = _kredit(client, unit["id"]).json()
     record_id = body["record"]["id"]
 
     response = client.post(
@@ -140,7 +140,7 @@ def test_whatsapp_jenis_piutang_memakai_teks_kendaraan_selesai(
 def test_jenis_whatsapp_tidak_dikenal_ditolak(client, create_customer, create_unit):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    record_id = _dp(client, unit["id"]).json()["record"]["id"]
+    record_id = _kredit(client, unit["id"]).json()["record"]["id"]
 
     response = client.post(
         f"/api/service-records/{record_id}/whatsapp",
