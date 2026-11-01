@@ -135,15 +135,18 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
 - Ukuran: 45.100.792 byte
-- SHA-256: `3b1bef67f561085cf1233f1f2097e2dbf8df50fe4316af0ef724eff1f0668c0d`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.6`, versionCode `9`,
+- SHA-256: `e7050ce16218ab5cd3b42200f1d83d72be6e206dbbdcc480c49fdeef6b43133b`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.7`, versionCode `10`,
   minSdk 26, targetSdk 35, debug-signed.
 - Asset `assets/bengkel_backend.zip`: 277.337 byte, SHA-256
-  `a6c451e599a06c461cf1e9ee4290328eb96a5fce8d4c2025d99b37092f1fe9d6`.
+  `8ef232823ad0fac939afdf32170d360089030f258c95e6941e9f57750cd46e2c`.
   ZIP ini memuat logika follow-up Tahap 1-5: penanda pengerjaan, status
   pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
   servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,
   prioritas, penggabungan pesan, varian template, dan sembilan kartu Follow up.
+  Build ini juga memperbaiki alur pilih unit di kasir: form unit baru
+  disembunyikan bila unit lama dipilih, dan rincian jasa/sparepart langsung
+  tampil.
 - Pytest dua stack lulus 322 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.

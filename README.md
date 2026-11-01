@@ -150,7 +150,7 @@ build step) di `http://127.0.0.1:8000`.
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
   tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build
-  debug terbaru adalah **2.2.6** (versionCode 9).
+  debug terbaru adalah **2.2.7** (versionCode 10).
 
 ## Menjalankan versi web/desktop
 
@@ -248,7 +248,7 @@ tidak tersedia di PATH.
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir adalah versi **2.2.6** (versionCode 9).
+terakhir adalah versi **2.2.7** (versionCode 10).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan

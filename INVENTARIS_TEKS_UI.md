@@ -52,7 +52,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.2.6 |
+| Versi | BengkelPOS Radiator v2.2.7 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan

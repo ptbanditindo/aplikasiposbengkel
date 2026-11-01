@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261154">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261156">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -246,48 +246,52 @@
                 </div>
               </div>
               <div class="unit-grid" id="unitList"></div>
-              <div class="divider-row"><span>atau daftarkan unit baru</span></div>
-              <div class="segmented" id="unitTypeSwitch">
-                <button type="button" data-type="MOBIL" class="active">Mobil lengkap</button>
-                <button type="button" data-type="RADIATOR_ONLY">Bawa radiator saja</button>
+              <div class="divider-row">
+                <button type="button" class="btn btn-ghost btn-sm" id="btnToggleNewUnit">Daftarkan unit baru</button>
               </div>
-              <div class="form-grid" id="mobilFields">
-                <label class="field">
-                  <span>Nomor polisi <em>*</em></span>
-                  <input type="text" class="input" id="unitNopol" placeholder="Contoh: B 1234 ABC" maxlength="32">
-                </label>
-                <label class="field">
-                  <span>Jenis atau tipe mobil</span>
-                  <input type="text" class="input" id="unitJenis" placeholder="Contoh: Avanza 2018" maxlength="255">
-                </label>
-                <label class="field">
-                  <span>Tahun</span>
-                  <input type="number" class="input" id="unitTahun" min="1900" max="2100" placeholder="2018">
-                </label>
-              </div>
-              <div class="form-grid hidden" id="radiatorFields">
-                <label class="field">
-                  <span>Tipe radiator</span>
-                  <input type="text" class="input" id="unitTipe" placeholder="Contoh: Radiator Canter 2-ply" maxlength="255">
-                </label>
-                <label class="field">
-                  <span>Kondisi awal</span>
-                  <input type="text" class="input" id="unitKondisi" placeholder="Contoh: upper tank retak" maxlength="1000">
-                </label>
-                <div class="field hint-box">
-                  <span>Label radiator otomatis</span>
-                  <strong>RAD-YYYYMMDD-XXX</strong>
-                  <small>Dibuat otomatis saat unit disimpan.</small>
+              <div class="new-unit-form hidden" id="newUnitForm">
+                <div class="segmented" id="unitTypeSwitch">
+                  <button type="button" data-type="MOBIL" class="active">Mobil lengkap</button>
+                  <button type="button" data-type="RADIATOR_ONLY">Bawa radiator saja</button>
                 </div>
-              </div>
-              <div class="form-grid">
-                <label class="field">
-                  <span>Keterangan tambahan</span>
-                  <input type="text" class="input" id="unitKeterangan" placeholder="Catatan unit (opsional)" maxlength="1000">
-                </label>
-              </div>
-              <div class="form-actions">
-                <button type="button" class="btn btn-outline" id="btnAddUnit">Simpan unit</button>
+                <div class="form-grid" id="mobilFields">
+                  <label class="field">
+                    <span>Nomor polisi <em>*</em></span>
+                    <input type="text" class="input" id="unitNopol" placeholder="Contoh: B 1234 ABC" maxlength="32">
+                  </label>
+                  <label class="field">
+                    <span>Jenis atau tipe mobil</span>
+                    <input type="text" class="input" id="unitJenis" placeholder="Contoh: Avanza 2018" maxlength="255">
+                  </label>
+                  <label class="field">
+                    <span>Tahun</span>
+                    <input type="number" class="input" id="unitTahun" min="1900" max="2100" placeholder="2018">
+                  </label>
+                </div>
+                <div class="form-grid hidden" id="radiatorFields">
+                  <label class="field">
+                    <span>Tipe radiator</span>
+                    <input type="text" class="input" id="unitTipe" placeholder="Contoh: Radiator Canter 2-ply" maxlength="255">
+                  </label>
+                  <label class="field">
+                    <span>Kondisi awal</span>
+                    <input type="text" class="input" id="unitKondisi" placeholder="Contoh: upper tank retak" maxlength="1000">
+                  </label>
+                  <div class="field hint-box">
+                    <span>Label radiator otomatis</span>
+                    <strong>RAD-YYYYMMDD-XXX</strong>
+                    <small>Dibuat otomatis saat unit disimpan.</small>
+                  </div>
+                </div>
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Keterangan tambahan</span>
+                    <input type="text" class="input" id="unitKeterangan" placeholder="Catatan unit (opsional)" maxlength="1000">
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button type="button" class="btn btn-outline" id="btnAddUnit">Simpan unit</button>
+                </div>
               </div>
             </section>
 
@@ -1137,7 +1141,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.2.6</span>
+        <span>BengkelPOS Radiator v2.2.7</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -1713,15 +1717,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261154"></script>
-  <script src="/static/js/api-client.js?v=20261154"></script>
-  <script src="/static/js/printer-manager.js?v=20261154"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261154"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261154"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261154"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261154"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261154"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261154"></script>
-  <script src="/static/js/app.js?v=20261154"></script>
+  <script src="/static/js/native-bridge.js?v=20261156"></script>
+  <script src="/static/js/api-client.js?v=20261156"></script>
+  <script src="/static/js/printer-manager.js?v=20261156"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261156"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261156"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261156"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261156"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261156"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261156"></script>
+  <script src="/static/js/app.js?v=20261156"></script>
 </body>
 </html>

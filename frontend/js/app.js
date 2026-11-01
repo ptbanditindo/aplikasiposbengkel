@@ -216,6 +216,7 @@
     customerResults: [],
     units: [],
     selectedUnit: null,
+    newUnitFormOpen: false,
     unitType: 'MOBIL',
     jobs: [],
     parts: [],
@@ -690,6 +691,7 @@
     state.parts = [];
     state.units = [];
     state.complaintConfirmed = false;
+    state.newUnitFormOpen = false;
 
     $('#customerSearch').value = customer.nama;
     hideCustomerResults();
@@ -720,6 +722,7 @@
     if (!state.units.length) {
       container.innerHTML =
         '<div class="empty-state sm">Belum ada unit terdaftar. Daftarkan mobil atau radiator baru di bawah.</div>';
+      syncNewUnitForm();
       return;
     }
 
@@ -755,6 +758,7 @@
           '<span class="unit-sub">' +
           esc(subtitle) +
           '</span>' +
+          '<span class="unit-pick">Pilih</span>' +
           tag +
           '</span>' +
           '</button>' +
@@ -767,6 +771,20 @@
         );
       })
       .join('');
+    syncNewUnitForm();
+  }
+
+  function syncNewUnitForm() {
+    const form = $('#newUnitForm');
+    const toggle = $('#btnToggleNewUnit');
+    if (!form || !toggle) return;
+    const hasUnits = state.units.length > 0;
+    const open = !hasUnits || state.newUnitFormOpen;
+    form.classList.toggle('hidden', !open);
+    toggle.classList.toggle('hidden', !hasUnits);
+    toggle.textContent = state.newUnitFormOpen
+      ? 'Tutup formulir unit baru'
+      : 'Daftarkan unit baru';
   }
 
   async function deleteUnit(unitId) {
@@ -815,9 +833,10 @@
     invalidateNotaReview();
     state.selectedUnit = unit;
     state.complaintConfirmed = false;
+    state.newUnitFormOpen = false;
     renderUnits();
     $('#complaintCard').classList.remove('hidden');
-    $('#itemsCard').classList.add('hidden');
+    $('#itemsCard').classList.remove('hidden');
     updateSummaryCustomer();
     updateSummary();
   }
@@ -890,6 +909,7 @@
     try {
       const unit = await API.createUnit(payload);
       state.units = [unit].concat(state.units);
+      state.newUnitFormOpen = false;
       renderUnits();
       selectUnit(unit.id);
       resetUnitForm();
@@ -1653,6 +1673,7 @@
     state.parts = [];
     state.unitType = 'MOBIL';
     state.complaintConfirmed = false;
+    state.newUnitFormOpen = false;
     state.notaReviewed = false;
     showSaveActions(false);
 
@@ -7796,6 +7817,10 @@
       button.addEventListener('click', () => setUnitType(button.dataset.type))
     );
     $('#btnAddUnit').addEventListener('click', handleAddUnit);
+    $('#btnToggleNewUnit').addEventListener('click', () => {
+      state.newUnitFormOpen = !state.newUnitFormOpen;
+      syncNewUnitForm();
+    });
 
     $('#jasaPicker').addEventListener('change', onJasaPickerChange);
     $('#partPicker').addEventListener('change', onPartPickerChange);
