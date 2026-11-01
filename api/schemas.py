@@ -380,6 +380,10 @@ class PaymentCreate(StrictBase):
     request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
 
 
+class DueDateUpdate(StrictBase):
+    jatuh_tempo: date
+
+
 class PaymentOut(ORMModel):
     id: int
     service_record_id: int
@@ -402,6 +406,9 @@ class ReceivableRecordOut(CompatBase):
     total_dibayar: Money
     sisa_bayar: Money
     jatuh_tempo: Optional[date] = None
+    diingatkan_pada: Optional[datetime] = None
+    sudah_diingatkan: bool = False
+    bisa_diingatkan: bool = True
     umur_hari: int
     umur_bucket: str
     overdue: bool

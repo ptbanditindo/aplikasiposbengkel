@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    DueDateUpdate,
     PaymentCreate,
     PaymentOut,
     PaymentResultOut,
@@ -71,6 +72,22 @@ def create_payment(
         status_bayar=record.status_bayar,
         sisa_bayar=payment_service.record_sisa(record),
     )
+
+
+@router.put(
+    "/service-records/{record_id}/jatuh-tempo",
+    response_model=ServiceRecordOut,
+)
+def update_due_date(
+    record_id: int,
+    payload: DueDateUpdate,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    record = payment_service.reschedule_due_date(
+        db, record_id, payload.jatuh_tempo, operator
+    )
+    return ServiceRecordOut.model_validate(record_summary(record))
 
 
 @router.get("/receivables", response_model=ReceivablesOut)

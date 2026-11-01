@@ -3430,12 +3430,13 @@ a.btn { text-decoration: none; }
 
 /* Piutang */
 .receivable-group {
+  min-width: 0;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface);
 }
-.receivable-list { display: grid; gap: 10px; }
+.receivable-list { display: grid; gap: 10px; min-width: 0; }
 .receivable-group + .receivable-group { margin-top: 10px; }
 .receivable-head {
   display: flex;
@@ -3445,7 +3446,7 @@ a.btn { text-decoration: none; }
   gap: 4px 12px;
   margin-bottom: 8px;
 }
-.receivable-head strong { font-size: 13px; }
+.receivable-head strong { margin-right: 6px; font-size: 13px; }
 .receivable-head span { color: var(--muted); font-size: 11.5px; }
 .receivable-head .receivable-total {
   color: var(--negative);
@@ -3460,15 +3461,16 @@ a.btn { text-decoration: none; }
   border-collapse: collapse;
   font-size: 12px;
 }
+.receivable-table-wrap { max-width: 100%; overflow-x: auto; }
 .receivable-records th {
-  padding: 6px 8px;
+  padding: 6px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
-.receivable-records td { padding: 7px 8px; border-bottom: 1px solid var(--rule); }
+.receivable-records td { padding: 6px; border-bottom: 1px solid var(--rule); }
 .receivable-records tr:last-child td { border-bottom: 0; }
 .receivable-records .num {
   font-family: var(--mono);
@@ -3481,6 +3483,23 @@ a.btn { text-decoration: none; }
   gap: 4px;
   white-space: nowrap;
 }
+.receivable-due {
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+}
+.receivable-due-date { white-space: nowrap; }
+.receivable-due-edit {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.receivable-due-edit:hover { color: var(--text); }
 
 /* Kendaraan selesai */
 .pengerjaan-info { display: grid; gap: 2px; }
@@ -3495,18 +3514,6 @@ a.btn { text-decoration: none; }
 .pengerjaan-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* WhatsApp */
-.wa-log-list { display: grid; gap: 6px; }
-.wa-log-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 10px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  font-size: 12px;
-}
-.wa-log-row small { color: var(--muted); font-size: 11px; }
 #waModalNumber { font-family: var(--mono); }
 
 /* Grid ops */
@@ -3518,6 +3525,6 @@ a.btn { text-decoration: none; }
 
 @media (max-width: 560px) {
   .receivable-records { min-width: 520px; }
-  .receivable-table-wrap { overflow-x: auto; }
+  .receivable-table-wrap { max-width: 100%; overflow-x: auto; }
   .payment-form .form-grid { grid-template-columns: 1fr; }
 }

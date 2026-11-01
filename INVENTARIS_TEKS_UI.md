@@ -69,7 +69,24 @@ Aturan yang dipakai:
 | Kosong | Belum ada transaksi hari ini. Mulai dari tombol Servis baru. |
 | Gagal muat | Ringkasan hari ini gagal dimuat. Coba muat ulang. |
 
-### 3.1 Daftar dan detail follow-up
+### 3.1 Piutang pelanggan
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Piutang pelanggan |
+| Keterangan | Nota yang belum lunas. / Nota belum lunas pelanggan ini. |
+| Ringkasan | N pelanggan · N nota · total sisa Rp... |
+| Kolom | Nota, Tanggal, Sisa, Jatuh tempo (+ Ubah/Atur), Umur, Aksi |
+| Tombol aksi | Pelunasan, Ingatkan |
+| Ingatkan terkunci | Diingatkan (sebelum jatuh tempo: Ingatkan nonaktif dengan keterangan tanggal mulai) |
+| Ubah tempo | Judul: Ubah jatuh tempo / Tanggal jatuh tempo * / Batal, Simpan tanggal |
+| Berhasil ubah tempo | Jatuh tempo diperbarui. Pengingat aktif lagi pada tanggal baru. |
+| Kosong | Tidak ada piutang berjalan. |
+| Gagal muat | Piutang gagal dimuat. Coba lagi. |
+| Berhasil ingatkan | Pengingat dibuka di WhatsApp. Tekan kirim di WhatsApp. |
+| Tombol tutup | Tutup |
+
+### 3.2 Daftar dan detail follow-up
 
 | Lokasi | Teks |
 | --- | --- |
@@ -92,7 +109,7 @@ Aturan yang dipakai:
 | Validasi arsip | Isi alasan arsip minimal 3 karakter. |
 | Tombol tutup | Tutup |
 
-### 3.2 Kendaraan selesai
+### 3.3 Kendaraan selesai
 
 | Lokasi | Teks |
 | --- | --- |
@@ -563,3 +580,10 @@ HTTP diganti dengan kalimat umum di atas.
 14. Tarif jasa dan sparepart punya interval servis berkala 0 sampai 120 bulan.
     Nilainya tampil di kasir, daftar stok, daftar jasa, dan pratinjau nota, serta
     menjadi sumber pengingat servis berkala. Interval 0 berarti nonaktif.
+15. Daftar piutang punya dua aksi: Ingatkan dan Pelunasan. Ingatkan langsung
+    membuka WhatsApp berisi pesan pengingat dari backend, hanya aktif pada hari
+    jatuh tempo atau setelahnya, dan terkunci setelah satu pengingat terkirim.
+    Tombol Ubah/Atur pada kolom Jatuh tempo memindahkan tanggal pembayaran
+    (reschedule); tanggal baru membuka lagi kesempatan mengingatkan. Tombol
+    Kendaraan selesai di piutang dan daftar riwayat WhatsApp pada detail nota
+    dihapus.

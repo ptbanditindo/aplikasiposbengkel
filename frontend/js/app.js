@@ -231,11 +231,11 @@
     complaintConfirmed: false,
     notaReviewed: false,
     detailPayments: [],
-    detailWaLogs: [],
     followupList: null,
     followupDetail: null,
     receivables: null,
     receivablesCustomerId: null,
+    rescheduleTarget: null,
     pengerjaan: null,
     waPreview: null,
   };
@@ -2130,13 +2130,6 @@
       toast('Gagal menyalin. Salin manual dari kotak teks.', 'warning');
       return false;
     }
-  }
-
-  function waStatusLabel(status) {
-    if (status === 'DIBUKA') return 'Dibuka';
-    if (status === 'DIBATALKAN') return 'Dibatalkan';
-    if (status === 'TIDAK_TERSEDIA') return 'Nomor tidak tersedia';
-    return status || '-';
   }
 
   function openWaPreview(options) {
@@ -4093,51 +4086,6 @@
     );
   }
 
-  function waSectionHtml(receipt) {
-    const logs = state.detailWaLogs || [];
-    const number = receiptWaNumber(receipt);
-    let hint = '';
-    if (!waDigits(number)) {
-      hint = 'Nomor HP pelanggan belum valid untuk WhatsApp.';
-    } else if (!(receipt.wa_text || '').trim()) {
-      hint = 'Pesan WhatsApp belum tersedia untuk nota ini.';
-    }
-    const rows = logs
-      .map((log) => {
-        const tone =
-          log.status === 'DIBUKA'
-            ? 'green'
-            : log.status === 'TIDAK_TERSEDIA'
-              ? 'red'
-              : 'gray';
-        return (
-          '<div class="wa-log-row"><div><strong>' +
-          esc(waStatusLabel(log.status)) +
-          '</strong><small>' +
-          esc(fmtDateTime(log.created_at)) +
-          ' · ' +
-          esc(log.operator || '-') +
-          ' · ' +
-          esc(log.nomor_masked || '-') +
-          '</small></div><span class="badge ' +
-          tone +
-          '">' +
-          esc(log.status) +
-          '</span></div>'
-        );
-      })
-      .join('');
-    return (
-      '<div class="detail-section">' +
-      '<h4 class="detail-section-title">WhatsApp</h4>' +
-      (hint ? '<p class="tiny muted">' + esc(hint) + '</p>' : '') +
-      (logs.length
-        ? '<div class="wa-log-list">' + rows + '</div>'
-        : '<div class="empty-state sm">Belum ada upaya WhatsApp untuk nota ini.</div>') +
-      '</div>'
-    );
-  }
-
   function renderRecordDetail(receipt) {
     const jobs = receipt.jobs || [];
     const parts = receipt.parts || [];
@@ -4275,7 +4223,6 @@
           '</p></div>'
         : '') +
       paymentSectionHtml(receipt) +
-      waSectionHtml(receipt) +
       returnHistoryHtml(state.detailReturns);
   }
 
@@ -4286,13 +4233,11 @@
         API.receipt(id),
         API.returns(id),
         API.payments(id),
-        API.recordWhatsappLogs(id),
       ]);
       const receipt = results[0];
       state.detailRecord = receipt;
       state.detailReturns = results[1] || [];
       state.detailPayments = results[2] || [];
-      state.detailWaLogs = results[3] || [];
       renderRecordDetail(receipt);
       openModal('#recordModal');
     } catch (err) {
@@ -4302,12 +4247,7 @@
 
   async function loadRecordExtras(recordId) {
     if (!recordId) return;
-    const results = await Promise.all([
-      API.payments(recordId),
-      API.recordWhatsappLogs(recordId),
-    ]);
-    state.detailPayments = results[0] || [];
-    state.detailWaLogs = results[1] || [];
+    state.detailPayments = (await API.payments(recordId)) || [];
     if (state.detailRecord && state.detailRecord.id === recordId) {
       renderRecordDetail(state.detailRecord);
     }
@@ -5100,6 +5040,40 @@
     }
   }
 
+  function receivableRemindButton(record) {
+    if (record.sudah_diingatkan) {
+      return (
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="Sudah diingatkan ' +
+        esc(fmtDateTime(record.diingatkan_pada)) +
+        '. Ubah jatuh tempo untuk mengingatkan lagi.">Diingatkan</button>'
+      );
+    }
+    if (record.bisa_diingatkan === false) {
+      return (
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="Pengingat bisa dikirim mulai ' +
+        esc(fmtDate(record.jatuh_tempo)) +
+        '.">Ingatkan</button>'
+      );
+    }
+    return (
+      '<button type="button" class="btn btn-outline btn-xs" data-action="receivable-remind" data-id="' +
+      record.id +
+      '">Ingatkan</button>'
+    );
+  }
+
+  function receivableDueCell(record) {
+    return (
+      '<div class="receivable-due"><span class="receivable-due-date">' +
+      esc(record.jatuh_tempo ? fmtDate(record.jatuh_tempo) : 'Belum diatur') +
+      '</span><button type="button" class="receivable-due-edit" data-action="receivable-reschedule" data-id="' +
+      record.id +
+      '">' +
+      (record.jatuh_tempo ? 'Ubah' : 'Atur') +
+      '</button></div>'
+    );
+  }
+
   function renderReceivables() {
     const body = $('#receivablesBody');
     if (!body) return;
@@ -5131,7 +5105,7 @@
               '</td><td class="num">' +
               fmtRp(record.sisa_bayar) +
               '</td><td>' +
-              esc(record.jatuh_tempo ? fmtDate(record.jatuh_tempo) : '-') +
+              receivableDueCell(record) +
               '</td><td>' +
               (record.overdue
                 ? '<span class="badge red">' +
@@ -5144,9 +5118,7 @@
               '<button type="button" class="btn btn-primary btn-xs" data-action="record-payment" data-id="' +
               record.id +
               '">Pelunasan</button>' +
-              '<button type="button" class="btn btn-outline btn-xs" data-action="record-completion" data-id="' +
-              record.id +
-              '">Kendaraan selesai</button>' +
+              receivableRemindButton(record) +
               '</td></tr>'
           )
           .join('');
@@ -5171,6 +5143,82 @@
       })
       .join('');
     body.innerHTML = summary + '<div class="receivable-list">' + groups + '</div>';
+  }
+
+  async function remindReceivable(recordId) {
+    const button = $(
+      '[data-action="receivable-remind"][data-id="' + recordId + '"]'
+    );
+    setBusy(button, true, 'Membuka...');
+    try {
+      const result = await API.remindReceivable(recordId);
+      const opened = await openExternalLink(result.link);
+      if (opened) {
+        toast('Pengingat dibuka di WhatsApp. Tekan kirim di WhatsApp.', 'success');
+      }
+      await loadReceivables();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function findReceivableRecord(recordId) {
+    const data = state.receivables;
+    if (!data) return null;
+    for (const customer of data.items || []) {
+      const found = (customer.records || []).find((row) => row.id === recordId);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function openRescheduleModal(recordId) {
+    const record = findReceivableRecord(recordId);
+    if (!record) return;
+    state.rescheduleTarget = record;
+    const today = todayISO();
+    const input = $('#rescheduleDate');
+    input.min = today;
+    input.value = record.jatuh_tempo && record.jatuh_tempo >= today
+      ? record.jatuh_tempo
+      : today;
+    $('#rescheduleSubtitle').textContent =
+      record.no_nota +
+      ' · sisa ' +
+      fmtRp(record.sisa_bayar) +
+      (record.jatuh_tempo ? ' · tempo ' + fmtDate(record.jatuh_tempo) : ' · belum ada tempo') +
+      (record.sudah_diingatkan ? ' · sudah diingatkan' : '');
+    openModal('#rescheduleModal');
+    input.focus();
+  }
+
+  async function submitReschedule(event) {
+    if (event) event.preventDefault();
+    const record = state.rescheduleTarget;
+    if (!record) return;
+    const value = ($('#rescheduleDate').value || '').trim();
+    if (!value) {
+      toast('Tanggal jatuh tempo wajib diisi.', 'warning');
+      return;
+    }
+    const button = $('#rescheduleSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.rescheduleDueDate(record.id, { jatuh_tempo: value });
+      closeModal('#rescheduleModal');
+      state.rescheduleTarget = null;
+      toast(
+        'Jatuh tempo diperbarui. Pengingat aktif lagi pada tanggal baru.',
+        'success'
+      );
+      await loadReceivables();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   /* --------------------------- Kendaraan selesai --------------------------- */
@@ -5367,6 +5415,14 @@
     }
     if (action === 'record-completion') {
       await openCompletionWhatsapp(id);
+      return;
+    }
+    if (action === 'receivable-remind') {
+      await remindReceivable(id);
+      return;
+    }
+    if (action === 'receivable-reschedule') {
+      openRescheduleModal(id);
       return;
     }
 
@@ -6825,6 +6881,13 @@
     $('#receivablesDismiss').addEventListener('click', () =>
       closeModal('#receivablesModal')
     );
+    $('#rescheduleClose').addEventListener('click', () =>
+      closeModal('#rescheduleModal')
+    );
+    $('#rescheduleCancel').addEventListener('click', () =>
+      closeModal('#rescheduleModal')
+    );
+    $('#rescheduleForm').addEventListener('submit', submitReschedule);
     $('#pengerjaanClose').addEventListener('click', () =>
       closeModal('#pengerjaanModal')
     );

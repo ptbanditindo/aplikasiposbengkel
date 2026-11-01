@@ -47,6 +47,28 @@ def record_whatsapp_attempt(
     )
 
 
+@router.post(
+    "/service-records/{record_id}/remind",
+    response_model=WhatsAppAttemptOut,
+    status_code=201,
+)
+def remind_receivable(
+    record_id: int,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    log, wa_text, link = whatsapp_service.remind_receivable(
+        db, record_id, operator
+    )
+    return WhatsAppAttemptOut(
+        status=log.status,
+        nomor_masked=log.nomor_masked,
+        link=link,
+        wa_text=wa_text,
+        log=WhatsAppLogOut.model_validate(log),
+    )
+
+
 @router.get(
     "/service-records/{record_id}/whatsapp-logs",
     response_model=List[WhatsAppLogOut],

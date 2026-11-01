@@ -207,6 +207,52 @@ def refund_excess(
     return refunded
 
 
+def reschedule_due_date(
+    db: Session,
+    record_id: int,
+    jatuh_tempo: date,
+    operator: Operator,
+    now: Optional[datetime] = None,
+) -> ServiceRecord:
+    """Pindahkan jatuh tempo piutang dan buka lagi pengingat untuk siklus baru."""
+    moment = now or datetime.now()
+    if jatuh_tempo < moment.date():
+        raise BusinessValidationError(
+            "Tanggal jatuh tempo tidak boleh di masa lalu."
+        )
+    with db.begin():
+        record = db.get(ServiceRecord, record_id)
+        if record is None:
+            raise NotFoundError("Nota servis tidak ditemukan.")
+        if (record.status or "NORMAL") == "VOID":
+            raise ConflictError("Nota sudah dibatalkan (VOID).")
+        if (
+            (record.status_bayar or "LUNAS") == "LUNAS"
+            or record_sisa(record) <= 0
+        ):
+            raise ConflictError("Nota ini sudah lunas.")
+        if record.jatuh_tempo == jatuh_tempo:
+            raise BusinessValidationError("Tanggal jatuh tempo tidak berubah.")
+        previous = record.jatuh_tempo
+        record.jatuh_tempo = jatuh_tempo
+        record.diingatkan_pada = None
+        audit_service.record_event(
+            db,
+            operator,
+            audit_service.ACTION_RESCHEDULE,
+            audit_service.REFERENCE_SERVICE_RECORD,
+            reference_id=record.no_nota,
+            reason=(
+                f"Jatuh tempo {previous.isoformat() if previous else '-'} "
+                f"menjadi {jatuh_tempo.isoformat()}"
+            ),
+            now=moment,
+        )
+        db.flush()
+    db.refresh(record)
+    return record
+
+
 def _age_bucket(days: int) -> str:
     if days <= 7:
         return "0-7"
@@ -264,6 +310,8 @@ def receivables(
         sisa = record_sisa(record)
         age = max((day - record.waktu_service.date()).days, 0)
         overdue = bool(record.jatuh_tempo and record.jatuh_tempo < day)
+        sudah_diingatkan = record.diingatkan_pada is not None
+        tempo_tiba = record.jatuh_tempo is None or record.jatuh_tempo <= day
         group["jumlah_nota"] += 1
         group["total_sisa"] += sisa
         group["umur_tertua_hari"] = max(group["umur_tertua_hari"], age)
@@ -282,6 +330,9 @@ def receivables(
                 "total_dibayar": money(record.total_dibayar or 0),
                 "sisa_bayar": sisa,
                 "jatuh_tempo": record.jatuh_tempo,
+                "diingatkan_pada": record.diingatkan_pada,
+                "sudah_diingatkan": sudah_diingatkan,
+                "bisa_diingatkan": bool(tempo_tiba and not sudah_diingatkan),
                 "umur_hari": age,
                 "umur_bucket": _age_bucket(age),
                 "overdue": overdue,

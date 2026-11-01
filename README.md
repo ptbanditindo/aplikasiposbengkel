@@ -34,9 +34,12 @@ build step) di `http://127.0.0.1:8000`.
 - **Kredit & piutang** — nota bisa disimpan sebagai KREDIT dengan uang muka
   opsional, dengan atau tanpa tanggal rencana pembayaran, lalu dilunasi kapan
   saja dari detail nota. Daftar piutang per pelanggan menampilkan sisa, umur
-  piutang, dan nota yang belum lunas. Opsi **Unit ditinggal** menandai
-  kendaraan yang masih di bengkel agar dapat dipakai follow-up saat kendaraan
-  selesai.
+  piutang, dan nota yang belum lunas, dengan tombol **Ingatkan** untuk langsung
+  membuka WhatsApp dan **Pelunasan** untuk mencatat pembayaran. Pengingat hanya
+  aktif pada hari jatuh tempo, terkunci setelah terkirim, dan terbuka lagi
+  lewat **Ubah** pada kolom jatuh tempo bila pelanggan minta perpanjangan.
+  Opsi **Unit ditinggal** menandai kendaraan yang masih di bengkel agar dapat
+  dipakai follow-up saat kendaraan selesai.
 - **WhatsApp manual** — setelah struk dicetak, aplikasi membuka WhatsApp berisi
   struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
   membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor

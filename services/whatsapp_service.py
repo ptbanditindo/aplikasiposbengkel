@@ -17,7 +17,7 @@ from database.models import ServiceRecord, WhatsAppLog
 from services import audit_service, payment_service, settings_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
-from services.errors import BusinessValidationError, NotFoundError
+from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import (
     format_rupiah,
     is_valid_whatsapp,
@@ -175,6 +175,57 @@ def log_attempt(
             catatan=catatan,
             now=now,
         )
+
+    db.refresh(log)
+    return log, message, link
+
+
+def remind_receivable(
+    db: Session,
+    record_id: int,
+    operator: Operator,
+    now: Optional[datetime] = None,
+):
+    """Kirim pengingat piutang sekali per siklus jatuh tempo.
+
+    Pengingat hanya boleh dibuka pada hari jatuh tempo atau setelahnya.
+    Mengubah jatuh tempo mengosongkan penanda sehingga pengingat aktif lagi.
+    """
+    moment = now or datetime.now()
+    with db.begin():
+        record = db.get(ServiceRecord, record_id)
+        if record is None:
+            raise NotFoundError("Nota servis tidak ditemukan.")
+        if (record.status or "NORMAL") == "VOID":
+            raise ConflictError("Nota sudah dibatalkan (VOID).")
+        if (
+            (record.status_bayar or "LUNAS") == "LUNAS"
+            or payment_service.record_sisa(record) <= 0
+        ):
+            raise ConflictError("Nota ini sudah lunas.")
+        if record.diingatkan_pada is not None:
+            raise ConflictError(
+                "Pengingat nota ini sudah dikirim. Ubah jatuh tempo untuk "
+                "mengingatkan lagi."
+            )
+        if record.jatuh_tempo is not None and moment.date() < record.jatuh_tempo:
+            raise BusinessValidationError(
+                "Pengingat bisa dikirim mulai "
+                f"{record.jatuh_tempo.strftime('%d-%m-%Y')}."
+            )
+        info = settings_service.get_bengkel_info(db)
+        message = completion_wa_text(record, info)
+        log, link = append_attempt(
+            db,
+            record.unit.customer,
+            jenis=JENIS_PIUTANG,
+            status=STATUS_OPENED,
+            message=message,
+            operator=operator,
+            record=record,
+            now=moment,
+        )
+        record.diingatkan_pada = moment
 
     db.refresh(log)
     return log, message, link

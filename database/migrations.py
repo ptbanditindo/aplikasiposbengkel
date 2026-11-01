@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 def get_user_version(conn) -> int:
@@ -576,6 +576,16 @@ def _migrate_015_pengerjaan_nota(cursor) -> None:
     )
 
 
+def _migrate_016_ingat_piutang(cursor) -> None:
+    """Penanda pengingat piutang pada satu siklus jatuh tempo."""
+    _add_column(
+        cursor,
+        "service_records",
+        "diingatkan_pada",
+        "diingatkan_pada DATETIME",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -592,6 +602,7 @@ MIGRATIONS: List[Migration] = [
     (13, _migrate_013_followup_service_date),
     (14, _migrate_014_record_credit),
     (15, _migrate_015_pengerjaan_nota),
+    (16, _migrate_016_ingat_piutang),
 ]
 
 

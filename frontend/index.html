@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261105">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261107">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -1527,6 +1527,30 @@
     </div>
   </div>
 
+  <!-- ============================ RESCHEDULE DUE DATE MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="rescheduleModal" role="dialog" aria-modal="true" aria-labelledby="rescheduleTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="rescheduleTitle">Ubah jatuh tempo</h3>
+          <p class="muted" id="rescheduleSubtitle">Tentukan tanggal pembayaran berikutnya.</p>
+        </div>
+        <button type="button" class="icon-btn" id="rescheduleClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="rescheduleForm">
+        <label class="field">
+          <span>Tanggal jatuh tempo <em>*</em></span>
+          <input type="date" class="input" id="rescheduleDate" required>
+        </label>
+        <p class="muted small">Pengingat yang sudah dikirim akan aktif lagi pada tanggal baru.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="rescheduleCancel">Batal</button>
+          <button type="submit" class="btn btn-primary" id="rescheduleSave">Simpan tanggal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ============================ PENGERJAAN MODAL ============================ -->
   <div class="modal-backdrop hidden" id="pengerjaanModal" role="dialog" aria-modal="true" aria-labelledby="pengerjaanTitle">
     <div class="modal modal-wide">
@@ -1546,15 +1570,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261105"></script>
-  <script src="/static/js/api-client.js?v=20261105"></script>
-  <script src="/static/js/printer-manager.js?v=20261105"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261105"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261105"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261105"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261105"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261105"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261105"></script>
-  <script src="/static/js/app.js?v=20261105"></script>
+  <script src="/static/js/native-bridge.js?v=20261107"></script>
+  <script src="/static/js/api-client.js?v=20261107"></script>
+  <script src="/static/js/printer-manager.js?v=20261107"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261107"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261107"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261107"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261107"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261107"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261107"></script>
+  <script src="/static/js/app.js?v=20261107"></script>
 </body>
 </html>

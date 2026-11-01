@@ -173,6 +173,10 @@ class ServiceRecord(Base):
         String(16), default="LUNAS", nullable=False
     )
     jatuh_tempo: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    # Waktu pengingat piutang dikirim; dikosongkan saat jatuh tempo diubah.
+    diingatkan_pada: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
     # Rencana pembayaran untuk nota kredit (null bila bukan kredit).
     rencana_bayar: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(14, 2), nullable=True

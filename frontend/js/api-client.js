@@ -241,8 +241,13 @@
         method: 'POST',
         body: data,
       }),
-    recordWhatsappLogs: (recordId) =>
-      request('/api/service-records/' + recordId + '/whatsapp-logs'),
+    remindReceivable: (recordId) =>
+      request('/api/service-records/' + recordId + '/remind', { method: 'POST' }),
+    rescheduleDueDate: (recordId, data) =>
+      request('/api/service-records/' + recordId + '/jatuh-tempo', {
+        method: 'PUT',
+        body: data,
+      }),
     whatsappLogs: (limit) =>
       request('/api/whatsapp/logs?limit=' + qs(limit || 100)),
 
