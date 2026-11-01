@@ -219,6 +219,20 @@
       }),
     payrollSummary: (today) =>
       request('/api/payroll/summary' + (today ? '?today=' + qs(today) : '')),
+    employeeDebts: (employeeId, outstandingOnly) => {
+      const params = [];
+      if (employeeId) params.push('employee_id=' + encodeURIComponent(employeeId));
+      if (outstandingOnly) params.push('outstanding_only=true');
+      return request(
+        '/api/employee-debts' + (params.length ? '?' + params.join('&') : '')
+      );
+    },
+    createEmployeeDebt: (data) =>
+      request('/api/employee-debts', { method: 'POST', body: data }),
+    updateEmployeeDebt: (id, data) =>
+      request('/api/employee-debts/' + id, { method: 'PUT', body: data }),
+    deleteEmployeeDebt: (id) =>
+      request('/api/employee-debts/' + id, { method: 'DELETE' }),
     salaryPayments: (start, end, employeeId) => {
       const params = [];
       if (start) params.push('start=' + encodeURIComponent(start));

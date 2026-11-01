@@ -60,7 +60,6 @@ Aturan copy yang dipakai:
 | --- | --- |
 | Judul | Ringkasan hari ini |
 | Keterangan | Servis dan pembayaran yang tercatat hari ini. |
-| Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif, Total hutang, Stok menipis, Stok habis |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
@@ -274,7 +273,7 @@ Aturan copy yang dipakai:
 | Keterangan | Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi dan gaji. |
 | Periode | Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Estimasi laba bersih setelah komisi & gaji |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Laba bersih setelah dipotong gaji dan komisi |
 | Meta | N transaksi, N unit, Diskon, Garansi aktif, Komisi karyawan, Gaji dibayar, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
 | Tabel | Transaksi pada periode |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |

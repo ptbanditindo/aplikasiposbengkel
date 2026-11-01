@@ -200,6 +200,7 @@ class Employee(Base):
     )
     aktif: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     nomor_hp: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    tanggal_masuk: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     komisi_mode: Mapped[str] = mapped_column(
         String(16), default="PERSEN", nullable=False
@@ -222,10 +223,38 @@ class Employee(Base):
         String(16), default="BULANAN", nullable=False
     )
     payroll_tanggal: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # 0=Senin ... 6=Minggu untuk jadwal mingguan/2 mingguan/3 mingguan.
+    payroll_hari: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    bank_nama: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    bank_nomor: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    bank_atas_nama: Mapped[str] = mapped_column(
+        String(255), default="", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class EmployeeDebt(Base):
+    """Hutang/uang muka karyawan yang dipotong dari gaji atau komisi."""
+
+    __tablename__ = "employee_debts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    employee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    nama_karyawan: Mapped[str] = mapped_column(String(255), nullable=False)
+    tanggal: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    terbayar: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    keterangan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    employee: Mapped[Optional["Employee"]] = relationship()
 
 
 class SalaryPayment(Base):
@@ -244,7 +273,17 @@ class SalaryPayment(Base):
     nama_karyawan: Mapped[str] = mapped_column(String(255), nullable=False)
     periode: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
     tanggal: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    cycle_start: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    potongan_hutang: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    bonus: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    cicilan_hutang: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
     metode: Mapped[str] = mapped_column(
         String(16), default="CASH", nullable=False
     )  # CASH | TRANSFER

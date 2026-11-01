@@ -3768,3 +3768,92 @@ a.btn { text-decoration: none; }
   pointer-events: none;
   filter: grayscale(0.15);
 }
+
+/* Pengingat gajian otomatis di Ringkasan */
+.notice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #f0d48a;
+  border-radius: var(--radius-card);
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+
+.notice-banner-text {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.notice-banner-text strong {
+  font-size: 13px;
+}
+
+/* Kelompok kartu Ringkasan berdasarkan tipe laporan */
+.stat-section {
+  margin-bottom: 18px;
+}
+
+.stat-section-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.stat-section .stats-grid {
+  margin-bottom: 0;
+}
+
+/* Pilihan pembayaran gaji: penuh, potong hutang, atau bonus */
+.payroll-pay-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.payroll-pay-summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.payroll-pay-summary span {
+  color: var(--muted);
+}
+
+.payroll-pay-options {
+  display: grid;
+  gap: 10px;
+}
+
+.payroll-bonus-row {
+  display: flex;
+  gap: 8px;
+}
+
+.payroll-bonus-row .input {
+  flex: 1;
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.payroll-pay-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}

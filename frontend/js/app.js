@@ -227,15 +227,22 @@
     resellerItems: [],
     supplierItemSelection: [],
     employees: [],
+    archivedEmployees: [],
     salaryPayments: [],
+    salaryPaymentsLoaded: false,
+    employeeDebts: [],
     payrollSummary: null,
+    payrollPayItem: null,
+    salaryPendingPhone: '',
     employeePerfId: null,
-    employeePerfDetail: false,
+    employeePerfHistory: [],
+    employeePerfName: '',
+    employeePerfMode: 'unpaid',
     followupTab: 'customer',
     jasa: [],
     history: [],
     customerDirectory: [],
-    dashboardRecords: [],
+    customerWarrantyRecords: [],
     dashboardToday: [],
     reportRows: [],
     reportLabel: 'Hari ini',
@@ -345,6 +352,14 @@
         /* noop */
       }
     }
+  }
+
+  function dismissModalStack(selectors) {
+    selectors.forEach((selector) => {
+      hideModal(selector);
+      const index = modalHistory.lastIndexOf(selector);
+      if (index >= 0) modalHistory.splice(index, 1);
+    });
   }
 
   function closeAllModals() {
@@ -511,6 +526,7 @@
     if (view === 'employees') {
       loadEmployees();
       loadSalaryPayments();
+      loadEmployeeDebts();
     }
     if (view === 'history') loadHistory($('#historySearch').value.trim());
     if (view === 'stock') renderStock();
@@ -1088,7 +1104,14 @@
 
   async function loadCustomerDirectory(query) {
     try {
-      state.customerDirectory = await API.customerOverview(query || '');
+      const results = await Promise.all([
+        API.customerOverview(query || ''),
+        API.records(''),
+      ]);
+      state.customerDirectory = results[0];
+      state.customerWarrantyRecords = (results[1] || []).filter(
+        (record) => record.garansi_aktif
+      );
       renderCustomerDirectory();
     } catch (err) {
       toast('Gagal memuat data pelanggan. Coba muat ulang.', 'error', 6000);
@@ -1114,6 +1137,9 @@
     $('#customerStatUnits').textContent = totals.units;
     $('#customerStatMobil').textContent = totals.mobil;
     $('#customerStatRadiator').textContent = totals.radiator;
+    $('#customerStatWarranty').textContent = (
+      state.customerWarrantyRecords || []
+    ).length;
     $('#customerDirectoryCount').textContent = customers.length + ' pelanggan';
 
     if (!customers.length) {
@@ -3790,87 +3816,34 @@
         !state.config.ops ||
         state.config.ops.karyawan_aktif !== false;
       const results = await Promise.all([
-        API.records(''),
         API.daily(todayISO()),
         employeeAktif ? API.payrollSummary(todayISO()) : Promise.resolve(null),
       ]);
-      const records = results[0];
-      const daily = results[1];
-      state.payrollSummary = results[2];
+      const daily = results[0];
+      state.payrollSummary = results[1];
       renderPayrollCard();
 
-      state.dashboardRecords = records;
       state.dashboardToday = daily.transaksi || [];
 
       $('#statUnit').textContent = daily.jumlah_unit_servis;
       $('#statCash').textContent = fmtRp(daily.total_cash);
       $('#statTransfer').textContent = fmtRp(daily.total_transfer);
-      $('#statWarranty').textContent = daily.garansi_aktif;
       $('#statTotalDebt').textContent = fmtRp(daily.piutang_total || 0);
       $('#statTotalDebtSub').textContent =
         intValue(daily.piutang_count, 0) +
         ' nota · ' +
         intValue(daily.piutang_customers, 0) +
         ' pelanggan';
+      $('#statEmployeeDebt').textContent = fmtRp(
+        daily.piutang_karyawan_total || 0
+      );
+      $('#statEmployeeDebtSub').textContent =
+        intValue(daily.piutang_karyawan_count, 0) + ' hutang berjalan';
       $('#statLowStock').textContent = intValue(daily.stok_menipis, 0);
       $('#statStockOut').textContent = intValue(daily.stok_habis, 0);
-
-      renderRecent(records.slice(0, 6));
     } catch (err) {
       toast('Ringkasan hari ini gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
-  }
-
-  function renderRecent(records) {
-    const body = $('#recentBody');
-    if (!body) return;
-
-    if (!records.length) {
-      body.innerHTML = '';
-      $('#recentEmpty').classList.remove('hidden');
-      return;
-    }
-
-    $('#recentEmpty').classList.add('hidden');
-    body.innerHTML = records
-      .map(
-        (record) =>
-          '<tr class="is-clickable" data-action="record-detail" data-id="' +
-          record.id +
-          '">' +
-          '<td>' +
-          esc(fmtDateTime(record.waktu_service)) +
-          '</td>' +
-          '<td><button type="button" class="cell-link" data-action="record-detail" data-id="' +
-          record.id +
-          '">' +
-          esc(record.no_nota) +
-          '</button>' +
-          statusBadge(record) +
-          '</td>' +
-          '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
-          record.customer_id +
-          '">' +
-          esc(record.customer_nama) +
-          '</button><span class="cell-sub">' +
-          esc(record.customer_hp) +
-          '</span></td>' +
-          '<td>' +
-          esc(record.unit_deskripsi) +
-          '</td>' +
-          '<td class="text-right money">' +
-          fmtRp(netTotal(record)) +
-          '</td>' +
-          '<td>' +
-          metodeBadge(record.metode_bayar) +
-          paymentBadge(record) +
-          '</td>' +
-          '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
-          record.id +
-          '">Cetak ulang</button></td>' +
-          '</tr>'
-      )
-      .join('');
   }
 
   function renderPayrollCard() {
@@ -3879,15 +3852,39 @@
     const data = state.payrollSummary;
     if (!data) {
       card.classList.add('hidden');
+      $('#payrollAlert')?.classList.add('hidden');
       return;
     }
     card.classList.remove('hidden');
     $('#statPayroll').textContent = fmtRp(data.total_due || 0);
-    $('#statPayrollSub').textContent = intValue(data.count, 0)
-      ? data.count +
-        ' karyawan · berikutnya ' +
-        (data.next_date ? fmtDate(data.next_date) : '-')
-      : 'Tidak ada tagihan gaji';
+    const dueCount = intValue(data.due_count, 0);
+    $('#statPayrollSub').textContent = dueCount
+      ? dueCount +
+        ' karyawan jatuh tempo · ' +
+        fmtRp(data.due_total || 0)
+      : intValue(data.count, 0)
+        ? data.count +
+          ' karyawan · berikutnya ' +
+          (data.next_date ? fmtDate(data.next_date) : '-')
+        : 'Tidak ada tagihan gaji';
+    const alert = $('#payrollAlert');
+    if (alert) {
+      alert.classList.toggle('hidden', !dueCount);
+      if (dueCount) {
+        const names = (data.items || [])
+          .filter(
+            (row) =>
+              Number(row.total_due) > 0 &&
+              ['JATUH_TEMPO', 'SEGERA'].includes(row.status)
+          )
+          .map((row) => row.nama);
+        $('#payrollAlertText').textContent =
+          names.join(', ') +
+          ' · total ' +
+          fmtRp(data.due_total || 0) +
+          '.';
+      }
+    }
   }
 
   function openPayrollModal() {
@@ -3909,19 +3906,178 @@
     } else {
       if (empty) empty.classList.add('hidden');
       body.innerHTML = items
-        .map(
-          (row) =>
-            '<tr><td><span class="cell-primary">' + esc(row.nama) + '</span></td>' +
-            '<td>' + esc(row.jadwal) + '</td>' +
-            '<td class="text-right">' + fmtRp(row.salary_due) + '</td>' +
-            '<td class="text-right">' + fmtRp(row.commission_earned) + '</td>' +
-            '<td class="text-right">' + fmtRp(row.salary_paid) + '</td>' +
-            '<td class="text-right"><strong>' + fmtRp(row.total_due) + '</strong></td>' +
-            '<td>' + esc(fmtDate(row.next_date)) + '</td></tr>'
-        )
+        .map((row) => {
+          const due = Number(row.total_due) > 0;
+          const payable = due && row.status === 'JATUH_TEMPO';
+          const action = payable
+            ? '<button type="button" class="btn btn-primary btn-xs" data-action="payroll-mark-paid" data-id="' +
+              row.employee_id +
+              '">Bayar</button>'
+            : '<span class="cell-sub">' +
+              (due ? 'Jadwal ' + fmtDate(row.next_date) : 'Lunas') +
+              '</span>';
+          return (
+            '<tr><td><span class="cell-primary">' +
+            esc(row.nama) +
+            '</span></td>' +
+            '<td class="text-right"><strong>' +
+            fmtRp(row.total_due) +
+            '</strong></td>' +
+            '<td class="row-actions">' +
+            action +
+            '</td></tr>'
+          );
+        })
         .join('');
     }
     openModal('#payrollModal');
+  }
+
+  function openPayrollPayModal(item) {
+    state.payrollPayItem = item;
+    $('#payrollPayTitle').textContent = 'Bayar ' + item.nama;
+    $('#payrollPaySubtitle').textContent =
+      'Pilih cara pembayaran gaji dan komisi.';
+    const hasDebt = Number(item.debt_total) > 0;
+    $('#payrollCicilToggle')?.classList.toggle('hidden', !hasDebt);
+    $('#payrollFullDebtToggle')?.classList.toggle('hidden', !hasDebt);
+    if ($('#payrollCicilAktif')) $('#payrollCicilAktif').checked = false;
+    if ($('#payrollFullDebtAktif')) $('#payrollFullDebtAktif').checked = false;
+    $('#payrollCicilRow')?.classList.add('hidden');
+    if ($('#payrollCicilNominal')) $('#payrollCicilNominal').value = '';
+    if ($('#payrollBonusAktif')) $('#payrollBonusAktif').checked = false;
+    $('#payrollBonusRow')?.classList.add('hidden');
+    if ($('#payrollBonusNominal')) $('#payrollBonusNominal').value = '';
+    if ($('#payrollBonusKeterangan')) $('#payrollBonusKeterangan').value = '';
+    renderPayrollPaySummary();
+    openModal('#payrollPayModal');
+  }
+
+  function payrollPayValues() {
+    const item = state.payrollPayItem || {};
+    const gross = Number(item.gross_due || 0);
+    const fullDebt = Boolean($('#payrollFullDebtAktif')?.checked);
+    let potongan = 0;
+    if (fullDebt) {
+      potongan = Number(item.debt_used || 0);
+    } else if ($('#payrollCicilAktif')?.checked) {
+      potongan = Number($('#payrollCicilNominal').value || 0);
+    }
+    const bonus = $('#payrollBonusAktif')?.checked
+      ? Number($('#payrollBonusNominal').value || 0)
+      : 0;
+    return {
+      gross,
+      potongan,
+      bonus,
+      fullDebt,
+      nominal: Math.max(0, gross - potongan + bonus),
+    };
+  }
+
+  function renderPayrollPaySummary() {
+    const values = payrollPayValues();
+    const item = state.payrollPayItem || {};
+    $('#payrollPayGross').textContent = fmtRp(values.gross);
+    const debtTotal = Number(item.debt_total || 0);
+    const debtTotalRow = $('#payrollPayDebtTotalRow');
+    if (debtTotalRow) {
+      debtTotalRow.classList.toggle('hidden', debtTotal <= 0);
+      $('#payrollPayDebtTotal').textContent = fmtRp(debtTotal);
+    }
+    const debtRow = $('#payrollPayDebtRow');
+    if (debtRow) {
+      debtRow.classList.toggle('hidden', values.potongan <= 0);
+      $('#payrollPayDebtLabel').textContent = values.fullDebt
+        ? 'Full bayar hutang'
+        : 'Cicil hutang';
+      $('#payrollPayDebt').textContent = fmtRp(values.potongan);
+    }
+    const bonusRow = $('#payrollPayBonusRow');
+    if (bonusRow) {
+      bonusRow.classList.toggle(
+        'hidden',
+        !$('#payrollBonusAktif')?.checked
+      );
+      $('#payrollPayBonus').textContent = fmtRp(values.bonus);
+    }
+    $('#payrollPayNet').textContent = fmtRp(values.nominal);
+  }
+
+  function submitPayrollPayment() {
+    const item = state.payrollPayItem;
+    if (!item) return;
+    let bonus = 0;
+    let bonusKeterangan = '';
+    if ($('#payrollBonusAktif')?.checked) {
+      bonus = Number($('#payrollBonusNominal').value || 0);
+      bonusKeterangan = $('#payrollBonusKeterangan').value.trim();
+      if (bonus <= 0) {
+        toast('Isi nominal bonus lebih dari 0.', 'warning');
+        $('#payrollBonusNominal').focus();
+        return;
+      }
+      if (!bonusKeterangan) {
+        toast('Isi keterangan bonus.', 'warning');
+        $('#payrollBonusKeterangan').focus();
+        return;
+      }
+    }
+    const gross = Number(item.gross_due || 0);
+    const debtUsed = Number(item.debt_used || 0);
+    const debtTotal = Number(item.debt_total || 0);
+    let potongan = 0;
+    let fullDebt = false;
+    if ($('#payrollFullDebtAktif')?.checked) {
+      potongan = debtUsed;
+      fullDebt = true;
+    } else if ($('#payrollCicilAktif')?.checked) {
+      potongan = Number($('#payrollCicilNominal').value || 0);
+      if (potongan <= 0) {
+        toast('Isi nominal cicilan hutang lebih dari 0.', 'warning');
+        $('#payrollCicilNominal').focus();
+        return;
+      }
+      if (potongan > debtTotal) {
+        toast('Cicilan melebihi sisa hutang karyawan.', 'warning');
+        return;
+      }
+      if (potongan > gross) {
+        toast('Cicilan melebihi gaji dan komisi.', 'warning');
+        return;
+      }
+    }
+    const nominal = gross - potongan + bonus;
+    if (nominal <= 0) {
+      toast('Tidak ada nominal yang perlu dibayar.', 'warning');
+      return;
+    }
+    const catatan =
+      (fullDebt
+        ? 'Gaji dipotong hutang penuh'
+        : potongan > 0
+          ? 'Gaji penuh · cicil hutang ' + fmtRp(potongan)
+          : 'Gaji penuh') +
+      (bonus > 0
+        ? ' · bonus ' + fmtRp(bonus) + ' (' + bonusKeterangan + ')'
+        : '');
+    openSalaryModal({
+      employee_id: item.employee_id,
+      nama_karyawan: item.nama,
+      periode: String(item.cycle_start || todayISO()).slice(0, 7),
+      tanggal: todayISO(),
+      nominal,
+      potongan_hutang: potongan,
+      bonus,
+      bonus_keterangan: bonusKeterangan,
+      cicilan_hutang: 0,
+      metode: 'CASH',
+      catatan,
+      bank_nama: item.bank_nama || '',
+      bank_nomor: item.bank_nomor || '',
+      bank_atas_nama: item.bank_atas_nama || '',
+      nomor_hp: item.nomor_hp || '',
+    });
   }
 
   /* ------------------------------- History -------------------------------- */
@@ -4015,7 +4171,6 @@
     const lists = [
       state.history,
       state.reportRows,
-      state.dashboardRecords,
       state.dashboardToday,
       state.notaList,
     ];
@@ -6485,12 +6640,6 @@
     } else if (filter === 'transfer') {
       list = today.filter((record) => record.metode_bayar === 'TRANSFER');
       title = 'Nota transfer hari ini';
-    } else if (filter === 'warranty') {
-      list = (state.dashboardRecords || []).filter(
-        (record) => record.garansi_aktif
-      );
-      title = 'Nota bergaransi aktif';
-      note = 'garansi masih aktif';
     }
 
     openNotaList(title, list, { note: note });
@@ -6570,9 +6719,21 @@
       openReceivables(null);
       return;
     }
+    if (action === 'employee-detail') {
+      openEmployeeDetail(id);
+      return;
+    }
     if (action === 'edit-employee') {
       const employee = state.employees.find((row) => row.id === id);
       if (employee) openEmployeeModal(employee);
+      return;
+    }
+    if (action === 'archive-employee') {
+      await archiveEmployee(id);
+      return;
+    }
+    if (action === 'reactivate-employee') {
+      await reactivateEmployee(id);
       return;
     }
     if (action === 'delete-employee') {
@@ -6583,13 +6744,17 @@
       await openEmployeePerformance(id);
       return;
     }
-    if (action === 'edit-salary') {
-      const payment = state.salaryPayments.find((row) => row.id === id);
-      if (payment) openSalaryModal(payment);
+    if (action === 'salary-history-all') {
+      openSalaryHistoryModal();
       return;
     }
-    if (action === 'delete-salary') {
-      await deleteSalaryPayment(id);
+    if (action === 'edit-debt') {
+      const debt = state.employeeDebts.find((row) => row.id === id);
+      if (debt) openDebtModal(debt);
+      return;
+    }
+    if (action === 'delete-debt') {
+      await deleteEmployeeDebt(id);
       return;
     }
     if (action === 'employee-perf-load') {
@@ -6597,9 +6762,7 @@
       return;
     }
     if (action === 'employee-perf-detail') {
-      state.employeePerfDetail = !state.employeePerfDetail;
-      const detail = $('#employeePerfDetail');
-      if (detail) detail.classList.toggle('hidden', !state.employeePerfDetail);
+      openEmployeePerfDetail();
       return;
     }
     if (action === 'employee-commission-save') {
@@ -6630,8 +6793,36 @@
       removeSupplierItem(id);
       return;
     }
+    if (action === 'customer-warranties') {
+      openNotaList(
+        'Nota bergaransi aktif',
+        state.customerWarrantyRecords || [],
+        { note: 'garansi masih aktif' }
+      );
+      return;
+    }
+    if (action === 'open-employee-debts') {
+      navigate('employees');
+      setTimeout(() => {
+        $('#debtBody')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 400);
+      return;
+    }
     if (action === 'open-payroll') {
       openPayrollModal();
+      return;
+    }
+    if (action === 'payroll-mark-paid') {
+      const item = (state.payrollSummary?.items || []).find(
+        (row) => row.employee_id === id
+      );
+      if (!item) return;
+      if (!state.salaryPaymentsLoaded) await loadSalaryPayments();
+      openPayrollPayModal(item);
+      return;
+    }
+    if (action === 'payroll-pay-confirm') {
+      submitPayrollPayment();
       return;
     }
     if (action === 'open-low-stock') {
@@ -7280,6 +7471,39 @@
 
   let reportRequestId = 0;
 
+  function renderReportRecent(records) {
+    const body = $('#reportRecentBody');
+    if (!body) return;
+    const empty = $('#reportRecentEmpty');
+    if (!records.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    body.innerHTML = records
+      .map(
+        (record) =>
+          '<tr class="is-clickable" data-action="record-detail" data-id="' +
+          record.id +
+          '">' +
+          '<td>' + esc(fmtDateTime(record.waktu_service)) + '</td>' +
+          '<td><button type="button" class="cell-link" data-action="record-detail" data-id="' +
+          record.id + '">' + esc(record.no_nota) + '</button>' +
+          statusBadge(record) + '</td>' +
+          '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
+          record.customer_id + '">' + esc(record.customer_nama) +
+          '</button><span class="cell-sub">' + esc(record.customer_hp) +
+          '</span></td>' +
+          '<td>' + esc(record.unit_deskripsi) + '</td>' +
+          '<td class="text-right money">' + fmtRp(netTotal(record)) + '</td>' +
+          '<td>' + metodeBadge(record.metode_bayar) + paymentBadge(record) + '</td>' +
+          '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
+          record.id + '">Cetak ulang</button></td></tr>'
+      )
+      .join('');
+  }
+
   async function loadReport() {
     const requestId = (reportRequestId += 1);
     const select = $('#reportPeriod');
@@ -7308,6 +7532,7 @@
 
       state.reportRows = rows;
       state.reportLabel = periodLabel;
+      renderReportRecent(rows.slice(0, 6));
 
       $('#reportOmset').textContent = fmtRp(data.total_omset);
       $('#reportCash').textContent = fmtRp(data.total_cash);
@@ -7519,7 +7744,7 @@
   /* ------------------------------ Karyawan -------------------------------- */
   async function loadEmployees() {
     try {
-      state.employees = await API.employees(false);
+      state.employees = await API.employees(true);
       renderEmployees();
       populateEmployeeOptions();
     } catch (err) {
@@ -7531,58 +7756,42 @@
     const body = $('#employeeBody');
     if (!body) return;
     const summary = $('#employeeSummary');
-    if (summary) summary.textContent = state.employees.length + ' karyawan';
+    if (summary) summary.textContent = state.employees.length + ' karyawan aktif';
     if (!state.employees.length) {
       body.innerHTML = '';
       $('#employeeEmpty').classList.remove('hidden');
       return;
     }
     $('#employeeEmpty').classList.add('hidden');
-    const peranLabel = { MEKANIK: 'Mekanik', KASIR: 'Kasir', KEDUANYA: 'Mekanik dan kasir' };
+    const peranLabel = {
+      MEKANIK: 'Mekanik',
+      KASIR: 'Kasir',
+      KEDUANYA: 'Mekanik dan kasir',
+    };
     body.innerHTML = state.employees
-      .map((employee) => {
-        const gaji =
-          employee.jenis_imbalan === 'KOMISI'
-            ? '-'
-            : fmtRp(employee.gaji_bulanan || 0);
-        const komisi =
-          employee.jenis_imbalan === 'GAJI'
-            ? '-'
-            : employee.komisi_mode === 'PERSEN'
-              ? 'Barang ' +
-                Number(employee.komisi_barang_nilai || 0) +
-                '% · Jasa ' +
-                Number(employee.komisi_jasa_nilai || 0) +
-                '%'
-              : 'Barang ' +
-                fmtRp(employee.komisi_barang_nilai || 0) +
-                ' · Jasa ' +
-                fmtRp(employee.komisi_jasa_nilai || 0);
-        const jadwal =
-          employee.payroll_label +
-          (employee.payroll_period === 'TANGGAL'
-            ? ' tgl ' + intValue(employee.payroll_tanggal, 1)
-            : '');
-        return (
-          '<tr>' +
-          '<td><span class="cell-primary">' + esc(employee.nama) + '</span></td>' +
-          '<td>' + esc(peranLabel[employee.peran] || employee.peran) + '</td>' +
-          '<td>' + esc(employee.nomor_hp || '-') + '</td>' +
-          '<td>' + esc(gaji) + '</td>' +
-          '<td>' + esc(jadwal) + '</td>' +
-          '<td>' + esc(komisi) + '</td>' +
-          '<td><span class="badge ' + (employee.aktif ? 'green' : 'gray') + '">' +
-          (employee.aktif ? 'Aktif' : 'Nonaktif') + '</span></td>' +
-          '<td class="row-actions">' +
+      .map(
+        (employee) =>
+          '<tr><td><button type="button" class="cell-link" data-action="employee-detail" data-id="' +
+          employee.id +
+          '">' +
+          esc(employee.nama) +
+          '</button></td><td>' +
+          esc(peranLabel[employee.peran] || employee.peran) +
+          '</td><td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="employee-perf" data-id="' +
-          employee.id + '">Performa</button>' +
+          employee.id +
+          '">Performa</button>' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-employee" data-id="' +
-          employee.id + '">Edit</button>' +
+          employee.id +
+          '">Edit</button>' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="archive-employee" data-id="' +
+          employee.id +
+          '">Arsipkan</button>' +
           '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-employee" data-id="' +
-          employee.id + '">Hapus</button>' +
+          employee.id +
+          '">Hapus</button>' +
           '</td></tr>'
-        );
-      })
+      )
       .join('');
   }
 
@@ -7649,8 +7858,13 @@
     const period = $('#employeePayrollPeriod')
       ? $('#employeePayrollPeriod').value
       : 'BULANAN';
-    const field = $('#employeePayrollTanggalField');
-    if (field) field.classList.toggle('hidden', period !== 'TANGGAL');
+    const weekly = ['MINGGUAN', 'DUA_MINGGUAN', 'TIGA_MINGGUAN'].includes(
+      period
+    );
+    const dateField = $('#employeePayrollTanggalField');
+    if (dateField) dateField.classList.toggle('hidden', period !== 'TANGGAL');
+    const dayField = $('#employeePayrollHariField');
+    if (dayField) dayField.classList.toggle('hidden', !weekly);
   }
 
   function openEmployeeModal(employee) {
@@ -7681,6 +7895,17 @@
     $('#employeePayrollTanggal').value = current
       ? intValue(current.payroll_tanggal, 1)
       : 1;
+    $('#employeePayrollHari').value = current
+      ? String(intValue(current.payroll_hari, 0))
+      : '0';
+    $('#employeeTanggalMasuk').value = current
+      ? String(current.tanggal_masuk || '').slice(0, 10)
+      : todayISO();
+    $('#employeeBankNama').value = current ? current.bank_nama || '' : '';
+    $('#employeeBankNomor').value = current ? current.bank_nomor || '' : '';
+    $('#employeeBankAtasNama').value = current
+      ? current.bank_atas_nama || ''
+      : '';
     syncEmployeeImbalanFields();
     openModal('#employeeModal');
     setTimeout(() => $('#employeeNama').focus(), 60);
@@ -7707,13 +7932,204 @@
         1,
         Math.min(31, intValue($('#employeePayrollTanggal').value, 1))
       ),
+      payroll_hari: Math.max(
+        0,
+        Math.min(6, intValue($('#employeePayrollHari').value, 0))
+      ),
+      bank_nama: $('#employeeBankNama').value.trim(),
+      bank_nomor: $('#employeeBankNomor').value.trim(),
+      bank_atas_nama: $('#employeeBankAtasNama').value.trim(),
+      tanggal_masuk: $('#employeeTanggalMasuk').value || null,
     };
     try {
       if (id) await API.updateEmployee(id, payload);
       else await API.createEmployee(payload);
-      closeModal('#employeeModal');
+      if (!$('#employeeDetailModal')?.classList.contains('hidden')) {
+        dismissModalStack(['#employeeModal', '#employeeDetailModal']);
+      } else {
+        closeModal('#employeeModal');
+      }
       toast('Data karyawan tersimpan.', 'success');
       await loadEmployees();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  function openEmployeeDetail(id) {
+    const employee = state.employees.find((row) => row.id === id);
+    if (!employee) return;
+    const peranLabel = {
+      MEKANIK: 'Mekanik',
+      KASIR: 'Kasir',
+      KEDUANYA: 'Mekanik dan kasir',
+    };
+    const payrollDays = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+    const weekly = [
+      'MINGGUAN',
+      'DUA_MINGGUAN',
+      'TIGA_MINGGUAN',
+    ].includes(employee.payroll_period);
+    const jadwal =
+      employee.payroll_label +
+      (employee.payroll_period === 'TANGGAL'
+        ? ' tgl ' + intValue(employee.payroll_tanggal, 1)
+        : weekly
+          ? ' · ' + payrollDays[intValue(employee.payroll_hari, 0)]
+          : '');
+    const suffix = employee.komisi_mode === 'PERSEN' ? '%' : ' / nota';
+    const row = (label, value) =>
+      '<div><span>' + esc(label) + '</span><strong>' +
+      esc(value || '-') + '</strong></div>';
+    $('#employeeDetailTitle').textContent = employee.nama;
+    $('#employeeDetailSubtitle').textContent =
+      (peranLabel[employee.peran] || employee.peran) +
+      (employee.aktif ? ' · Aktif' : ' · Nonaktif');
+    $('#employeeDetailBody').innerHTML =
+      '<div class="payroll-pay-summary">' +
+      row('Nama', employee.nama) +
+      row('Peran', peranLabel[employee.peran] || employee.peran) +
+      row('Tanggal masuk', employee.tanggal_masuk ? fmtDate(employee.tanggal_masuk) : '-') +
+      row('WhatsApp', employee.nomor_hp || '-') +
+      row('Status', employee.aktif ? 'Aktif' : 'Nonaktif') +
+      row('Jenis imbalan', employee.jenis_imbalan) +
+      row('Gaji bulanan', fmtRp(employee.gaji_bulanan || 0)) +
+      row(
+        'Komisi barang',
+        Number(employee.komisi_barang_nilai || 0) + suffix
+      ) +
+      row(
+        'Komisi jasa',
+        Number(employee.komisi_jasa_nilai || 0) + suffix
+      ) +
+      row('Jadwal gajian', jadwal) +
+      row(
+        'Rekening',
+        [
+          employee.bank_nama,
+          employee.bank_nomor,
+          employee.bank_atas_nama ? 'a.n. ' + employee.bank_atas_nama : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      ) +
+      row('Catatan', employee.catatan || '-') +
+      '</div>' +
+      '<div class="row-actions" style="margin-top:14px">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="employee-perf" data-id="' +
+      employee.id + '">Performa</button>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="edit-employee" data-id="' +
+      employee.id + '">Edit</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-employee" data-id="' +
+      employee.id + '">Arsipkan</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="delete-employee" data-id="' +
+      employee.id + '">Hapus</button>' +
+      '</div>';
+    openModal('#employeeDetailModal');
+  }
+
+  async function archiveEmployee(id) {
+    const employee = state.employees.find((row) => row.id === id);
+    if (!employee) return;
+    if (
+      !window.confirm(
+        'Arsipkan ' +
+          employee.nama +
+          '? Data karyawan tetap tersimpan dan bisa diaktifkan kembali.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.updateEmployee(id, { aktif: false });
+      dismissModalStack(['#employeeDetailModal']);
+      toast('Karyawan dipindahkan ke arsip.', 'success');
+      await loadEmployees();
+      await loadSalaryPayments();
+      await loadEmployeeDebts();
+      state.payrollSummary = await API.payrollSummary(todayISO());
+      renderPayrollCard();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function openEmployeeArchive() {
+    try {
+      const all = await API.employees(false);
+      state.archivedEmployees = all.filter((employee) => !employee.aktif);
+      renderEmployeeArchive();
+      openModal('#employeeArchiveModal');
+    } catch (err) {
+      toast('Arsip karyawan gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderEmployeeArchive() {
+    const body = $('#employeeArchiveBody');
+    const empty = $('#employeeArchiveEmpty');
+    if (!body) return;
+    const employees = state.archivedEmployees || [];
+    $('#employeeArchiveSubtitle').textContent =
+      employees.length + ' karyawan di arsip. Data tetap tersimpan.';
+    if (!employees.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    const peranLabel = {
+      MEKANIK: 'Mekanik',
+      KASIR: 'Kasir',
+      KEDUANYA: 'Mekanik dan kasir',
+    };
+    body.innerHTML = employees
+      .map(
+        (employee) =>
+          '<tr><td><span class="cell-primary">' + esc(employee.nama) +
+          '</span></td><td>' +
+          esc(peranLabel[employee.peran] || employee.peran) + '</td><td>' +
+          (employee.tanggal_masuk
+            ? esc(fmtDate(employee.tanggal_masuk))
+            : '-') +
+          '</td><td>' + esc(employee.nomor_hp || '-') + '</td><td>' +
+          (employee.jenis_imbalan === 'KOMISI'
+            ? '-'
+            : fmtRp(employee.gaji_bulanan || 0)) +
+          '</td><td class="row-actions">' +
+          '<button type="button" class="btn btn-primary btn-xs" data-action="reactivate-employee" data-id="' +
+          employee.id + '">Aktifkan kembali</button></td></tr>'
+      )
+      .join('');
+  }
+
+  async function reactivateEmployee(id) {
+    const employee = state.archivedEmployees.find((row) => row.id === id);
+    if (!employee) return;
+    if (
+      !window.confirm(
+        'Aktifkan kembali ' +
+          employee.nama +
+          '? Karyawan akan muncul lagi di daftar aktif.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.updateEmployee(id, { aktif: true });
+      toast('Karyawan diaktifkan kembali.', 'success');
+      await loadEmployees();
+      const all = await API.employees(false);
+      state.archivedEmployees = all.filter((row) => !row.aktif);
+      renderEmployeeArchive();
     } catch (err) {
       toast(err.message, 'error', 6000);
     }
@@ -7725,6 +8141,7 @@
     if (!window.confirm('Hapus karyawan "' + employee.nama + '"?')) return;
     try {
       await API.deleteEmployee(id);
+      dismissModalStack(['#employeeDetailModal']);
       toast('Karyawan dihapus.', 'success');
       await loadEmployees();
     } catch (err) {
@@ -7735,6 +8152,7 @@
   async function loadSalaryPayments() {
     try {
       state.salaryPayments = await API.salaryPayments();
+      state.salaryPaymentsLoaded = true;
       renderSalaryPayments();
     } catch (err) {
       toast('Data pembayaran gaji gagal dimuat. Coba lagi.', 'error', 6000);
@@ -7754,8 +8172,8 @@
         ? state.salaryPayments.length +
           ' pembayaran · total ' +
           fmtRp(total) +
-          '. Laporan memotong nominal pada tanggal pembayaran.'
-        : 'Catat gaji yang benar-benar dibayar. Laporan memotong nominal pada tanggal pembayaran.';
+          '. Menampilkan 2 terbaru per karyawan.'
+        : 'Belum ada pembayaran gaji.';
     }
     const empty = $('#salaryEmpty');
     if (!state.salaryPayments.length) {
@@ -7764,7 +8182,15 @@
       return;
     }
     if (empty) empty.classList.add('hidden');
-    body.innerHTML = state.salaryPayments
+    const grouped = new Map();
+    state.salaryPayments.forEach((payment) => {
+      const key = payment.employee_id || 'nama:' + payment.nama_karyawan;
+      const rows = grouped.get(key) || [];
+      if (rows.length < 2) rows.push(payment);
+      grouped.set(key, rows);
+    });
+    const rows = Array.from(grouped.values()).flat();
+    body.innerHTML = rows
       .map(
         (payment) =>
           '<tr>' +
@@ -7776,31 +8202,251 @@
           '<td>' + esc(payment.periode || '-') + '</td>' +
           '<td>' + esc(payment.metode === 'TRANSFER' ? 'Transfer' : 'Tunai') + '</td>' +
           '<td class="text-right">' + fmtRp(payment.nominal) + '</td>' +
-          '<td>' + esc(payment.catatan || '-') + '</td>' +
-          '<td class="row-actions">' +
-          '<button type="button" class="btn btn-outline btn-xs" data-action="edit-salary" data-id="' +
-          payment.id + '">Edit</button>' +
-          '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-salary" data-id="' +
-          payment.id + '">Hapus</button>' +
-          '</td></tr>'
+          '<td class="text-right">' + fmtRp(payment.potongan_hutang || 0) + '</td>' +
+          '<td>' + esc(payment.catatan || '-') + '</td></tr>'
       )
       .join('');
   }
 
-  function salaryEmployeeOptions(selectedId, deletedName, periode, currentId) {
-    const paid = new Set(
-      state.salaryPayments
-        .filter(
-          (row) =>
-            row.periode === periode &&
-            row.employee_id &&
-            (!currentId || row.id !== currentId)
+  function openSalaryHistoryModal() {
+    const body = $('#salaryHistoryBody');
+    const empty = $('#salaryHistoryEmpty');
+    if (!body) return;
+    if (!state.salaryPayments.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      if (empty) empty.classList.add('hidden');
+      body.innerHTML = state.salaryPayments
+        .map(
+          (payment) =>
+            '<tr>' +
+            '<td>' + esc(fmtDate(payment.tanggal)) + '</td>' +
+            '<td>' + esc(payment.nama_karyawan) + '</td>' +
+            '<td>' + esc(payment.periode || '-') + '</td>' +
+            '<td>' + esc(payment.metode === 'TRANSFER' ? 'Transfer' : 'Tunai') + '</td>' +
+            '<td class="text-right">' + fmtRp(payment.nominal) + '</td>' +
+            '<td class="text-right">' + fmtRp(payment.potongan_hutang || 0) + '</td>' +
+              '<td>' + esc(payment.catatan || '-') + '</td></tr>'
         )
-        .map((row) => row.employee_id)
+        .join('');
+    }
+    $('#salaryHistorySubtitle').textContent =
+      state.salaryPayments.length +
+      ' pembayaran gaji tercatat, termasuk potongan hutang.';
+    openModal('#salaryHistoryModal');
+  }
+
+  async function loadEmployeeDebts() {
+    try {
+      state.employeeDebts = await API.employeeDebts();
+      renderEmployeeDebts();
+    } catch (err) {
+      toast('Data hutang karyawan gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderEmployeeDebts() {
+    const body = $('#debtBody');
+    if (!body) return;
+    const summary = $('#debtSummary');
+    const outstanding = state.employeeDebts.reduce(
+      (sum, row) => sum + Number(row.sisa || 0),
+      0
     );
-    const available = state.employees.filter(
-      (employee) => !paid.has(employee.id)
+    if (summary) {
+      summary.textContent = state.employeeDebts.length
+        ? 'Sisa hutang ' +
+          fmtRp(outstanding) +
+          '. Hutang otomatis dipotong dari gaji atau komisi saat gajian.'
+        : 'Catat uang muka atau kebutuhan karyawan. Sisa hutang otomatis dipotong dari gaji atau komisi saat gajian.';
+    }
+    const empty = $('#debtEmpty');
+    const allButton = $('#btnDebtHistoryAll');
+    if (allButton) {
+      allButton.classList.toggle(
+        'hidden',
+        state.employeeDebts.length <= 4
+      );
+    }
+    if (!state.employeeDebts.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    body.innerHTML = state.employeeDebts
+      .slice(0, 4)
+      .map(
+        (debt) =>
+          '<tr><td>' + esc(fmtDate(debt.tanggal)) + '</td>' +
+          '<td>' + esc(debt.nama_karyawan) + '</td>' +
+          '<td>' + esc(debt.keterangan || '-') + '</td>' +
+          '<td class="text-right">' + fmtRp(debt.nominal) + '</td>' +
+          '<td class="text-right">' + fmtRp(debt.terbayar || 0) + '</td>' +
+          '<td class="text-right"><strong>' + fmtRp(debt.sisa) + '</strong></td>' +
+          '<td><span class="badge ' + (debt.lunas ? 'green' : 'amber') + '">' +
+          (debt.lunas ? 'Lunas' : 'Belum lunas') + '</span></td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="edit-debt" data-id="' +
+          debt.id + '">Edit</button>' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-debt" data-id="' +
+          debt.id + '">Hapus</button></td></tr>'
+      )
+      .join('');
+  }
+
+  function openDebtHistoryModal() {
+    const body = $('#debtHistoryBody');
+    const empty = $('#debtHistoryEmpty');
+    if (!body) return;
+    if (!state.employeeDebts.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      if (empty) empty.classList.add('hidden');
+      body.innerHTML = state.employeeDebts
+        .map(
+          (debt) =>
+            '<tr><td>' + esc(fmtDate(debt.tanggal)) + '</td>' +
+            '<td>' + esc(debt.nama_karyawan) + '</td>' +
+            '<td>' + esc(debt.keterangan || '-') + '</td>' +
+            '<td class="text-right">' + fmtRp(debt.nominal) + '</td>' +
+            '<td class="text-right">' + fmtRp(debt.terbayar || 0) + '</td>' +
+            '<td class="text-right">' + fmtRp(debt.sisa) + '</td>' +
+            '<td><span class="badge ' + (debt.lunas ? 'green' : 'amber') + '">' +
+            (debt.lunas ? 'Lunas' : 'Belum lunas') + '</span></td></tr>'
+        )
+        .join('');
+    }
+    $('#debtHistorySubtitle').textContent =
+      state.employeeDebts.length + ' catatan hutang karyawan.';
+    openModal('#debtHistoryModal');
+  }
+
+  function debtEmployeeOptions(selectedId, deletedName) {
+    const options = state.employees.map(
+      (employee) =>
+        '<option value="' + employee.id + '"' +
+        (employee.id === selectedId ? ' selected' : '') + '>' +
+        esc(employee.nama) +
+        (employee.aktif ? '' : ' (nonaktif)') +
+        '</option>'
     );
+    if (selectedId && !state.employees.some((row) => row.id === selectedId)) {
+      options.unshift(
+        '<option value="" selected>' + esc(deletedName || 'Karyawan') +
+        ' (dihapus)</option>'
+      );
+    }
+    return options.join('') || '<option value="">Belum ada karyawan</option>';
+  }
+
+  function openDebtModal(debt) {
+    const current = debt || null;
+    if (!state.employees.length) {
+      toast('Tambahkan karyawan lebih dulu.', 'warning');
+      return;
+    }
+    $('#debtModalTitle').textContent = current
+      ? 'Edit hutang karyawan'
+      : 'Catat hutang karyawan';
+    $('#debtId').value = current ? current.id : '';
+    $('#debtEmployee').innerHTML = debtEmployeeOptions(
+      current ? current.employee_id : state.employees[0].id,
+      current ? current.nama_karyawan : ''
+    );
+    $('#debtEmployee').required = !(current && !current.employee_id);
+    $('#debtTanggal').value = current
+      ? String(current.tanggal).slice(0, 10)
+      : todayISO();
+    $('#debtNominal').value = current ? Number(current.nominal || 0) : '';
+    $('#debtKeterangan').value = current ? current.keterangan || '' : '';
+    openModal('#debtModal');
+  }
+
+  async function handleDebtSubmit(event) {
+    event.preventDefault();
+    const id = intValue($('#debtId').value, 0);
+    const employeeId = intValue($('#debtEmployee').value, 0);
+    const payload = {
+      tanggal: $('#debtTanggal').value || null,
+      nominal: String(Number($('#debtNominal').value || 0)),
+      keterangan: $('#debtKeterangan').value.trim() || null,
+    };
+    if (employeeId) payload.employee_id = employeeId;
+    try {
+      if (id) await API.updateEmployeeDebt(id, payload);
+      else await API.createEmployeeDebt(payload);
+      closeModal('#debtModal');
+      toast('Hutang karyawan tersimpan.', 'success');
+      await loadEmployeeDebts();
+      state.payrollSummary = await API.payrollSummary(todayISO());
+      renderPayrollCard();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function deleteEmployeeDebt(id) {
+    const debt = state.employeeDebts.find((row) => row.id === id);
+    if (!debt) return;
+    if (
+      !window.confirm(
+        'Hapus hutang ' + debt.nama_karyawan + ' sebesar ' + fmtRp(debt.sisa) + '?'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.deleteEmployeeDebt(id);
+      toast('Hutang karyawan dihapus.', 'success');
+      await loadEmployeeDebts();
+      state.payrollSummary = await API.payrollSummary(todayISO());
+      renderPayrollCard();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  function isoDateLocal(dateObj) {
+    return (
+      dateObj.getFullYear() +
+      '-' +
+      String(dateObj.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(dateObj.getDate()).padStart(2, '0')
+    );
+  }
+
+  function payrollCycleStart(employee, dateISO) {
+    const dateObj = new Date((dateISO || todayISO()) + 'T00:00:00');
+    if (employee.payroll_period === 'MINGGUAN') {
+      dateObj.setDate(dateObj.getDate() - 6);
+    } else if (employee.payroll_period === 'DUA_MINGGUAN') {
+      dateObj.setDate(dateObj.getDate() - 13);
+    } else if (employee.payroll_period === 'TIGA_MINGGUAN') {
+      dateObj.setDate(dateObj.getDate() - 20);
+    } else {
+      dateObj.setDate(1);
+    }
+    return isoDateLocal(dateObj);
+  }
+
+  function salaryAvailableEmployees(dateISO, currentId) {
+    return state.employees.filter((employee) => {
+      const cycle = payrollCycleStart(employee, dateISO);
+      return !state.salaryPayments.some(
+        (row) =>
+          row.employee_id === employee.id &&
+          row.cycle_start === cycle &&
+          (!currentId || row.id !== currentId)
+      );
+    });
+  }
+
+  function salaryEmployeeOptions(selectedId, deletedName, dateISO, currentId) {
+    const available = salaryAvailableEmployees(dateISO, currentId);
     const options = available.map(
       (employee) =>
         '<option value="' + employee.id + '"' +
@@ -7817,29 +8463,15 @@
     }
     return (
       options.join('') ||
-      '<option value="">Semua karyawan sudah dicatat untuk periode ini</option>'
+      '<option value="">Semua karyawan sudah dicatat untuk siklus ini</option>'
     );
-  }
-
-  function salaryAvailableEmployees(periode, currentId) {
-    const paid = new Set(
-      state.salaryPayments
-        .filter(
-          (row) =>
-            row.periode === periode &&
-            row.employee_id &&
-            (!currentId || row.id !== currentId)
-        )
-        .map((row) => row.employee_id)
-    );
-    return state.employees.filter((employee) => !paid.has(employee.id));
   }
 
   function refreshSalaryEmployeeOptions() {
-    const period = $('#salaryPeriode').value;
+    const dateISO = $('#salaryTanggal').value || todayISO();
     const currentId = intValue($('#salaryId').value, 0);
     const current = state.salaryPayments.find((row) => row.id === currentId);
-    const available = salaryAvailableEmployees(period, currentId);
+    const available = salaryAvailableEmployees(dateISO, currentId);
     const previous = intValue($('#salaryEmployee').value, 0);
     let selectedId = previous;
     if (!available.some((employee) => employee.id === selectedId)) {
@@ -7848,7 +8480,7 @@
     $('#salaryEmployee').innerHTML = salaryEmployeeOptions(
       selectedId,
       current && !current.employee_id ? current.nama_karyawan : '',
-      period,
+      dateISO,
       currentId
     );
     $('#salaryEmployee').required = Boolean(
@@ -7875,70 +8507,135 @@
     }
   }
 
-  function openSalaryModal(payment) {
-    const current = payment || null;
-    if (!state.employees.length) {
-      toast('Tambahkan karyawan lebih dulu.', 'warning');
+  function syncSalaryBankRow() {
+    const transfer = $('#salaryMetode')?.value === 'TRANSFER';
+    $('#salaryBankRow')?.classList.toggle('hidden', !transfer);
+  }
+
+  function openSalaryModal(preset) {
+    const data = preset || {};
+    if (!data.employee_id) {
+      toast('Karyawan pembayaran tidak ditemukan.', 'warning');
       return;
     }
-    const period = current ? current.periode || '' : todayISO().slice(0, 7);
-    const currentId = current ? current.id : 0;
-    const available = salaryAvailableEmployees(period, currentId);
-    if (!current && !available.length) {
-      toast('Semua karyawan sudah dicatat untuk periode ini.', 'warning');
-      return;
-    }
-    const select = $('#salaryEmployee');
-    $('#salaryModalTitle').textContent = current
-      ? 'Edit pembayaran gaji'
-      : 'Catat pembayaran gaji';
-    $('#salaryId').value = current ? current.id : '';
-    select.innerHTML = salaryEmployeeOptions(
-      current
-        ? current.employee_id
-        : available[0]
-          ? available[0].id
-          : null,
-      current ? current.nama_karyawan : '',
-      period,
-      currentId
-    );
-    select.required = Boolean(
-      current ? current.employee_id || available.length : available.length
-    );
-    $('#salarySubmit').disabled = !current && !available.length;
+    const period = data.periode || todayISO().slice(0, 7);
+    $('#salaryModalTitle').textContent =
+      'Bayar ' + (data.nama_karyawan || 'karyawan');
+    $('#salaryId').value = '';
+    $('#salaryEmployee').value = data.employee_id;
+    state.salaryPendingPhone = data.nomor_hp || '';
+    $('#salaryEmployeeName').textContent = data.nama_karyawan || '-';
     $('#salaryPeriode').value = period;
-    $('#salaryTanggal').value = current
-      ? String(current.tanggal).slice(0, 10)
-      : todayISO();
-    $('#salaryNominal').value = current
-      ? Number(current.nominal || 0)
-      : '';
-    $('#salaryMetode').value = current ? current.metode || 'CASH' : 'CASH';
-    $('#salaryCatatan').value = current ? current.catatan || '' : '';
-    if (!current) syncSalaryNominalFromEmployee();
+    $('#salaryPeriodLabel').textContent = period;
+    $('#salaryTanggal').value = data.tanggal || todayISO();
+    const nominal = Number(data.nominal || 0);
+    $('#salaryNominal').value = nominal;
+    $('#salaryPayTotal').textContent = fmtRp(nominal);
+    $('#salaryPotonganHutang').value = Number(data.potongan_hutang || 0);
+    $('#salaryBonus').value = Number(data.bonus || 0);
+    $('#salaryCicilanHutang').value = Number(data.cicilan_hutang || 0);
+    $('#salaryCatatan').value = data.catatan || '';
+    $('#salaryMetode').value = data.metode || 'CASH';
+    const bankParts = [
+      data.bank_nama,
+      data.bank_nomor,
+      data.bank_atas_nama ? 'a.n. ' + data.bank_atas_nama : '',
+    ].filter(Boolean);
+    $('#salaryBankInfo').textContent = bankParts.length
+      ? bankParts.join(' · ')
+      : 'Nomor rekening karyawan belum diisi di menu Karyawan.';
+    const bonus = Number(data.bonus || 0);
+    $('#salaryBonusInfo').classList.toggle('hidden', bonus <= 0);
+    $('#salaryBonusText').textContent =
+      bonus > 0
+        ? fmtRp(bonus) +
+          (data.bonus_keterangan ? ' · ' + data.bonus_keterangan : '')
+        : '-';
+    syncSalaryBankRow();
     openModal('#salaryModal');
-    setTimeout(() => select.focus(), 60);
   }
 
   async function handleSalarySubmit(event) {
     event.preventDefault();
     const id = intValue($('#salaryId').value, 0);
     const employeeId = intValue($('#salaryEmployee').value, 0);
+    const employeeName = $('#salaryEmployeeName').textContent.trim();
+    const period = $('#salaryPeriode').value;
+    const total = Number($('#salaryNominal').value || 0);
+    const method = $('#salaryMetode').value;
+    const methodLabel = method === 'TRANSFER' ? 'Transfer' : 'Tunai';
+    const bankInfo = $('#salaryBankInfo').textContent.trim();
+    const bonusInfo = $('#salaryBonusInfo').classList.contains('hidden')
+      ? ''
+      : $('#salaryBonusText').textContent.trim();
+    if (
+      !window.confirm(
+        'Bayar ' +
+          employeeName +
+          ' sebesar ' +
+          fmtRp(total) +
+          ' via ' +
+          methodLabel +
+          '?'
+      )
+    ) {
+      return;
+    }
     const payload = {
-      periode: $('#salaryPeriode').value,
+      periode: period,
       tanggal: $('#salaryTanggal').value || null,
-      nominal: String(Number($('#salaryNominal').value || 0)),
-      metode: $('#salaryMetode').value,
+      nominal: String(total),
+      potongan_hutang: String(
+        Number($('#salaryPotonganHutang').value || 0)
+      ),
+      bonus: String(Number($('#salaryBonus').value || 0)),
+      cicilan_hutang: String(
+        Number($('#salaryCicilanHutang').value || 0)
+      ),
+      metode: method,
       catatan: $('#salaryCatatan').value.trim() || null,
     };
     if (employeeId) payload.employee_id = employeeId;
     try {
       if (id) await API.updateSalaryPayment(id, payload);
       else await API.createSalaryPayment(payload);
-      closeModal('#salaryModal');
+      dismissModalStack([
+        '#salaryModal',
+        '#payrollPayModal',
+        '#payrollModal',
+      ]);
       toast('Pembayaran gaji tersimpan.', 'success');
       await loadSalaryPayments();
+      await loadEmployeeDebts();
+      try {
+        state.payrollSummary = await API.payrollSummary(todayISO());
+        renderPayrollCard();
+      } catch (err) {
+        // Ringkasan tetap bisa dimuat ulang lewat tombol Muat ulang.
+      }
+      const waTarget = waLink(
+        state.salaryPendingPhone,
+        [
+          'Nota pembayaran gaji',
+          'Karyawan: ' + employeeName,
+          'Periode: ' + period,
+          'Tanggal: ' + fmtDate(todayISO()),
+          'Total dibayarkan: ' + fmtRp(total),
+          'Metode: ' + methodLabel,
+          method === 'TRANSFER' && bankInfo ? 'Rekening: ' + bankInfo : '',
+          bonusInfo && bonusInfo !== '-' ? 'Bonus: ' + bonusInfo : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      );
+      if (waTarget) {
+        const opened = await openExternalLink(waTarget);
+        if (opened) {
+          toast('Nota gaji dibuka di WhatsApp karyawan.', 'success');
+        }
+      } else {
+        toast('Nomor WhatsApp karyawan belum diisi.', 'warning');
+      }
     } catch (err) {
       toast(err.message, 'error', 6000);
     }
@@ -7968,15 +8665,35 @@
   }
 
   function employeePerfPeriod() {
-    const start = $('#employeePerfStart') ? $('#employeePerfStart').value : '';
-    const end = $('#employeePerfEnd') ? $('#employeePerfEnd').value : '';
-    return { start: start || undefined, end: end || undefined };
+    const select = $('#employeePerfPeriod');
+    const mode = select ? select.value : state.employeePerfMode || 'unpaid';
+    state.employeePerfMode = mode;
+    if (mode === 'unpaid') return {};
+    const today = new Date();
+    const end = toISODate(today);
+    if (mode === 'weekly') {
+      const startDate = new Date(today);
+      startDate.setDate(startDate.getDate() - 6);
+      return { start: toISODate(startDate), end };
+    }
+    if (mode === 'monthly') {
+      return {
+        start: toISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
+        end,
+      };
+    }
+    if (mode === 'yearly') {
+      return { start: toISODate(new Date(today.getFullYear(), 0, 1)), end };
+    }
+    return { start: '2000-01-01', end };
   }
 
   async function openEmployeePerformance(id) {
     state.employeePerfId = id;
-    state.employeePerfDetail = false;
+    state.employeePerfHistory = [];
+    state.employeePerfMode = 'unpaid';
     const employee = state.employees.find((row) => row.id === id);
+    state.employeePerfName = employee ? employee.nama : '';
     $('#employeePerfTitle').textContent = employee
       ? 'Performa ' + employee.nama
       : 'Performa karyawan';
@@ -8004,30 +8721,46 @@
     const body = $('#employeePerfBody');
     if (!body) return;
     const employee = data.employee || {};
-    const period = data.start || data.end
+    const periodLabels = {
+      unpaid: 'Belum digaji',
+      weekly: 'Mingguan',
+      monthly: 'Bulanan',
+      yearly: 'Tahunan',
+      all: 'Keseluruhan',
+    };
+    const periodRange = data.start || data.end
       ? (data.start || '-') + ' sampai ' + (data.end || '-')
       : 'Semua waktu';
-    const history = (data.riwayat || [])
+    const period =
+      state.employeePerfMode === 'unpaid' && intValue(data.jumlah_nota, 0) === 0
+        ? 'Belum ada pengerjaan setelah gaji'
+        : state.employeePerfMode === 'all'
+          ? 'Keseluruhan'
+          : (periodLabels[state.employeePerfMode] || 'Periode') +
+            ' · ' +
+            periodRange;
+    state.employeePerfHistory = data.riwayat || [];
+    state.employeePerfName = employee.nama || state.employeePerfName;
+    const periodOptions = [
+      ['unpaid', 'Belum digaji'],
+      ['weekly', 'Mingguan'],
+      ['monthly', 'Bulanan'],
+      ['yearly', 'Tahunan'],
+      ['all', 'Keseluruhan'],
+    ]
       .map(
-        (row) =>
-          '<tr><td>' + esc(fmtDate(row.waktu_service)) + '</td>' +
-          '<td>' + esc(row.no_nota) + '</td>' +
-          '<td>' + esc(row.customer_nama) + '</td>' +
-          '<td>' + esc(row.unit_deskripsi) + '</td>' +
-          '<td class="text-right">' + fmtRp(row.total_servis) + '</td>' +
-          '<td class="text-right">' + fmtRp(row.komisi) + '</td>' +
-          '<td><div class="inline-action"><input type="number" class="input input-xs" id="empCommission-' +
-          row.record_id + '" min="0" step="0.01" value="' +
-          Number(row.komisi || 0) + '"><button type="button" class="btn btn-outline btn-xs" data-action="employee-commission-save" data-id="' +
-          employee.id + '" data-record-id="' + row.record_id + '">Simpan</button></div></td></tr>'
+        ([value, label]) =>
+          '<option value="' + value + '"' +
+          (state.employeePerfMode === value ? ' selected' : '') + '>' +
+          label +
+          '</option>'
       )
       .join('');
     body.innerHTML =
-      '<div class="form-grid">' +
-      '<label class="field"><span>Mulai</span><input type="date" class="input" id="employeePerfStart" value="' + esc(data.start || '') + '"></label>' +
-      '<label class="field"><span>Selesai</span><input type="date" class="input" id="employeePerfEnd" value="' + esc(data.end || '') + '"></label>' +
-      '</div>' +
-      '<button type="button" class="btn btn-outline btn-sm" data-action="employee-perf-load">Muat periode</button>' +
+      '<label class="field"><span>Periode</span>' +
+      '<select class="input" id="employeePerfPeriod">' +
+      periodOptions +
+      '</select></label>' +
       '<p class="tiny muted">' + esc(period) + '</p>' +
       '<p class="tiny muted">Klik kartu untuk melihat rincian.</p>' +
       '<div class="stats-grid stats-grid--secondary">' +
@@ -8037,11 +8770,11 @@
       '<article class="stat-card is-clickable" role="button" tabindex="0" data-action="employee-perf-detail"><span class="stat-label">Nilai servis</span><strong>' + fmtRp(data.total_nilai) + '</strong></article>' +
       '<article class="stat-card is-clickable" role="button" tabindex="0" data-action="employee-perf-detail"><span class="stat-label">Pelanggan</span><strong>' + intValue(data.pelanggan_unik, 0) + '</strong></article>' +
       '<article class="stat-card is-clickable" role="button" tabindex="0" data-action="employee-perf-detail"><span class="stat-label">Komisi</span><strong>' + fmtRp(data.komisi_total) + '</strong></article>' +
-      '</div>' +
-      '<div id="employeePerfDetail"' + (state.employeePerfDetail ? '' : ' class="hidden"') + '>' +
-      '<div class="table-wrap"><table class="table"><thead><tr><th>Tanggal</th><th>Nota</th><th>Pelanggan</th><th>Unit</th><th class="text-right">Nilai</th><th class="text-right">Komisi</th><th>Komisi manual</th></tr></thead><tbody>' +
-      (history || '<tr><td colspan="7" class="empty-state sm">Belum ada pengerjaan.</td></tr>') +
-      '</tbody></table></div></div>';
+      '</div>';
+    const periodSelect = $('#employeePerfPeriod');
+    if (periodSelect) {
+      periodSelect.addEventListener('change', () => loadEmployeePerformance());
+    }
     const modeSuffix = employee.komisi_mode === 'PERSEN' ? '%' : ' / nota';
     const rates =
       'Barang ' +
@@ -8058,6 +8791,38 @@
           : rates;
     $('#employeePerfSubtitle').textContent =
       (employee.nama || 'Karyawan') + ' · ' + imbalanText;
+  }
+
+  function openEmployeePerfDetail() {
+    const body = $('#employeePerfDetailBody');
+    const empty = $('#employeePerfDetailEmpty');
+    if (!body) return;
+    const rows = state.employeePerfHistory || [];
+    const employeeId = state.employeePerfId;
+    $('#employeePerfDetailTitle').textContent =
+      'Rincian ' + (state.employeePerfName || 'karyawan');
+    if (!rows.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+    } else {
+      if (empty) empty.classList.add('hidden');
+      body.innerHTML = rows
+        .map(
+          (row) =>
+            '<tr><td>' + esc(fmtDate(row.waktu_service)) + '</td>' +
+            '<td>' + esc(row.no_nota) + '</td>' +
+            '<td>' + esc(row.customer_nama) + '</td>' +
+            '<td>' + esc(row.unit_deskripsi) + '</td>' +
+            '<td class="text-right">' + fmtRp(row.total_servis) + '</td>' +
+            '<td class="text-right">' + fmtRp(row.komisi) + '</td>' +
+            '<td><div class="inline-action"><input type="number" class="input input-xs" id="empCommission-' +
+            row.record_id + '" min="0" step="0.01" value="' +
+            Number(row.komisi || 0) + '"><button type="button" class="btn btn-outline btn-xs" data-action="employee-commission-save" data-id="' +
+            employeeId + '" data-record-id="' + row.record_id + '">Simpan</button></div></td></tr>'
+        )
+        .join('');
+    }
+    openModal('#employeePerfDetailModal');
   }
 
   async function saveEmployeeCommission(id, recordId) {
@@ -8416,15 +9181,18 @@
     if (employeeToggle) employeeToggle.checked = employeeAktif;
     if (supplierToggle) supplierToggle.checked = supplierAktif;
     $('#posEmployeeFields')?.classList.toggle('hidden', !employeeAktif);
+    $('#dashboardEmployeeStats')?.classList.toggle('hidden', !employeeAktif);
     $('#dashboardPayrollCard')?.classList.toggle(
       'hidden',
       !employeeAktif || !state.payrollSummary
     );
+    if (!employeeAktif) $('#payrollAlert')?.classList.add('hidden');
     $('#stockSupplierField')?.classList.toggle('hidden', !supplierAktif);
     const resellerTab = $('#followupTabSwitch [data-followup-tab="reseller"]');
     if (resellerTab) resellerTab.classList.toggle('hidden', !supplierAktif);
     if ($('#btnAddEmployee')) $('#btnAddEmployee').disabled = !employeeAktif;
-    if ($('#btnAddSalary')) $('#btnAddSalary').disabled = !employeeAktif;
+    if ($('#btnEmployeeArchive')) $('#btnEmployeeArchive').disabled = !employeeAktif;
+    if ($('#btnAddDebt')) $('#btnAddDebt').disabled = !employeeAktif;
     if ($('#btnAddSupplier')) $('#btnAddSupplier').disabled = !supplierAktif;
     freezeFeatureSection('view-employees', !employeeAktif);
     freezeFeatureSection('view-suppliers', !supplierAktif);
@@ -8435,8 +9203,13 @@
       });
       closeModal('#employeeModal');
       closeModal('#salaryModal');
+      closeModal('#debtModal');
       closeModal('#employeePerfModal');
+      closeModal('#employeePerfDetailModal');
+      closeModal('#employeeDetailModal');
+      closeModal('#employeeArchiveModal');
       closeModal('#payrollModal');
+      closeModal('#payrollPayModal');
     }
     if (!supplierAktif) closeModal('#supplierModal');
   }
@@ -9125,10 +9898,7 @@
       tab.addEventListener('click', () => navigate(tab.dataset.view))
     );
 
-    $('#heroNewService').addEventListener('click', () => navigate('pos'));
-    $('#heroNewCustomer').addEventListener('click', () => openCustomerModal(false));
     $('#btnNewCustomerPos').addEventListener('click', () => openCustomerModal(true));
-    $('#refreshDashboard').addEventListener('click', loadDashboard);
 
     $('#posReset').addEventListener('click', () => {
       if (window.confirm('Reset seluruh isian transaksi?')) resetPosState();
@@ -9218,6 +9988,19 @@
     );
 
     $('#btnAddEmployee').addEventListener('click', () => openEmployeeModal(null));
+    $('#btnEmployeeArchive').addEventListener('click', openEmployeeArchive);
+    $('#employeeDetailClose').addEventListener('click', () =>
+      closeModal('#employeeDetailModal')
+    );
+    $('#employeeDetailDismiss').addEventListener('click', () =>
+      closeModal('#employeeDetailModal')
+    );
+    $('#employeeArchiveClose').addEventListener('click', () =>
+      closeModal('#employeeArchiveModal')
+    );
+    $('#employeeArchiveDismiss').addEventListener('click', () =>
+      closeModal('#employeeArchiveModal')
+    );
     $('#btnRefreshEmployees').addEventListener('click', loadEmployees);
     $('#employeeForm').addEventListener('submit', handleEmployeeSubmit);
     $('#employeeJenisImbalan').addEventListener('change', syncEmployeeImbalanFields);
@@ -9235,10 +10018,28 @@
     $('#employeeCancel').addEventListener('click', () =>
       closeModal('#employeeModal')
     );
-    $('#btnAddSalary').addEventListener('click', () => openSalaryModal(null));
+    $('#btnAddDebt').addEventListener('click', () => openDebtModal(null));
+    $('#debtForm').addEventListener('submit', handleDebtSubmit);
+    $('#debtModalClose').addEventListener('click', () =>
+      closeModal('#debtModal')
+    );
+    $('#debtCancel').addEventListener('click', () => closeModal('#debtModal'));
+    $('#btnDebtHistoryAll').addEventListener('click', openDebtHistoryModal);
+    $('#debtHistoryClose').addEventListener('click', () =>
+      closeModal('#debtHistoryModal')
+    );
+    $('#debtHistoryDismiss').addEventListener('click', () =>
+      closeModal('#debtHistoryModal')
+    );
+    $('#btnSalaryHistoryAll').addEventListener('click', openSalaryHistoryModal);
+    $('#salaryHistoryClose').addEventListener('click', () =>
+      closeModal('#salaryHistoryModal')
+    );
+    $('#salaryHistoryDismiss').addEventListener('click', () =>
+      closeModal('#salaryHistoryModal')
+    );
     $('#salaryForm').addEventListener('submit', handleSalarySubmit);
-    $('#salaryEmployee').addEventListener('change', syncSalaryNominalFromEmployee);
-    $('#salaryPeriode').addEventListener('change', refreshSalaryEmployeeOptions);
+    $('#salaryMetode').addEventListener('change', syncSalaryBankRow);
     $('#salaryModalClose').addEventListener('click', () =>
       closeModal('#salaryModal')
     );
@@ -9248,6 +10049,46 @@
     $('#payrollModalDismiss').addEventListener('click', () =>
       closeModal('#payrollModal')
     );
+    $('#payrollPayClose').addEventListener('click', () =>
+      closeModal('#payrollPayModal')
+    );
+    $('#payrollPayCancel').addEventListener('click', () =>
+      closeModal('#payrollPayModal')
+    );
+    $('#payrollCicilAktif').addEventListener('change', (event) => {
+      if (event.target.checked && $('#payrollFullDebtAktif')) {
+        $('#payrollFullDebtAktif').checked = false;
+      }
+      $('#payrollCicilRow')?.classList.toggle(
+        'hidden',
+        !event.target.checked
+      );
+      if (event.target.checked) $('#payrollCicilNominal')?.focus();
+      renderPayrollPaySummary();
+    });
+    $('#payrollFullDebtAktif').addEventListener('change', (event) => {
+      if (event.target.checked) {
+        if ($('#payrollCicilAktif')) $('#payrollCicilAktif').checked = false;
+        $('#payrollCicilRow')?.classList.add('hidden');
+      }
+      renderPayrollPaySummary();
+    });
+    $('#payrollBonusAktif').addEventListener('change', (event) => {
+      $('#payrollBonusRow')?.classList.toggle(
+        'hidden',
+        !event.target.checked
+      );
+      if (event.target.checked) $('#payrollBonusNominal')?.focus();
+      renderPayrollPaySummary();
+    });
+    $('#payrollCicilNominal').addEventListener(
+      'input',
+      renderPayrollPaySummary
+    );
+    $('#payrollBonusNominal').addEventListener(
+      'input',
+      renderPayrollPaySummary
+    );
     $('#salaryCancel').addEventListener('click', () =>
       closeModal('#salaryModal')
     );
@@ -9256,6 +10097,12 @@
     );
     $('#employeePerfDismiss').addEventListener('click', () =>
       closeModal('#employeePerfModal')
+    );
+    $('#employeePerfDetailClose').addEventListener('click', () =>
+      closeModal('#employeePerfDetailModal')
+    );
+    $('#employeePerfDetailDismiss').addEventListener('click', () =>
+      closeModal('#employeePerfDetailModal')
     );
     $('#btnAddSupplier').addEventListener('click', () => openSupplierModal(null));
     $('#btnRefreshSuppliers').addEventListener('click', loadSuppliers);
@@ -9284,6 +10131,7 @@
 
     $('#btnLoadReport').addEventListener('click', loadReport);
     $('#reportPeriod').addEventListener('change', loadReport);
+    $('#btnRefreshReportRecent').addEventListener('click', loadReport);
 
     $('#receiptWidthSwitch').addEventListener('click', onReceiptWidthClick);
     $('#btnBrowserPrint').addEventListener('click', () => {

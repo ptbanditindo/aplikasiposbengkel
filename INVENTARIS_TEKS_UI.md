@@ -61,7 +61,6 @@ Aturan yang dipakai:
 | --- | --- |
 | Judul | Ringkasan hari ini |
 | Keterangan | Servis dan pembayaran yang tercatat hari ini. |
-| Tombol | Pelanggan baru, Servis baru |
 | Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
@@ -311,7 +310,7 @@ Aturan yang dipakai:
 | Keterangan | Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi. |
 | Periode | Periode laporan, Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Estimasi laba bersih setelah komisi |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Laba bersih setelah dipotong gaji dan komisi |
 | Tabel transaksi | Transaksi pada periode, Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Kosong | Tidak ada transaksi pada periode ini. |
 | Rekap | Rekap harian periode. Hanya hari yang memiliki transaksi. |

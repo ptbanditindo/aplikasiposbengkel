@@ -18,6 +18,7 @@ from database.models import (
     ServiceRecordMechanic,
     VehicleOrUnit,
 )
+from services import employee_debt_service
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
 
@@ -38,6 +39,18 @@ PAYROLL_LABELS = {
     "TIGA_MINGGUAN": "Per 3 minggu",
     "BULANAN": "Bulanan",
 }
+HARI_LABELS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+
+
+def _clean_optional_date(value: Any) -> Optional[date]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError as exc:
+        raise BusinessValidationError("Tanggal masuk tidak valid.") from exc
 
 
 def _clean_employee(
@@ -54,6 +67,11 @@ def _clean_employee(
     komisi_jasa_nilai: Any = None,
     payroll_period: str = "BULANAN",
     payroll_tanggal: Any = 1,
+    payroll_hari: Any = 0,
+    bank_nama: Optional[str] = "",
+    bank_nomor: Optional[str] = "",
+    bank_atas_nama: Optional[str] = "",
+    tanggal_masuk: Any = None,
 ) -> Dict[str, Any]:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
@@ -117,6 +135,12 @@ def _clean_employee(
         raise BusinessValidationError("Tanggal gajian harus berupa angka.") from exc
     if payroll_day < 1 or payroll_day > 31:
         raise BusinessValidationError("Tanggal gajian harus antara 1 dan 31.")
+    try:
+        payroll_weekday = int(payroll_hari or 0)
+    except (TypeError, ValueError) as exc:
+        raise BusinessValidationError("Hari gajian tidak valid.") from exc
+    if payroll_weekday < 0 or payroll_weekday > 6:
+        raise BusinessValidationError("Hari gajian harus antara Senin dan Minggu.")
 
     return {
         "nama": clean_nama,
@@ -132,6 +156,11 @@ def _clean_employee(
         "gaji_bulanan": gaji,
         "payroll_period": clean_payroll,
         "payroll_tanggal": payroll_day,
+        "payroll_hari": payroll_weekday,
+        "bank_nama": clean_text(bank_nama, max_length=64, allow_newlines=False) or "",
+        "bank_nomor": clean_text(bank_nomor, max_length=64, allow_newlines=False) or "",
+        "bank_atas_nama": clean_text(bank_atas_nama, max_length=255, allow_newlines=False) or "",
+        "tanggal_masuk": _clean_optional_date(tanggal_masuk),
     }
 
 
@@ -152,7 +181,12 @@ def serialize(employee: Employee) -> Dict[str, Any]:
         "gaji_bulanan": employee.gaji_bulanan,
         "payroll_period": employee.payroll_period,
         "payroll_tanggal": employee.payroll_tanggal,
+        "payroll_hari": employee.payroll_hari,
         "payroll_label": PAYROLL_LABELS.get(employee.payroll_period, "Bulanan"),
+        "bank_nama": employee.bank_nama,
+        "bank_nomor": employee.bank_nomor,
+        "bank_atas_nama": employee.bank_atas_nama,
+        "tanggal_masuk": employee.tanggal_masuk,
     }
 
 
@@ -186,11 +220,17 @@ def create_employee(
     komisi_jasa_nilai: Any = None,
     payroll_period: str = "BULANAN",
     payroll_tanggal: Any = 1,
+    payroll_hari: Any = 0,
+    bank_nama: Optional[str] = "",
+    bank_nomor: Optional[str] = "",
+    bank_atas_nama: Optional[str] = "",
+    tanggal_masuk: Any = None,
 ) -> Employee:
     clean = _clean_employee(
         nama, peran, nomor_hp, catatan, komisi_mode, komisi_basis, komisi_nilai,
         jenis_imbalan, gaji_bulanan, komisi_barang_nilai, komisi_jasa_nilai,
-        payroll_period, payroll_tanggal,
+        payroll_period, payroll_tanggal, payroll_hari,
+        bank_nama, bank_nomor, bank_atas_nama, tanggal_masuk,
     )
     employee = Employee(**clean, aktif=bool(aktif))
     db.add(employee)
@@ -225,6 +265,11 @@ def update_employee(db: Session, employee_id: int, **values: Any) -> Employee:
         jasa_value,
         values.get("payroll_period", employee.payroll_period),
         values.get("payroll_tanggal", employee.payroll_tanggal),
+        values.get("payroll_hari", employee.payroll_hari),
+        values.get("bank_nama", employee.bank_nama),
+        values.get("bank_nomor", employee.bank_nomor),
+        values.get("bank_atas_nama", employee.bank_atas_nama),
+        values.get("tanggal_masuk", employee.tanggal_masuk),
     )
     for key, value in clean.items():
         setattr(employee, key, value)
@@ -432,6 +477,20 @@ def performance(
     end: Optional[date] = None,
 ) -> Dict[str, Any]:
     employee = get_employee(db, employee_id)
+    if start is None and end is None:
+        today = date.today()
+        last_payment = db.scalar(
+            select(SalaryPayment)
+            .where(SalaryPayment.employee_id == employee.id)
+            .order_by(SalaryPayment.tanggal.desc(), SalaryPayment.id.desc())
+        )
+        if last_payment is not None:
+            start = last_payment.tanggal + timedelta(days=1)
+        else:
+            start = payroll_cycle_start(employee, today)
+            if employee.tanggal_masuk and employee.tanggal_masuk > start:
+                start = employee.tanggal_masuk
+        end = today
     records = _employee_records(db, employee, start, end)
     jasa_qty = 0
     part_qty = 0
@@ -474,7 +533,7 @@ def performance(
     }
 
 
-def _payroll_cycle_start(employee: Employee, today: date) -> date:
+def payroll_cycle_start(employee: Employee, today: date) -> date:
     period = employee.payroll_period or "BULANAN"
     if period == "MINGGUAN":
         return today - timedelta(days=6)
@@ -502,7 +561,9 @@ def _payroll_salary_due(employee: Employee) -> Decimal:
 def _next_pay_date(employee: Employee, today: date) -> date:
     period = employee.payroll_period or "BULANAN"
     if period in {"MINGGUAN", "DUA_MINGGUAN", "TIGA_MINGGUAN"}:
-        return today
+        target = min(max(0, int(employee.payroll_hari or 0)), 6)
+        delta = (target - today.weekday()) % 7
+        return today + timedelta(days=delta)
     last_day = calendar.monthrange(today.year, today.month)[1]
     if period == "BULANAN":
         return date(today.year, today.month, last_day)
@@ -548,7 +609,7 @@ def payroll_summary(db: Session, today: Optional[date] = None) -> Dict[str, Any]
             "items": [],
         }
 
-    starts = {employee.id: _payroll_cycle_start(employee, target) for employee in employees}
+    starts = {employee.id: payroll_cycle_start(employee, target) for employee in employees}
     earliest = min(starts.values())
     payments = list(
         db.scalars(
@@ -562,9 +623,15 @@ def payroll_summary(db: Session, today: Optional[date] = None) -> Dict[str, Any]
     for payment in payments:
         if payment.employee_id is None:
             continue
-        paid[payment.employee_id] = paid.get(payment.employee_id, Decimal("0.00")) + Decimal(
-            payment.nominal or 0
+        settled = (
+            Decimal(payment.nominal or 0)
+            + Decimal(payment.potongan_hutang or 0)
+            - Decimal(payment.bonus or 0)
         )
+        paid[payment.employee_id] = paid.get(
+            payment.employee_id, Decimal("0.00")
+        ) + max(Decimal("0.00"), settled)
+    debt_totals = employee_debt_service.outstanding_by_employee(db)
 
     items = []
     for employee in employees:
@@ -574,27 +641,63 @@ def payroll_summary(db: Session, today: Optional[date] = None) -> Dict[str, Any]
             commission += _commission_for(db, employee, record)
         salary_due = _payroll_salary_due(employee)
         salary_paid = money(paid.get(employee.id, Decimal("0.00")))
-        total_due = money(max(Decimal("0.00"), salary_due + commission - salary_paid))
+        gross_due = money(
+            max(Decimal("0.00"), salary_due + commission - salary_paid)
+        )
+        debt_total = money(debt_totals.get(employee.id, Decimal("0.00")))
+        debt_used = money(min(debt_total, gross_due))
+        total_due = money(gross_due - debt_used)
+        next_date = _next_pay_date(employee, target)
+        days_left = (next_date - target).days
+        status = (
+            "JATUH_TEMPO"
+            if days_left <= 0
+            else "SEGERA"
+            if days_left <= 3
+            else "TERJADWAL"
+        )
         items.append(
             {
                 "employee_id": employee.id,
                 "nama": employee.nama,
-                "jadwal": PAYROLL_LABELS.get(employee.payroll_period, "Bulanan"),
+                "jadwal": PAYROLL_LABELS.get(
+                    employee.payroll_period, "Bulanan"
+                )
+                + (
+                    " · " + HARI_LABELS[int(employee.payroll_hari or 0)]
+                    if employee.payroll_period
+                    in {"MINGGUAN", "DUA_MINGGUAN", "TIGA_MINGGUAN"}
+                    else ""
+                ),
                 "cycle_start": start,
-                "next_date": _next_pay_date(employee, target),
+                "next_date": next_date,
+                "days_left": days_left,
+                "status": status,
                 "salary_due": salary_due,
                 "commission_earned": money(commission),
                 "salary_paid": salary_paid,
+                "debt_total": debt_total,
+                "debt_used": debt_used,
+                "gross_due": gross_due,
                 "total_due": total_due,
+                "bank_nama": employee.bank_nama,
+                "bank_nomor": employee.bank_nomor,
+                "bank_atas_nama": employee.bank_atas_nama,
+                "nomor_hp": employee.nomor_hp,
             }
         )
 
     items.sort(key=lambda row: (Decimal(row["total_due"]) <= 0, -Decimal(row["total_due"]), row["nama"].lower()))
     due_items = [row for row in items if Decimal(row["total_due"]) > 0]
+    alert_items = [row for row in due_items if row["status"] in {"JATUH_TEMPO", "SEGERA"}]
     return {
         "today": target,
         "total_due": money(sum((Decimal(row["total_due"]) for row in items), Decimal("0.00"))),
         "count": len(due_items),
+        "due_count": len(alert_items),
+        "due_total": money(
+            sum((Decimal(row["total_due"]) for row in alert_items), Decimal("0.00"))
+        ),
         "next_date": min((row["next_date"] for row in due_items), default=None),
         "items": items,
     }

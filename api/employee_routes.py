@@ -11,6 +11,9 @@ from api.deps import require_auth
 from api.schemas import (
     EmployeeCommissionIn,
     EmployeeCreate,
+    EmployeeDebtCreate,
+    EmployeeDebtOut,
+    EmployeeDebtUpdate,
     EmployeeOut,
     EmployeePerformanceOut,
     EmployeeUpdate,
@@ -20,7 +23,7 @@ from api.schemas import (
     SalaryPaymentUpdate,
 )
 from database.session import get_db
-from services import employee_service, salary_service
+from services import employee_debt_service, employee_service, salary_service
 
 router = APIRouter(
     tags=["Karyawan"], dependencies=[Depends(require_auth)]
@@ -60,6 +63,11 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         komisi_jasa_nilai=payload.komisi_jasa_nilai,
         payroll_period=payload.payroll_period,
         payroll_tanggal=payload.payroll_tanggal,
+        payroll_hari=payload.payroll_hari,
+        bank_nama=payload.bank_nama,
+        bank_nomor=payload.bank_nomor,
+        bank_atas_nama=payload.bank_atas_nama,
+        tanggal_masuk=payload.tanggal_masuk,
     )
     return _out(employee)
 
@@ -79,6 +87,52 @@ def update_employee(
 @router.delete("/employees/{employee_id}", status_code=204)
 def delete_employee(employee_id: int, db: Session = Depends(get_db)):
     employee_service.delete_employee(db, employee_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/employee-debts", response_model=List[EmployeeDebtOut])
+def list_employee_debts(
+    employee_id: Optional[int] = Query(default=None),
+    outstanding_only: bool = Query(default=False),
+    db: Session = Depends(get_db),
+):
+    return [
+        EmployeeDebtOut(**employee_debt_service.serialize(debt))
+        for debt in employee_debt_service.list_debts(
+            db, employee_id=employee_id, outstanding_only=outstanding_only
+        )
+    ]
+
+
+@router.post("/employee-debts", response_model=EmployeeDebtOut, status_code=201)
+def create_employee_debt(
+    payload: EmployeeDebtCreate, db: Session = Depends(get_db)
+):
+    debt = employee_debt_service.create_debt(
+        db,
+        payload.employee_id,
+        payload.nominal,
+        tanggal=payload.tanggal,
+        keterangan=payload.keterangan,
+    )
+    return EmployeeDebtOut(**employee_debt_service.serialize(debt))
+
+
+@router.put("/employee-debts/{debt_id}", response_model=EmployeeDebtOut)
+def update_employee_debt(
+    debt_id: int,
+    payload: EmployeeDebtUpdate,
+    db: Session = Depends(get_db),
+):
+    debt = employee_debt_service.update_debt(
+        db, debt_id, **payload.model_dump(exclude_unset=True)
+    )
+    return EmployeeDebtOut(**employee_debt_service.serialize(debt))
+
+
+@router.delete("/employee-debts/{debt_id}", status_code=204)
+def delete_employee_debt(debt_id: int, db: Session = Depends(get_db)):
+    employee_debt_service.delete_debt(db, debt_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -118,6 +172,9 @@ def create_salary_payment(
         tanggal=payload.tanggal,
         metode=payload.metode,
         catatan=payload.catatan,
+        potongan_hutang=payload.potongan_hutang,
+        bonus=payload.bonus,
+        cicilan_hutang=payload.cicilan_hutang,
     )
     return SalaryPaymentOut(**salary_service.serialize(payment))
 

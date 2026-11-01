@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from database.models import (
     AppSetting,
+    EmployeeDebt,
     FollowupItem,
     SalaryPayment,
     ServicePayment,
@@ -206,8 +207,29 @@ def _ops_snapshot(
     if end is not None:
         salary_filters.append(SalaryPayment.tanggal < end.date())
     gaji_dibayar = (
-        select(func.coalesce(func.sum(SalaryPayment.nominal), 0))
+        select(
+            func.coalesce(
+                func.sum(
+                    SalaryPayment.nominal
+                    + func.coalesce(SalaryPayment.potongan_hutang, 0)
+                ),
+                0,
+            )
+        )
         .where(*salary_filters)
+        .scalar_subquery()
+    )
+    sisa_hutang_karyawan = EmployeeDebt.nominal - func.coalesce(
+        EmployeeDebt.terbayar, 0
+    )
+    piutang_karyawan_total = (
+        select(func.coalesce(func.sum(sisa_hutang_karyawan), 0))
+        .where(EmployeeDebt.terbayar < EmployeeDebt.nominal)
+        .scalar_subquery()
+    )
+    piutang_karyawan_count = (
+        select(func.count(EmployeeDebt.id))
+        .where(EmployeeDebt.terbayar < EmployeeDebt.nominal)
         .scalar_subquery()
     )
     piutang = db.execute(
@@ -219,6 +241,8 @@ def _ops_snapshot(
             stok_habis,
             garansi_akan_habis,
             gaji_dibayar,
+            piutang_karyawan_total,
+            piutang_karyawan_count,
         )
         .join(VehicleOrUnit, ServiceRecord.unit_id == VehicleOrUnit.id)
         .where(
@@ -235,6 +259,8 @@ def _ops_snapshot(
         "stok_habis": int(piutang[4] or 0),
         "garansi_akan_habis": int(piutang[5] or 0),
         "gaji_dibayar": money(piutang[6] or 0),
+        "piutang_karyawan_total": money(piutang[7] or 0),
+        "piutang_karyawan_count": int(piutang[8] or 0),
     }
 
 

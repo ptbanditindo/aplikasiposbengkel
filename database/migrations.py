@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 34
 
 
 def get_user_version(conn) -> int:
@@ -973,6 +973,108 @@ def _migrate_027_employee_commission_split(cursor: Cursor) -> None:
     )
 
 
+def _migrate_028_salary_cycle(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "salary_payments",
+        "cycle_start",
+        "cycle_start DATE",
+    )
+    cursor.execute(
+        "UPDATE salary_payments SET cycle_start = date(substr(tanggal, 1, 7) || '-01') "
+        "WHERE cycle_start IS NULL"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_salary_payments_cycle_start "
+        "ON salary_payments (cycle_start)"
+    )
+
+
+def _migrate_029_employee_debts(cursor: Cursor) -> None:
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS employee_debts ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL, "
+        "nama_karyawan VARCHAR(255) NOT NULL, "
+        "tanggal DATE NOT NULL, "
+        "nominal NUMERIC(14, 2) NOT NULL, "
+        "terbayar NUMERIC(14, 2) NOT NULL DEFAULT 0, "
+        "keterangan TEXT, "
+        "created_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_employee_debts_employee_id "
+        "ON employee_debts (employee_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_employee_debts_tanggal "
+        "ON employee_debts (tanggal)"
+    )
+    _add_column(
+        cursor,
+        "salary_payments",
+        "potongan_hutang",
+        "potongan_hutang NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+
+
+def _migrate_030_salary_bonus(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "salary_payments",
+        "bonus",
+        "bonus NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+
+
+def _migrate_031_salary_debt_installment(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "salary_payments",
+        "cicilan_hutang",
+        "cicilan_hutang NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+
+
+def _migrate_032_employee_bank(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "employees",
+        "bank_nama",
+        "bank_nama VARCHAR(64) NOT NULL DEFAULT ''",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "bank_nomor",
+        "bank_nomor VARCHAR(64) NOT NULL DEFAULT ''",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "bank_atas_nama",
+        "bank_atas_nama VARCHAR(255) NOT NULL DEFAULT ''",
+    )
+
+
+def _migrate_033_payroll_day(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "employees",
+        "payroll_hari",
+        "payroll_hari INTEGER NOT NULL DEFAULT 0",
+    )
+
+
+def _migrate_034_employee_join_date(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "employees",
+        "tanggal_masuk",
+        "tanggal_masuk DATE",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1001,6 +1103,13 @@ MIGRATIONS: List[Migration] = [
     (25, _migrate_025_employee_salary),
     (26, _migrate_026_salary_payments),
     (27, _migrate_027_employee_commission_split),
+    (28, _migrate_028_salary_cycle),
+    (29, _migrate_029_employee_debts),
+    (30, _migrate_030_salary_bonus),
+    (31, _migrate_031_salary_debt_installment),
+    (32, _migrate_032_employee_bank),
+    (33, _migrate_033_payroll_day),
+    (34, _migrate_034_employee_join_date),
 ]
 
 

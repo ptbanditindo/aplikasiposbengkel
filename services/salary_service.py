@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from database.models import Employee, SalaryPayment
+from services import employee_debt_service, employee_service
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
 
@@ -63,7 +64,11 @@ def serialize(payment: SalaryPayment) -> Dict[str, Any]:
         "nama_karyawan": nama,
         "periode": payment.periode,
         "tanggal": payment.tanggal,
+        "cycle_start": payment.cycle_start,
         "nominal": payment.nominal,
+        "potongan_hutang": payment.potongan_hutang,
+        "bonus": payment.bonus,
+        "cicilan_hutang": payment.cicilan_hutang,
         "metode": payment.metode,
         "catatan": payment.catatan,
         "created_at": payment.created_at,
@@ -114,29 +119,74 @@ def create_payment(
     tanggal: Any = None,
     metode: Any = "CASH",
     catatan: Optional[str] = None,
+    potongan_hutang: Any = 0,
+    bonus: Any = 0,
+    cicilan_hutang: Any = 0,
 ) -> SalaryPayment:
     employee = _get_employee(db, employee_id)
     clean_period = _clean_period(periode)
+    pay_date = _clean_date(tanggal)
+    cycle_start = employee_service.payroll_cycle_start(employee, pay_date)
     existing = db.scalar(
         select(SalaryPayment).where(
             SalaryPayment.employee_id == employee.id,
-            SalaryPayment.periode == clean_period,
+            SalaryPayment.cycle_start == cycle_start,
         )
     )
     if existing is not None:
         raise ConflictError(
-            f"Gaji {employee.nama} untuk periode {clean_period} sudah dicatat."
+            f"Gaji {employee.nama} untuk siklus {cycle_start.isoformat()} sudah dicatat."
         )
+    try:
+        potongan = money(Decimal(str(potongan_hutang or 0)))
+    except Exception as exc:
+        raise BusinessValidationError("Potongan hutang tidak valid.") from exc
+    if potongan < 0:
+        raise BusinessValidationError("Potongan hutang tidak boleh negatif.")
+    outstanding = employee_debt_service.outstanding_by_employee(db).get(
+        employee.id, Decimal("0.00")
+    )
+    try:
+        cicilan = money(Decimal(str(cicilan_hutang or 0)))
+    except Exception as exc:
+        raise BusinessValidationError("Nominal cicilan hutang tidak valid.") from exc
+    if cicilan < 0:
+        raise BusinessValidationError("Cicilan hutang tidak boleh negatif.")
+    if potongan + cicilan > outstanding:
+        raise BusinessValidationError(
+            "Potongan dan cicilan hutang melebihi sisa hutang karyawan."
+        )
+    try:
+        clean_bonus = money(Decimal(str(bonus or 0)))
+    except Exception as exc:
+        raise BusinessValidationError("Nominal bonus tidak valid.") from exc
+    if clean_bonus < 0:
+        raise BusinessValidationError("Nominal bonus tidak boleh negatif.")
     payment = SalaryPayment(
         employee_id=employee.id,
         nama_karyawan=employee.nama,
         periode=clean_period,
-        tanggal=_clean_date(tanggal),
+        tanggal=pay_date,
+        cycle_start=cycle_start,
         nominal=_clean_nominal(nominal),
+        potongan_hutang=potongan,
+        bonus=clean_bonus,
+        cicilan_hutang=cicilan,
         metode=_clean_metode(metode),
         catatan=clean_text(catatan, max_length=500) or None,
     )
     db.add(payment)
+    db.flush()
+    if potongan > 0:
+        applied = employee_debt_service.settle_debts(
+            db, employee.id, potongan
+        )
+        payment.potongan_hutang = applied
+    if cicilan > 0:
+        applied_cicilan = employee_debt_service.settle_debts(
+            db, employee.id, cicilan
+        )
+        payment.cicilan_hutang = applied_cicilan
     db.commit()
     db.refresh(payment)
     return payment
@@ -166,16 +216,24 @@ def update_payment(db: Session, payment_id: int, **values: Any) -> SalaryPayment
         payment.metode = _clean_metode(values["metode"])
     if "catatan" in values:
         payment.catatan = clean_text(values["catatan"], max_length=500) or None
-    duplicate = db.scalar(
-        select(SalaryPayment).where(
-            SalaryPayment.employee_id == payment.employee_id,
-            SalaryPayment.periode == payment.periode,
-            SalaryPayment.id != payment.id,
+    if "employee_id" in values or "tanggal" in values:
+        employee = db.get(Employee, payment.employee_id) if payment.employee_id else None
+        if employee is not None:
+            payment.cycle_start = employee_service.payroll_cycle_start(
+                employee, payment.tanggal
+            )
+    duplicate = None
+    if payment.employee_id and payment.cycle_start is not None:
+        duplicate = db.scalar(
+            select(SalaryPayment).where(
+                SalaryPayment.employee_id == payment.employee_id,
+                SalaryPayment.cycle_start == payment.cycle_start,
+                SalaryPayment.id != payment.id,
+            )
         )
-    )
     if duplicate is not None:
         raise ConflictError(
-            f"Gaji karyawan ini untuk periode {payment.periode} sudah dicatat."
+            f"Gaji karyawan ini untuk siklus {payment.cycle_start.isoformat()} sudah dicatat."
         )
     db.commit()
     db.refresh(payment)

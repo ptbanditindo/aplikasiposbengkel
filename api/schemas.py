@@ -173,6 +173,11 @@ class EmployeeCreate(CompatBase):
         **_pattern("^(TANGGAL|MINGGUAN|DUA_MINGGUAN|TIGA_MINGGUAN|BULANAN)$"),
     )
     payroll_tanggal: int = Field(default=1, ge=1, le=31)
+    payroll_hari: int = Field(default=0, ge=0, le=6)
+    bank_nama: str = Field(default="", max_length=64)
+    bank_nomor: str = Field(default="", max_length=64)
+    bank_atas_nama: str = Field(default="", max_length=255)
+    tanggal_masuk: Optional[date] = None
 
 
 class EmployeeUpdate(CompatBase):
@@ -193,6 +198,11 @@ class EmployeeUpdate(CompatBase):
         **_pattern("^(TANGGAL|MINGGUAN|DUA_MINGGUAN|TIGA_MINGGUAN|BULANAN)$"),
     )
     payroll_tanggal: Optional[int] = Field(default=None, ge=1, le=31)
+    payroll_hari: Optional[int] = Field(default=None, ge=0, le=6)
+    bank_nama: Optional[str] = Field(default=None, max_length=64)
+    bank_nomor: Optional[str] = Field(default=None, max_length=64)
+    bank_atas_nama: Optional[str] = Field(default=None, max_length=255)
+    tanggal_masuk: Optional[date] = None
 
 
 class EmployeeOut(CompatBase):
@@ -211,7 +221,12 @@ class EmployeeOut(CompatBase):
     komisi_jasa_nilai: Money = ZERO_MONEY
     payroll_period: str = "BULANAN"
     payroll_tanggal: int = 1
+    payroll_hari: int = 0
     payroll_label: str = "Bulanan"
+    bank_nama: str = ""
+    bank_nomor: str = ""
+    bank_atas_nama: str = ""
+    tanggal_masuk: Optional[date] = None
 
 
 class PayrollItemOut(CompatBase):
@@ -220,16 +235,27 @@ class PayrollItemOut(CompatBase):
     jadwal: str
     cycle_start: date
     next_date: date
+    days_left: int = 0
+    status: str = "TERJADWAL"
     salary_due: Money = ZERO_MONEY
     commission_earned: Money = ZERO_MONEY
     salary_paid: Money = ZERO_MONEY
+    debt_total: Money = ZERO_MONEY
+    debt_used: Money = ZERO_MONEY
+    gross_due: Money = ZERO_MONEY
     total_due: Money = ZERO_MONEY
+    bank_nama: str = ""
+    bank_nomor: str = ""
+    bank_atas_nama: str = ""
+    nomor_hp: str = ""
 
 
 class PayrollSummaryOut(CompatBase):
     today: date
     total_due: Money = ZERO_MONEY
     count: int = 0
+    due_count: int = 0
+    due_total: Money = ZERO_MONEY
     next_date: Optional[date] = None
     items: List[PayrollItemOut] = Field(default_factory=list)
 
@@ -266,6 +292,9 @@ class SalaryPaymentCreate(CompatBase):
     periode: str = Field(..., min_length=7, max_length=7)
     tanggal: Optional[date] = None
     nominal: Decimal = Field(..., gt=0)
+    potongan_hutang: Decimal = Field(default=Decimal("0.00"), ge=0)
+    bonus: Decimal = Field(default=Decimal("0.00"), ge=0)
+    cicilan_hutang: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     catatan: Optional[str] = Field(default=None, max_length=500)
 
@@ -285,10 +314,40 @@ class SalaryPaymentOut(CompatBase):
     nama_karyawan: str
     periode: str
     tanggal: date
+    cycle_start: Optional[date] = None
     nominal: Money
+    potongan_hutang: Money = ZERO_MONEY
+    bonus: Money = ZERO_MONEY
+    cicilan_hutang: Money = ZERO_MONEY
     metode: str
     catatan: Optional[str] = None
     created_at: datetime
+
+
+class EmployeeDebtCreate(CompatBase):
+    employee_id: int = Field(..., gt=0)
+    tanggal: Optional[date] = None
+    nominal: Decimal = Field(..., gt=0)
+    keterangan: Optional[str] = Field(default=None, max_length=500)
+
+
+class EmployeeDebtUpdate(CompatBase):
+    employee_id: Optional[int] = Field(default=None, gt=0)
+    tanggal: Optional[date] = None
+    nominal: Optional[Decimal] = Field(default=None, gt=0)
+    keterangan: Optional[str] = Field(default=None, max_length=500)
+
+
+class EmployeeDebtOut(CompatBase):
+    id: int
+    employee_id: Optional[int] = None
+    nama_karyawan: str
+    tanggal: date
+    nominal: Money
+    terbayar: Money = ZERO_MONEY
+    sisa: Money = ZERO_MONEY
+    keterangan: Optional[str] = None
+    lunas: bool = False
 
 
 # --- SUPPLIER ---
@@ -989,6 +1048,8 @@ class DailySummaryOut(CompatBase):
     piutang_count: int = 0
     piutang_customers: int = 0
     piutang_total: Money = ZERO_MONEY
+    piutang_karyawan_total: Money = ZERO_MONEY
+    piutang_karyawan_count: int = 0
     stok_menipis: int = 0
     stok_habis: int = 0
     garansi_akan_habis: int = 0
@@ -1036,6 +1097,8 @@ class PeriodReportOut(CompatBase):
     piutang_count: int = 0
     piutang_customers: int = 0
     piutang_total: Money = ZERO_MONEY
+    piutang_karyawan_total: Money = ZERO_MONEY
+    piutang_karyawan_count: int = 0
     stok_menipis: int = 0
     stok_habis: int = 0
     garansi_akan_habis: int = 0

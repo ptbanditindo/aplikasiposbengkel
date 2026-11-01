@@ -37,6 +37,7 @@ from database.models import (  # noqa: E402
     ServicePayment,
     ServiceRecord,
     ServiceRecordMechanic,
+    EmployeeDebt,
     SalaryPayment,
     ServiceReturn,
     ServiceReturnItem,
@@ -534,6 +535,124 @@ with SessionLocal() as db:
         metode="TRANSFER",
     )
 
+    # Tambahan transaksi hari ini agar laporan setelah gaji tetap positif.
+    record(
+        siti_unit,
+        "DEMO-0019",
+        at(0, 16),
+        [("Las Radiator", 1, Decimal("300000.00"), 0)],
+        keluhan="Radiator bocor halus.",
+        metode="TRANSFER",
+    )
+    record(
+        agus_unit,
+        "DEMO-0020",
+        at(0, 16, 30),
+        [
+            ("Servis Radiator", 1, Decimal("250000.00"), 6),
+            ("Tune Up", 1, Decimal("200000.00"), 0),
+        ],
+        keluhan="Servis radiator dan tune up.",
+    )
+    record(
+        rudi_unit,
+        "DEMO-0021",
+        at(0, 17),
+        [
+            ("Ganti Coolant", 1, Decimal("120000.00"), 12),
+            ("Cek Kebocoran", 1, Decimal("75000.00"), 0),
+        ],
+        keluhan="Ganti coolant dan cek kebocoran.",
+    )
+    record(
+        maya_unit,
+        "DEMO-0022",
+        at(0, 17, 30),
+        [
+            ("Servis Radiator", 1, Decimal("250000.00"), 6),
+            ("Ganti Oli", 1, Decimal("150000.00"), 6),
+        ],
+        keluhan="Servis radiator dan ganti oli.",
+        metode="TRANSFER",
+    )
+    record(
+        lina_unit,
+        "DEMO-0023",
+        at(0, 18),
+        [("Las Radiator", 1, Decimal("300000.00"), 0)],
+        keluhan="Las radiator retak.",
+    )
+    record(
+        hendra_unit,
+        "DEMO-0024",
+        at(0, 18, 30),
+        [
+            ("Tune Up", 1, Decimal("200000.00"), 0),
+            ("Cek Radiator", 1, Decimal("50000.00"), 0),
+        ],
+        keluhan="Tune up dan cek radiator.",
+    )
+    record(
+        nur_unit,
+        "DEMO-0025",
+        at(0, 19),
+        [
+            ("Servis Radiator", 1, Decimal("250000.00"), 6),
+            ("Ganti Coolant", 1, Decimal("120000.00"), 12),
+        ],
+        keluhan="Servis radiator dan coolant.",
+        metode="TRANSFER",
+    )
+    record(
+        budi_unit,
+        "DEMO-0026",
+        at(0, 19, 30),
+        [
+            ("Las Radiator", 1, Decimal("300000.00"), 0),
+            ("Cek Kebocoran", 1, Decimal("75000.00"), 0),
+        ],
+        keluhan="Las radiator dan cek kebocoran.",
+    )
+
+    # Tambahan riwayat beberapa hari terakhir untuk laporan periode.
+    record(
+        nur_unit,
+        "DEMO-0027",
+        at(-1, 10),
+        [("Servis Radiator", 1, Decimal("250000.00"), 6)],
+        keluhan="Servis radiator rutin.",
+        metode="TRANSFER",
+    )
+    record(
+        fajar_unit,
+        "DEMO-0028",
+        at(-2, 11),
+        [("Ganti Oli", 1, Decimal("150000.00"), 6)],
+        keluhan="Ganti oli rutin.",
+    )
+    record(
+        siti_unit,
+        "DEMO-0029",
+        at(-3, 9),
+        [("Tune Up", 1, Decimal("200000.00"), 0)],
+        keluhan="Tune up berkala.",
+    )
+    record(
+        agus_unit,
+        "DEMO-0030",
+        at(-6, 14),
+        [("Cuci Radiator", 1, Decimal("100000.00"), 3)],
+        keluhan="Cuci radiator.",
+        metode="TRANSFER",
+    )
+    record(
+        maya_unit,
+        "DEMO-0031",
+        at(-9, 13),
+        [("Las Radiator", 1, Decimal("300000.00"), 0)],
+        keluhan="Las radiator.",
+    )
+
     # Piutang lewat tempo yang sudah diingatkan.
     budi_overdue = record(
         budi_unit,
@@ -786,18 +905,23 @@ with SessionLocal() as db:
         nama="Andi",
         peran="MEKANIK",
         nomor_hp="081200000201",
+        tanggal_masuk=today - timedelta(days=400),
         komisi_mode="PERSEN",
         komisi_basis="JASA",
         komisi_nilai=Decimal("10.00"),
         komisi_barang_nilai=Decimal("0.00"),
         komisi_jasa_nilai=Decimal("10.00"),
-        payroll_period="BULANAN",
+        payroll_period="TANGGAL",
         payroll_tanggal=25,
+        bank_nama="BCA",
+        bank_nomor="1234567890",
+        bank_atas_nama="Andi",
     )
     bayu = Employee(
         nama="Bayu",
         peran="MEKANIK",
         nomor_hp="081200000202",
+        tanggal_masuk=today - timedelta(days=220),
         komisi_mode="PERSEN",
         komisi_basis="KEDUANYA",
         komisi_nilai=Decimal("5.00"),
@@ -805,11 +929,16 @@ with SessionLocal() as db:
         komisi_jasa_nilai=Decimal("5.00"),
         payroll_period="MINGGUAN",
         payroll_tanggal=1,
+        payroll_hari=6,
+        bank_nama="Mandiri",
+        bank_nomor="9876543210",
+        bank_atas_nama="Bayu",
     )
     sari = Employee(
         nama="Sari",
         peran="KASIR",
         nomor_hp="081200000203",
+        tanggal_masuk=today - timedelta(days=120),
         jenis_imbalan="GAJI",
         gaji_bulanan=Decimal("3000000.00"),
         komisi_mode="NOMINAL",
@@ -819,18 +948,81 @@ with SessionLocal() as db:
         komisi_jasa_nilai=Decimal("0.00"),
         payroll_period="TANGGAL",
         payroll_tanggal=1,
+        bank_nama="BRI",
+        bank_nomor="5556667778",
+        bank_atas_nama="Sari",
     )
     db.add_all([andi, bayu, sari])
     db.flush()
+    db.add(
+        EmployeeDebt(
+            employee_id=andi.id,
+            nama_karyawan=andi.nama,
+            tanggal=today,
+            nominal=Decimal("50000.00"),
+            terbayar=Decimal("0.00"),
+            keterangan="Kebutuhan keluarga",
+        )
+    )
+    db.add_all(
+        [
+            EmployeeDebt(
+                employee_id=bayu.id,
+                nama_karyawan=bayu.nama,
+                tanggal=today,
+                nominal=Decimal("5000.00"),
+                terbayar=Decimal("0.00"),
+                keterangan="Pinjam konsumsi",
+            ),
+            EmployeeDebt(
+                employee_id=andi.id,
+                nama_karyawan=andi.nama,
+                tanggal=today,
+                nominal=Decimal("10000.00"),
+                terbayar=Decimal("0.00"),
+                keterangan="Bensin operasional",
+            ),
+            EmployeeDebt(
+                employee_id=sari.id,
+                nama_karyawan=sari.nama,
+                tanggal=today,
+                nominal=Decimal("10000.00"),
+                terbayar=Decimal("0.00"),
+                keterangan="Kebutuhan rumah",
+            ),
+            EmployeeDebt(
+                employee_id=andi.id,
+                nama_karyawan=andi.nama,
+                tanggal=today,
+                nominal=Decimal("5000.00"),
+                terbayar=Decimal("0.00"),
+                keterangan="Servis motor",
+            ),
+        ]
+    )
     db.add(
         SalaryPayment(
             employee_id=sari.id,
             nama_karyawan=sari.nama,
             periode=today.strftime("%Y-%m"),
             tanggal=today,
+            cycle_start=today.replace(day=1),
             nominal=Decimal("3000000.00"),
             metode="TRANSFER",
             catatan="Gaji demo bulan ini",
+        )
+    )
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    db.add(
+        SalaryPayment(
+            employee_id=sari.id,
+            nama_karyawan=sari.nama,
+            periode=previous_month.strftime("%Y-%m"),
+            tanggal=previous_month,
+            cycle_start=previous_month.replace(day=1),
+            nominal=Decimal("3000000.00"),
+            metode="TRANSFER",
+            catatan="Gaji demo bulan lalu",
         )
     )
     sample_records = (

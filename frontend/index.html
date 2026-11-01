@@ -156,81 +156,68 @@
             <h1>Ringkasan hari ini</h1>
             <p class="muted">Servis dan pembayaran yang tercatat hari ini.</p>
           </div>
-          <div class="page-actions">
-            <button type="button" class="btn btn-outline" id="heroNewCustomer">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-8 0v1"></path><circle cx="12" cy="9" r="3"></circle><path d="M19 8h3M20.5 6.5v3"></path></svg>
-              Pelanggan baru
-            </button>
-            <button type="button" class="btn btn-primary" id="heroNewService">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-              Servis baru
-            </button>
-          </div>
         </div>
 
-        <div class="stats-grid">
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
-            <span class="stat-label">Unit diservis</span>
-            <strong id="statUnit">0</strong>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai hari ini" data-action="dashboard-notas" data-filter="cash">
-            <span class="stat-label">Tunai masuk</span>
-            <strong id="statCash">Rp 0</strong>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota transfer hari ini" data-action="dashboard-notas" data-filter="transfer">
-            <span class="stat-label">Transfer masuk</span>
-            <strong id="statTransfer">Rp 0</strong>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="dashboard-notas" data-filter="warranty">
-            <span class="stat-label">Garansi aktif</span>
-            <strong id="statWarranty">0</strong>
-          </article>
-          <article class="stat-card stat-card--wide is-clickable" role="button" tabindex="0" title="Buka daftar piutang" data-action="open-receivables">
-            <span class="stat-label">Total hutang</span>
-            <strong id="statTotalDebt">Rp 0</strong>
-            <span class="stat-sub" id="statTotalDebtSub">0 nota · 0 pelanggan</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok menipis" data-action="open-low-stock">
-            <span class="stat-label">Stok menipis</span>
-            <strong id="statLowStock">0</strong>
-            <span class="stat-sub">Perlu dibeli</span>
-          </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok habis" data-action="open-stock-out">
-            <span class="stat-label">Stok habis</span>
-            <strong id="statStockOut">0</strong>
-            <span class="stat-sub">Tidak tersedia</span>
-          </article>
-          <article class="stat-card stat-card--wide is-clickable hidden" id="dashboardPayrollCard" role="button" tabindex="0" title="Buka rincian gaji dan komisi" data-action="open-payroll">
-            <span class="stat-label">Gaji &amp; komisi harus dibayar</span>
-            <strong id="statPayroll">Rp 0</strong>
-            <span class="stat-sub" id="statPayrollSub">Belum ada tagihan gaji</span>
-          </article>
+        <div class="notice-banner hidden" id="payrollAlert" role="status" aria-live="polite">
+          <div class="notice-banner-text">
+            <strong>Pengingat gajian</strong>
+            <span id="payrollAlertText"></span>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" data-action="open-payroll">Bayar</button>
         </div>
 
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Transaksi terakhir</h2>
-              <p class="muted">Nota terbaru yang tercatat di kasir.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" id="refreshDashboard">Muat ulang</button>
+        <section class="stat-section">
+          <h2 class="stat-section-title">Laporan keuangan bengkel hari ini</h2>
+          <div class="stats-grid">
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
+              <span class="stat-label">Unit diservis</span>
+              <strong id="statUnit">0</strong>
+            </article>
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai hari ini" data-action="dashboard-notas" data-filter="cash">
+              <span class="stat-label">Tunai masuk</span>
+              <strong id="statCash">Rp 0</strong>
+            </article>
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota transfer hari ini" data-action="dashboard-notas" data-filter="transfer">
+              <span class="stat-label">Transfer masuk</span>
+              <strong id="statTransfer">Rp 0</strong>
+            </article>
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
+              <span class="stat-label">Total hutang pelanggan</span>
+              <strong id="statTotalDebt">Rp 0</strong>
+              <span class="stat-sub" id="statTotalDebtSub">0 nota · 0 pelanggan</span>
+            </article>
           </div>
-          <div class="table-wrap">
-            <table class="table table-recent">
-              <thead>
-                <tr>
-                  <th>Waktu</th>
-                  <th>No. nota</th>
-                  <th>Pelanggan</th>
-                  <th>Unit</th>
-                  <th class="text-right">Total</th>
-                  <th>Metode</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="recentBody"></tbody>
-            </table>
-            <div class="empty-state hidden" id="recentEmpty">Belum ada transaksi hari ini. Mulai dari tombol Servis baru.</div>
+        </section>
+
+        <section class="stat-section">
+          <h2 class="stat-section-title">Laporan stok habis / menipis</h2>
+          <div class="stats-grid">
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok menipis" data-action="open-low-stock">
+              <span class="stat-label">Stok menipis</span>
+              <strong id="statLowStock">0</strong>
+              <span class="stat-sub">Perlu dibeli</span>
+            </article>
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok habis" data-action="open-stock-out">
+              <span class="stat-label">Stok habis</span>
+              <strong id="statStockOut">0</strong>
+              <span class="stat-sub">Tidak tersedia</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="stat-section" id="dashboardEmployeeStats">
+          <h2 class="stat-section-title">Laporan keuangan karyawan</h2>
+          <div class="stats-grid">
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka hutang karyawan" data-action="open-employee-debts">
+              <span class="stat-label">Piutang karyawan</span>
+              <strong id="statEmployeeDebt">Rp 0</strong>
+              <span class="stat-sub" id="statEmployeeDebtSub">0 hutang berjalan</span>
+            </article>
+            <article class="stat-card is-clickable hidden" id="dashboardPayrollCard" role="button" tabindex="0" title="Buka rincian gaji dan komisi" data-action="open-payroll">
+              <span class="stat-label">Gaji &amp; komisi harus dibayar</span>
+              <strong id="statPayroll">Rp 0</strong>
+              <span class="stat-sub" id="statPayrollSub">Belum ada tagihan gaji</span>
+            </article>
           </div>
         </section>
       </section>
@@ -703,12 +690,39 @@
             <strong id="reportProfitJasa">Rp 0</strong>
           </article>
           <article class="stat-card" title="Margin sparepart + jasa - komisi karyawan - gaji yang dibayar pada periode.">
-            <span class="stat-label">Estimasi laba bersih setelah komisi</span>
+            <span class="stat-label">Laba bersih setelah dipotong gaji dan komisi</span>
             <strong id="reportNetProfit">Rp 0</strong>
           </article>
         </div>
 
         <div class="report-meta hidden" id="reportMeta"></div>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Transaksi terakhir</h2>
+              <p class="muted">6 nota terbaru pada periode laporan.</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnRefreshReportRecent">Muat ulang</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-recent">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>No. nota</th>
+                  <th>Pelanggan</th>
+                  <th>Unit</th>
+                  <th class="text-right">Total</th>
+                  <th>Metode</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="reportRecentBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="reportRecentEmpty">Tidak ada transaksi pada periode ini.</div>
+          </div>
+        </section>
 
         <section class="card">
           <div class="card-head">
@@ -1134,6 +1148,11 @@
             <span class="stat-label">Radiator copotan</span>
             <strong id="customerStatRadiator">0</strong>
           </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="customer-warranties">
+            <span class="stat-label">Garansi aktif</span>
+            <strong id="customerStatWarranty">0</strong>
+            <span class="stat-sub">Nota masih bergaransi</span>
+          </article>
         </div>
 
         <section class="card">
@@ -1155,6 +1174,7 @@
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur karyawan</span><input type="checkbox" id="employeeFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
             <button type="button" class="btn btn-ghost" id="btnRefreshEmployees">Muat ulang</button>
+            <button type="button" class="btn btn-outline" id="btnEmployeeArchive">Lihat arsip</button>
             <button type="button" class="btn btn-primary" id="btnAddEmployee">+ Karyawan</button>
           </div>
         </div>
@@ -1168,7 +1188,7 @@
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Nama</th><th>Peran</th><th>WhatsApp</th><th>Gaji bulanan</th><th>Jadwal gajian</th><th>Komisi</th><th>Status</th><th></th></tr>
+                <tr><th>Nama</th><th>Peran</th><th></th></tr>
               </thead>
               <tbody id="employeeBody"></tbody>
             </table>
@@ -1179,17 +1199,39 @@
         <div class="card">
           <div class="card-head">
             <div>
-              <h2>Pembayaran gaji</h2>
-              <p class="muted" id="salarySummary">Catat gaji yang benar-benar dibayar. Laporan memotong nominal pada tanggal pembayaran.</p>
+              <h2>Hutang karyawan</h2>
+              <p class="muted" id="debtSummary">Catat uang muka atau kebutuhan karyawan. Sisa hutang otomatis dipotong dari gaji atau komisi saat gajian.</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-primary" id="btnAddSalary">+ Catat gaji</button>
+              <button type="button" class="btn btn-ghost hidden" id="btnDebtHistoryAll">Lihat semua</button>
+              <button type="button" class="btn btn-primary" id="btnAddDebt">+ Catat hutang</button>
             </div>
           </div>
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Tanggal</th><th>Karyawan</th><th>Periode</th><th>Metode</th><th class="text-right">Nominal</th><th>Catatan</th><th></th></tr>
+                <tr><th>Tanggal</th><th>Karyawan</th><th>Keperluan</th><th class="text-right">Nominal</th><th class="text-right">Sudah dipotong</th><th class="text-right">Sisa</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="debtBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="debtEmpty">Belum ada hutang karyawan.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Riwayat pembayaran gaji</h2>
+              <p class="muted" id="salarySummary">Menampilkan 2 pembayaran terbaru per karyawan.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-ghost" id="btnSalaryHistoryAll">Lihat semua</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Tanggal</th><th>Karyawan</th><th>Periode</th><th>Metode</th><th class="text-right">Nominal</th><th class="text-right">Potongan hutang</th><th>Catatan</th></tr>
               </thead>
               <tbody id="salaryBody"></tbody>
             </table>
@@ -1642,6 +1684,10 @@
             </select>
           </label>
         </div>
+        <label class="field">
+          <span>Tanggal masuk</span>
+          <input type="date" class="input" id="employeeTanggalMasuk">
+        </label>
         <div class="form-grid">
           <label class="field">
             <span>Jenis imbalan</span>
@@ -1699,6 +1745,32 @@
           <span>Tanggal gajian (1-31)</span>
           <input type="number" class="input" id="employeePayrollTanggal" min="1" max="31" step="1" value="1">
         </label>
+        <label class="field hidden" id="employeePayrollHariField">
+          <span>Hari pembayaran</span>
+          <select class="input" id="employeePayrollHari">
+            <option value="0">Senin</option>
+            <option value="1">Selasa</option>
+            <option value="2">Rabu</option>
+            <option value="3">Kamis</option>
+            <option value="4">Jumat</option>
+            <option value="5">Sabtu</option>
+            <option value="6">Minggu</option>
+          </select>
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Bank</span>
+            <input type="text" class="input" id="employeeBankNama" maxlength="64" placeholder="Contoh: BCA">
+          </label>
+          <label class="field">
+            <span>Nomor rekening</span>
+            <input type="text" class="input" id="employeeBankNomor" maxlength="64" placeholder="Nomor rekening karyawan">
+          </label>
+        </div>
+        <label class="field">
+          <span>Atas nama rekening</span>
+          <input type="text" class="input" id="employeeBankAtasNama" maxlength="255" placeholder="Nama pemilik rekening">
+        </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="employeeCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan karyawan</button>
@@ -1719,7 +1791,7 @@
       <div class="modal-table-wrap">
         <table class="table">
           <thead>
-            <tr><th>Karyawan</th><th>Jadwal</th><th class="text-right">Gaji</th><th class="text-right">Komisi</th><th class="text-right">Sudah dibayar</th><th class="text-right">Perlu dibayar</th><th>Berikutnya</th></tr>
+            <tr><th>Karyawan</th><th class="text-right">Total</th><th></th></tr>
           </thead>
           <tbody id="payrollBody"></tbody>
         </table>
@@ -1731,6 +1803,50 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="payrollPayModal" role="dialog" aria-modal="true" aria-labelledby="payrollPayTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="payrollPayTitle">Pilih pembayaran</h3>
+          <p class="muted" id="payrollPaySubtitle">Tentukan cara pembayaran gaji dan komisi.</p>
+        </div>
+        <button type="button" class="icon-btn" id="payrollPayClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="payroll-pay-summary">
+        <div><span>Gaji &amp; komisi</span><strong id="payrollPayGross">Rp 0</strong></div>
+        <div class="hidden" id="payrollPayDebtTotalRow"><span>Hutang karyawan</span><strong id="payrollPayDebtTotal">Rp 0</strong></div>
+        <div class="hidden" id="payrollPayDebtRow"><span id="payrollPayDebtLabel">Potong hutang</span><strong id="payrollPayDebt">Rp 0</strong></div>
+        <div class="hidden" id="payrollPayBonusRow"><span>Bonus</span><strong id="payrollPayBonus">Rp 0</strong></div>
+        <div><span>Total yang harus dibayarkan</span><strong id="payrollPayNet">Rp 0</strong></div>
+      </div>
+      <div class="payroll-pay-options">
+        <label class="checkbox-line" id="payrollCicilToggle">
+          <input type="checkbox" id="payrollCicilAktif">
+          Cicil hutang (dipotong dari gaji)
+        </label>
+        <div class="field hidden" id="payrollCicilRow">
+          <input type="number" class="input" id="payrollCicilNominal" min="0" step="0.01" placeholder="Nominal cicilan hutang">
+        </div>
+        <label class="checkbox-line" id="payrollFullDebtToggle">
+          <input type="checkbox" id="payrollFullDebtAktif">
+          Full bayar hutang (dipotong dari gaji)
+        </label>
+        <label class="checkbox-line">
+          <input type="checkbox" id="payrollBonusAktif">
+          Tambah bonus
+        </label>
+        <div class="field hidden" id="payrollBonusRow">
+          <input type="number" class="input" id="payrollBonusNominal" min="0" step="0.01" placeholder="Nominal bonus">
+          <input type="text" class="input" id="payrollBonusKeterangan" maxlength="200" placeholder="Bonus untuk apa">
+        </div>
+        <button type="button" class="btn btn-primary" data-action="payroll-pay-confirm">Bayar</button>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="payrollPayCancel">Batal</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hidden" id="salaryModal" role="dialog" aria-modal="true" aria-labelledby="salaryModalTitle">
     <div class="modal">
       <div class="modal-head">
@@ -1738,46 +1854,128 @@
           <h3 id="salaryModalTitle">Catat pembayaran gaji</h3>
           <p class="muted">Gaji yang dicatat di sini mengurangi laba bersih pada tanggal pembayaran.</p>
         </div>
-        <button type="button" class="icon-btn" id="salaryModalClose" aria-label="Tutup">&times;</button>
+        <button class="icon-btn" type="button" id="salaryModalClose" aria-label="Tutup">&times;</button>
       </div>
       <form id="salaryForm">
         <input type="hidden" id="salaryId">
-        <label class="field">
-          <span>Karyawan <em>*</em></span>
-          <select class="input" id="salaryEmployee" required></select>
-        </label>
-        <div class="form-grid">
-          <label class="field">
-            <span>Periode gaji <em>*</em></span>
-            <input type="month" class="input" id="salaryPeriode" required>
-          </label>
-          <label class="field">
-            <span>Tanggal bayar <em>*</em></span>
-            <input type="date" class="input" id="salaryTanggal" required>
-          </label>
-        </div>
-        <div class="form-grid">
-          <label class="field">
-            <span>Nominal (Rp) <em>*</em></span>
-            <input type="number" class="input" id="salaryNominal" min="0.01" step="0.01" required>
-          </label>
-          <label class="field">
-            <span>Metode</span>
-            <select class="input" id="salaryMetode">
-              <option value="CASH">Tunai</option>
-              <option value="TRANSFER">Transfer</option>
-            </select>
-          </label>
+        <input type="hidden" id="salaryEmployee">
+        <input type="hidden" id="salaryPeriode">
+        <input type="hidden" id="salaryTanggal">
+        <input type="hidden" id="salaryNominal">
+        <input type="hidden" id="salaryPotonganHutang" value="0">
+        <input type="hidden" id="salaryBonus" value="0">
+        <input type="hidden" id="salaryCicilanHutang" value="0">
+        <input type="hidden" id="salaryCatatan">
+        <div class="payroll-pay-summary">
+          <div><span>Karyawan</span><strong id="salaryEmployeeName">-</strong></div>
+          <div><span>Periode</span><strong id="salaryPeriodLabel">-</strong></div>
+          <div><span>Total yang harus dibayarkan</span><strong id="salaryPayTotal">Rp 0</strong></div>
         </div>
         <label class="field">
-          <span>Catatan</span>
-          <input type="text" class="input" id="salaryCatatan" maxlength="500" placeholder="Opsional">
+          <span>Metode pembayaran</span>
+          <select class="input" id="salaryMetode">
+            <option value="CASH">Tunai</option>
+            <option value="TRANSFER">Transfer</option>
+          </select>
         </label>
+        <div class="field hidden" id="salaryBankRow">
+          <span>Rekening karyawan</span>
+          <div id="salaryBankInfo" class="cell-primary">-</div>
+        </div>
+        <div class="field hidden" id="salaryBonusInfo">
+          <span>Bonus</span>
+          <div id="salaryBonusText" class="cell-primary">-</div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="salaryCancel">Batal</button>
-          <button type="submit" class="btn btn-primary" id="salarySubmit">Simpan gaji</button>
+          <button type="submit" class="btn btn-primary" id="salarySubmit">Bayar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="debtModal" role="dialog" aria-modal="true" aria-labelledby="debtModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="debtModalTitle">Catat hutang karyawan</h3>
+          <p class="muted">Hutang akan dipotong otomatis dari gaji atau komisi saat gajian.</p>
+        </div>
+        <button type="button" class="icon-btn" id="debtModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="debtForm">
+        <input type="hidden" id="debtId">
+        <label class="field">
+          <span>Karyawan <em>*</em></span>
+          <select class="input" id="debtEmployee" required></select>
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Tanggal <em>*</em></span>
+            <input type="date" class="input" id="debtTanggal" required>
+          </label>
+          <label class="field">
+            <span>Nominal (Rp) <em>*</em></span>
+            <input type="number" class="input" id="debtNominal" min="0.01" step="0.01" required>
+          </label>
+        </div>
+        <label class="field">
+          <span>Keperluan</span>
+          <input type="text" class="input" id="debtKeterangan" maxlength="500" placeholder="Contoh: kebutuhan keluarga">
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="debtCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan hutang</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="debtHistoryModal" role="dialog" aria-modal="true" aria-labelledby="debtHistoryTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="debtHistoryTitle">Seluruh hutang karyawan</h3>
+          <p class="muted" id="debtHistorySubtitle">Semua catatan hutang yang tercatat.</p>
+        </div>
+        <button type="button" class="icon-btn" id="debtHistoryClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Tanggal</th><th>Karyawan</th><th>Keperluan</th><th class="text-right">Nominal</th><th class="text-right">Sudah dipotong</th><th class="text-right">Sisa</th><th>Status</th></tr>
+          </thead>
+          <tbody id="debtHistoryBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="debtHistoryEmpty">Belum ada hutang karyawan.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="debtHistoryDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="salaryHistoryModal" role="dialog" aria-modal="true" aria-labelledby="salaryHistoryTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="salaryHistoryTitle">Seluruh riwayat pembayaran gaji</h3>
+          <p class="muted" id="salaryHistorySubtitle">Semua pembayaran gaji yang tercatat.</p>
+        </div>
+        <button type="button" class="icon-btn" id="salaryHistoryClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Tanggal</th><th>Karyawan</th><th>Periode</th><th>Metode</th><th class="text-right">Nominal</th><th class="text-right">Potongan hutang</th><th>Catatan</th></tr>
+          </thead>
+          <tbody id="salaryHistoryBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="salaryHistoryEmpty">Belum ada pembayaran gaji.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="salaryHistoryDismiss">Tutup</button>
+      </div>
     </div>
   </div>
 
@@ -1793,6 +1991,66 @@
       <div id="employeePerfBody"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="employeePerfDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="employeeDetailModal" role="dialog" aria-modal="true" aria-labelledby="employeeDetailTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="employeeDetailTitle">Detail karyawan</h3>
+          <p class="muted" id="employeeDetailSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="employeeDetailClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="employeeDetailBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="employeeDetailDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="employeeArchiveModal" role="dialog" aria-modal="true" aria-labelledby="employeeArchiveTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="employeeArchiveTitle">Arsip karyawan</h3>
+          <p class="muted" id="employeeArchiveSubtitle">Karyawan yang sudah keluar. Data tetap tersimpan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="employeeArchiveClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead><tr><th>Nama</th><th>Peran</th><th>Masuk</th><th>WhatsApp</th><th>Gaji</th><th></th></tr></thead>
+          <tbody id="employeeArchiveBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="employeeArchiveEmpty">Belum ada karyawan di arsip.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="employeeArchiveDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="employeePerfDetailModal" role="dialog" aria-modal="true" aria-labelledby="employeePerfDetailTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="employeePerfDetailTitle">Rincian performa</h3>
+          <p class="muted">Riwayat pengerjaan dan komisi per nota.</p>
+        </div>
+        <button type="button" class="icon-btn" id="employeePerfDetailClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead><tr><th>Tanggal</th><th>Nota</th><th>Pelanggan</th><th>Unit</th><th class="text-right">Nilai</th><th class="text-right">Komisi</th><th>Komisi manual</th></tr></thead>
+          <tbody id="employeePerfDetailBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="employeePerfDetailEmpty">Belum ada pengerjaan.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="employeePerfDetailDismiss">Tutup</button>
       </div>
     </div>
   </div>
