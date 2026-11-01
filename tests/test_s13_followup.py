@@ -304,6 +304,13 @@ def test_prospek_batas_hari_cooldown_dan_arsip(
     assert item["sisa_hari"] == 0
     assert item["bisa_followup"] is True
 
+    blocked = client.post(
+        f"/api/followup/items/{item['id']}/status",
+        json={"status": "MASIH_KENDALA"},
+    )
+    assert blocked.status_code == 409
+    assert "follow up" in blocked.json()["detail"].lower()
+
     response = client.post(
         f"/api/followup/items/{item['id']}/followup",
         json={"status": "DIBUKA"},

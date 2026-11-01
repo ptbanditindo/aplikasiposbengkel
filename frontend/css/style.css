@@ -593,6 +593,32 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
 .card-head h2,
 .card-head h3 { font-size: 16px; font-weight: 600; }
 .card-head p { margin-top: 3px; font-size: 12.5px; }
+#view-settings .settings-collapsible > .card-head {
+  align-items: center;
+  margin-bottom: 0;
+  cursor: pointer;
+  user-select: none;
+}
+#view-settings .settings-collapsible > .card-head::after {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+#view-settings .settings-collapsible:not(.is-collapsed) > .card-head {
+  margin-bottom: 16px;
+}
+#view-settings .settings-collapsible:not(.is-collapsed) > .card-head::after {
+  content: '▾';
+}
+#view-settings .settings-collapsible.is-collapsed > :not(.card-head) {
+  display: none;
+}
+#view-settings .settings-collapsible > .card-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
 
 /* ------------------------------- Stats strip ---------------------------- */
 .stats-grid {

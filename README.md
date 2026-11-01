@@ -63,7 +63,8 @@ build step) di `http://127.0.0.1:8000`.
   status **Masih kendala** memindahkan prospek ke kartu **Berkendala**.
   Pintasan Status pada Prospek hanya berisi **Masih bagus**, **Masih
   kendala**, dan **Akan datang service** (tanggal wajib); prospek berjadwal
-  tetap di daftar Prospek dan tanggalnya bisa diubah.
+  tetap di daftar Prospek dan tanggalnya bisa diubah. Tombol Status baru
+  aktif setelah pelanggan diingatkan lewat Ingatkan/WA.
   Di kartu Berkendala, pintasan **Status** hanya berisi **Sudah datang**,
   **Tidak datang**, dan **Reschedule** (wajib tanggal); reschedule
   mengembalikan prospek ke daftar Prospek dengan tanggal kunjungan baru.
@@ -103,6 +104,8 @@ build step) di `http://127.0.0.1:8000`.
   opsional ke Telegram.
 - **Pengaturan** — identitas bengkel, rekening transfer, token/jadwal Telegram,
   printer, dan batas kunci aplikasi dapat diubah dari UI tanpa mengedit `.env`.
+  Setiap bagian tampil sebagai judul yang bisa diklik; isi formulir hanya
+  dibuka saat dibutuhkan agar halaman tetap ringkas.
 - **Tampilan terang/gelap** — antarmuka berbasis kertas putih dengan aksen
   warna pada angka dan status penting; pilihan Terang atau Gelap tersimpan per
   perangkat di Pengaturan dan langsung berlaku tanpa memuat ulang halaman.

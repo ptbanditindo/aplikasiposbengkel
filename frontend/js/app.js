@@ -4663,7 +4663,8 @@
         item.id +
         '">WA</button>'
       : '<button type="button" class="btn btn-outline btn-xs" disabled title="Nomor WhatsApp pelanggan belum valid">WA</button>';
-    const statusLocked = jadwal && !item.sudah_followup;
+    const statusLocked =
+      (jadwal || item.jenis === 'prospek') && !item.sudah_followup;
     const statusButton =
       '<button type="button" class="btn btn-outline btn-xs" data-action="followup-status-shortcut" data-id="' +
       item.id +
@@ -7639,6 +7640,33 @@
     });
   }
 
+  function initSettingsAccordion() {
+    $$('#view-settings .settings-collapsible').forEach((card) => {
+      const head = card.querySelector(':scope > .card-head');
+      if (!head) return;
+      card.classList.add('is-collapsed');
+      head.setAttribute('role', 'button');
+      head.setAttribute('tabindex', '0');
+      head.setAttribute('aria-expanded', 'false');
+      const toggle = () => {
+        const collapsed = card.classList.toggle('is-collapsed');
+        head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      };
+      head.addEventListener('click', (event) => {
+        if (event.target.closest('button, a, input, select, textarea, label')) {
+          return;
+        }
+        toggle();
+      });
+      head.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggle();
+        }
+      });
+    });
+  }
+
   /* ---------------------------- PIN keamanan APK --------------------------- */
   function initPinSecurityCard() {
     const bridge = window.BengkelPin;
@@ -7690,6 +7718,7 @@
   async function init() {
     initTheme();
     bindEvents();
+    initSettingsAccordion();
     $$('.money-input').forEach(formatMoneyField);
     startClock();
     initPrinter();

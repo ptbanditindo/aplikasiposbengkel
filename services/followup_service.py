@@ -966,8 +966,12 @@ def change_status(
                 raise ConflictError(
                     "Lakukan follow up WhatsApp dulu sebelum mengubah status."
                 )
-        elif item.jenis == JENIS_PROSPEK and target == STATUS_AKAN_DATANG:
-            if tanggal_service is None:
+        elif item.jenis == JENIS_PROSPEK:
+            if target != STATUS_ARSIP and item.followup_terakhir is None:
+                raise ConflictError(
+                    "Lakukan follow up WhatsApp dulu sebelum mengubah status."
+                )
+            if target == STATUS_AKAN_DATANG and tanggal_service is None:
                 raise BusinessValidationError("Tanggal kunjungan wajib diisi.")
         elif target in {STATUS_AKAN_DATANG, STATUS_TIDAK_DATANG}:
             raise BusinessValidationError(

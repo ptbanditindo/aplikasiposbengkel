@@ -658,4 +658,9 @@ HTTP diganti dengan kalimat umum di atas.
     Masih kendala, dan Akan datang service (wajib tanggal). Label BARU untuk
     prospek ditampilkan sebagai "Masih bagus". Prospek berjadwal tetap di
     daftar Prospek dan tanggalnya bisa diubah lewat pilihan Akan datang
-    service.
+    service. Tombol Status terkunci sampai pelanggan diingatkan lewat
+    Ingatkan/WA.
+30. Halaman Pengaturan memakai bagian lipat: hanya judul Tampilan, Identitas
+    dan rekening, Pengingat dan follow-up, Printer, Backup, Telegram, dan
+    Keamanan yang tampil. Isi formulir dibuka saat judul diklik; tombol aksi
+    di kepala kartu (mis. Tambah printer) tetap bisa diklik tanpa melipat.
