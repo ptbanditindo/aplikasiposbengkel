@@ -130,9 +130,13 @@ build step) di `http://127.0.0.1:8000`.
   skema dan salinan pengaman otomatis, backup lokal harian, serta pengiriman
   opsional ke Telegram.
 - **Pengaturan** — identitas bengkel, rekening transfer, token/jadwal Telegram,
-  printer, dan batas kunci aplikasi dapat diubah dari UI tanpa mengedit `.env`.
-  Setiap bagian tampil sebagai judul yang bisa diklik; isi formulir hanya
-  dibuka saat dibutuhkan agar halaman tetap ringkas.
+  printer, tema, jam follow-up, dan seluruh angka pengingat dapat diubah dari UI
+  tanpa mengedit `.env`. Angka yang dapat diatur mencakup tempo piutang, tahap
+  prospek, jeda follow-up, H- pengingat garansi, arsip garansi, H- servis
+  berkala, jeda dan batas pengingat piutang, penundaan belum bisa, batas pesan
+  harian/bulanan, jeda prospek/servis, serta batas tidak merespons. Setiap
+  bagian tampil sebagai judul yang bisa diklik; isi formulir hanya dibuka saat
+  dibutuhkan agar halaman tetap ringkas.
 - **Tampilan terang/gelap** — antarmuka berbasis kertas putih dengan aksen
   warna pada angka dan status penting; pilihan Terang atau Gelap tersimpan per
   perangkat di Pengaturan dan langsung berlaku tanpa memuat ulang halaman.
@@ -140,12 +144,13 @@ build step) di `http://127.0.0.1:8000`.
   atau perangkat sentuh. Navigasi mobile menjadi satu baris yang dapat digeser,
   modal panjang memakai footer aksi tetap, dan tabel tidak keluar dari layar.
   Daftar lengkap teks dan popup ada di `PETA_TEKS_UI_DAN_POPUP.md`.
-- **APK Android** — gerbang PIN 6 angka native (PBKDF2 + salt, lockout
+- **APK Android** — gerbang PIN 4-12 angka native (PBKDF2 + salt, lockout
   bertingkat), shell WebView, backend berjalan di dalam aplikasi. Saat server
   disiapkan, layar menampilkan indikator loading lingkaran. Layar utama
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
-  tidak tertutup sistem, dan warna status bar ikut tema terang/gelap.
+  tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build
+  debug terbaru adalah **2.2.6** (versionCode 9).
 
 ## Menjalankan versi web/desktop
 
@@ -291,7 +296,7 @@ desktop memakai Pydantic v2; kombinasi APK tetap memakai Pydantic 1.10 +
 FastAPI 0.115.
 
 Unit test Kotlin untuk PIN, backup, printer, dan shell WebView juga tersedia
-(308 test):
+(154 test pada build terakhir):
 
 ```bash
 cd android
@@ -301,7 +306,13 @@ cd android
 Chaquopy memakai interpreter host hanya untuk menjalankan pip. Nilainya wajib
 ditunjuk eksplisit di Windows karena `py`/`python` tidak ada di PATH mesin build.
 Interpreter host boleh berbeda dari target runtime 3.10; build terakhir memakai
-Python 3.14.
+Python 3.12.
+
+Database dummy untuk uji manual dapat dibangun ulang dengan
+`SEED_DB_REL=data/dummy_manual.db python tools/seed_manual_test.py`. Skrip ini
+mengisi pelanggan, unit, nota, piutang, garansi, servis berkala, follow-up,
+stok, retur, void, dan unit yang masih di bengkel, lalu menghapus PIN lama agar
+alur pendaftaran dapat dicoba dari awal.
 
 ## Keamanan dan data
 

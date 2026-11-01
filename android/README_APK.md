@@ -96,7 +96,7 @@ Rust. Karena itu APK memakai pin pure-Python berikut di
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
 Versi desktop di `requirements.txt` memakai pydantic v2 dan FastAPI terbaru
-yang diverifikasi. Seluruh **288 test** lulus di kedua jalur (v2 dan v1 +
+yang diverifikasi. Seluruh **322 test** lulus di kedua jalur (v2 dan v1 +
 FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
@@ -144,8 +144,7 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
   pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
   servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,
   prioritas, penggabungan pesan, varian template, dan sembilan kartu Follow up.
-- Pytest dua stack lulus 322 test. Unit test Kotlin tidak dijalankan ulang pada
-  build ini; hasil terakhir yang tercatat adalah 308 test JVM.
+- Pytest dua stack lulus 322 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 
