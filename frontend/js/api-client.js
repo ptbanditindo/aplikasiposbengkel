@@ -244,6 +244,8 @@
     },
     createSalaryPayment: (data) =>
       request('/api/salary-payments', { method: 'POST', body: data }),
+    salaryReceipt: (id) =>
+      request('/api/salary-payments/' + id + '/receipt'),
     updateSalaryPayment: (id, data) =>
       request('/api/salary-payments/' + id, { method: 'PUT', body: data }),
     deleteSalaryPayment: (id) =>

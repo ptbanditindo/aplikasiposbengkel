@@ -30,6 +30,7 @@ def _salary(
     potongan_hutang="0",
     cicilan_hutang="0",
     bonus="0",
+    bonus_keterangan=None,
 ):
     payload = {
         "employee_id": employee_id,
@@ -42,6 +43,8 @@ def _salary(
         "metode": "TRANSFER",
         "catatan": "Gaji bulan ini",
     }
+    if bonus_keterangan:
+        payload["bonus_keterangan"] = bonus_keterangan
     return client.post("/api/salary-payments", json=payload)
 
 
@@ -315,4 +318,98 @@ def test_validasi_gaji(client):
             },
         ).status_code
         == 404
+    )
+
+
+def test_nota_gaji_memuat_bonus_dan_hutang_otomatis(client):
+    employee = _employee(
+        client, nama="Kasir Nota", jenis_imbalan="GAJI", gaji_bulanan="2000000"
+    )
+    debt = client.post(
+        "/api/employee-debts",
+        json={"employee_id": employee["id"], "nominal": "50000"},
+    )
+    assert debt.status_code == 201, debt.text
+    response = _salary(
+        client,
+        employee["id"],
+        nominal="2050000",
+        potongan_hutang="50000",
+        bonus="100000",
+        bonus_keterangan="Bonus disiplin",
+    )
+    assert response.status_code == 201, response.text
+
+    receipt = client.get(
+        f"/api/salary-payments/{response.json()['id']}/receipt"
+    )
+    assert receipt.status_code == 200, receipt.text
+    text = receipt.json()["text"]
+    assert text.startswith("\n**NOTA GAJI**")
+    assert "\n\n--------------------------------\n\nKaryawan : Kasir Nota" in text
+    assert "Periode  : " + date.today().strftime("%Y-%m") in text
+    assert "Tanggal  : " in text
+    assert "*BONUS*" in text
+    assert "Keterangan: Bonus disiplin" in text
+    assert "*HUTANG*" in text
+    assert "Dipotong dari gaji: Rp 50.000" in text
+    assert "Status: Hutang lunas" in text
+    assert "*TOTAL DIBAYAR: Rp 2.050.000*" in text
+    assert text.endswith("Terima kasih.")
+    assert "Mohon maaf" not in text
+    assert "Perkenalkan" not in text
+    assert "KOMISI BARANG" not in text
+    assert "KOMISI JASA" not in text
+    assert "KOMISI NOTA" not in text
+
+
+def test_sisa_hutang_karyawan_terbawa_ke_siklus_berikutnya(client):
+    employee = _employee(
+        client,
+        nama="Kasir Bawa Hutang",
+        jenis_imbalan="GAJI",
+        gaji_bulanan="1000000",
+        payroll_period="BULANAN",
+    )
+    debt = client.post(
+        "/api/employee-debts",
+        json={"employee_id": employee["id"], "nominal": "1500000"},
+    )
+    assert debt.status_code == 201, debt.text
+
+    first_this_month = date.today().replace(day=1)
+    previous_end = first_this_month - timedelta(days=1)
+    previous_start = previous_end.replace(day=1)
+    response = _salary(
+        client,
+        employee["id"],
+        nominal="1000000",
+        tanggal=previous_end,
+        periode=previous_start.strftime("%Y-%m"),
+        cicilan_hutang="400000",
+    )
+    assert response.status_code == 201, response.text
+
+    debts = client.get("/api/employee-debts").json()
+    assert debts[0]["terbayar"] == "400000.00"
+    assert debts[0]["sisa"] == "1100000.00"
+    assert debts[0]["lunas"] is False
+
+    summary = client.get("/api/payroll/summary").json()
+    row = next(
+        item for item in summary["items"] if item["employee_id"] == employee["id"]
+    )
+    assert row["debt_total"] == "1100000.00"
+    assert row["debt_used"] == "1000000.00"
+    assert row["total_due"] == "0.00"
+
+    receipt = client.get(
+        f"/api/salary-payments/{response.json()['id']}/receipt"
+    )
+    assert receipt.status_code == 200, receipt.text
+    text = receipt.json()["text"]
+    assert "Hutang awal periode: Rp 1.500.000" in text
+    assert "Cicilan dibayar: Rp 400.000" in text
+    assert (
+        "Sisa hutang (dibawa ke periode berikutnya): Rp 1.100.000" in text
     )

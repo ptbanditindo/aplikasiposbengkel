@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 35
 
 
 def get_user_version(conn) -> int:
@@ -1075,6 +1075,15 @@ def _migrate_034_employee_join_date(cursor: Cursor) -> None:
     )
 
 
+def _migrate_035_salary_bonus_note(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "salary_payments",
+        "bonus_keterangan",
+        "bonus_keterangan VARCHAR(255) NOT NULL DEFAULT ''",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1110,6 +1119,7 @@ MIGRATIONS: List[Migration] = [
     (32, _migrate_032_employee_bank),
     (33, _migrate_033_payroll_day),
     (34, _migrate_034_employee_join_date),
+    (35, _migrate_035_salary_bonus_note),
 ]
 
 

@@ -294,6 +294,7 @@ class SalaryPaymentCreate(CompatBase):
     nominal: Decimal = Field(..., gt=0)
     potongan_hutang: Decimal = Field(default=Decimal("0.00"), ge=0)
     bonus: Decimal = Field(default=Decimal("0.00"), ge=0)
+    bonus_keterangan: Optional[str] = Field(default=None, max_length=255)
     cicilan_hutang: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
     catatan: Optional[str] = Field(default=None, max_length=500)
@@ -318,10 +319,15 @@ class SalaryPaymentOut(CompatBase):
     nominal: Money
     potongan_hutang: Money = ZERO_MONEY
     bonus: Money = ZERO_MONEY
+    bonus_keterangan: str = ""
     cicilan_hutang: Money = ZERO_MONEY
     metode: str
     catatan: Optional[str] = None
     created_at: datetime
+
+
+class SalaryReceiptOut(CompatBase):
+    text: str
 
 
 class EmployeeDebtCreate(CompatBase):

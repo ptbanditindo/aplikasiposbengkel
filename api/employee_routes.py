@@ -21,9 +21,15 @@ from api.schemas import (
     SalaryPaymentCreate,
     SalaryPaymentOut,
     SalaryPaymentUpdate,
+    SalaryReceiptOut,
 )
 from database.session import get_db
-from services import employee_debt_service, employee_service, salary_service
+from services import (
+    employee_debt_service,
+    employee_service,
+    payroll_receipt_service,
+    salary_service,
+)
 
 router = APIRouter(
     tags=["Karyawan"], dependencies=[Depends(require_auth)]
@@ -174,6 +180,7 @@ def create_salary_payment(
         catatan=payload.catatan,
         potongan_hutang=payload.potongan_hutang,
         bonus=payload.bonus,
+        bonus_keterangan=payload.bonus_keterangan,
         cicilan_hutang=payload.cicilan_hutang,
     )
     return SalaryPaymentOut(**salary_service.serialize(payment))
@@ -189,6 +196,17 @@ def update_salary_payment(
         db, payment_id, **payload.model_dump(exclude_unset=True)
     )
     return SalaryPaymentOut(**salary_service.serialize(payment))
+
+
+@router.get(
+    "/salary-payments/{payment_id}/receipt",
+    response_model=SalaryReceiptOut,
+)
+def salary_payment_receipt(payment_id: int, db: Session = Depends(get_db)):
+    payment = salary_service.get_payment(db, payment_id)
+    return SalaryReceiptOut(
+        text=payroll_receipt_service.build_text(db, payment)
+    )
 
 
 @router.delete("/salary-payments/{payment_id}", status_code=204)

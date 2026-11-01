@@ -68,6 +68,7 @@ def serialize(payment: SalaryPayment) -> Dict[str, Any]:
         "nominal": payment.nominal,
         "potongan_hutang": payment.potongan_hutang,
         "bonus": payment.bonus,
+        "bonus_keterangan": payment.bonus_keterangan,
         "cicilan_hutang": payment.cicilan_hutang,
         "metode": payment.metode,
         "catatan": payment.catatan,
@@ -121,6 +122,7 @@ def create_payment(
     catatan: Optional[str] = None,
     potongan_hutang: Any = 0,
     bonus: Any = 0,
+    bonus_keterangan: Optional[str] = None,
     cicilan_hutang: Any = 0,
 ) -> SalaryPayment:
     employee = _get_employee(db, employee_id)
@@ -171,6 +173,10 @@ def create_payment(
         nominal=_clean_nominal(nominal),
         potongan_hutang=potongan,
         bonus=clean_bonus,
+        bonus_keterangan=clean_text(
+            bonus_keterangan, max_length=255, allow_newlines=False
+        )
+        or "",
         cicilan_hutang=cicilan,
         metode=_clean_metode(metode),
         catatan=clean_text(catatan, max_length=500) or None,

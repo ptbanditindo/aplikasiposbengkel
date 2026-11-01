@@ -3908,14 +3908,23 @@
       body.innerHTML = items
         .map((row) => {
           const due = Number(row.total_due) > 0;
+          const debt = Number(row.debt_total) > 0;
           const payable = due && row.status === 'JATUH_TEMPO';
-          const action = payable
-            ? '<button type="button" class="btn btn-primary btn-xs" data-action="payroll-mark-paid" data-id="' +
+          let action;
+          if (payable) {
+            action =
+              '<button type="button" class="btn btn-primary btn-xs" data-action="payroll-mark-paid" data-id="' +
               row.employee_id +
-              '">Bayar</button>'
-            : '<span class="cell-sub">' +
-              (due ? 'Jadwal ' + fmtDate(row.next_date) : 'Lunas') +
+              '">Bayar</button>';
+          } else {
+            const notes = [];
+            if (due) notes.push('Jadwal ' + fmtDate(row.next_date));
+            if (debt) notes.push('Sisa hutang ' + fmtRp(row.debt_total));
+            action =
+              '<span class="cell-sub">' +
+              (notes.length ? notes.join(' · ') : 'Lunas') +
               '</span>';
+          }
           return (
             '<tr><td><span class="cell-primary">' +
             esc(row.nama) +
@@ -6748,6 +6757,10 @@
       openSalaryHistoryModal();
       return;
     }
+    if (action === 'debt-detail') {
+      openDebtDetail(id);
+      return;
+    }
     if (action === 'edit-debt') {
       const debt = state.employeeDebts.find((row) => row.id === id);
       if (debt) openDebtModal(debt);
@@ -6802,10 +6815,12 @@
       return;
     }
     if (action === 'open-employee-debts') {
-      navigate('employees');
-      setTimeout(() => {
-        $('#debtBody')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 400);
+      try {
+        const debts = await API.employeeDebts(null, true);
+        openDebtHistoryModal(debts, 'Piutang karyawan');
+      } catch (err) {
+        toast('Piutang karyawan gagal dimuat. Coba lagi.', 'error', 6000);
+      }
       return;
     }
     if (action === 'open-payroll') {
@@ -8258,8 +8273,8 @@
       summary.textContent = state.employeeDebts.length
         ? 'Sisa hutang ' +
           fmtRp(outstanding) +
-          '. Hutang otomatis dipotong dari gaji atau komisi saat gajian.'
-        : 'Catat uang muka atau kebutuhan karyawan. Sisa hutang otomatis dipotong dari gaji atau komisi saat gajian.';
+          '. Sisa hutang otomatis dibawa ke gaji berikutnya dan dipotong saat gajian.'
+        : 'Catat uang muka atau kebutuhan karyawan. Sisa hutang otomatis dibawa ke gaji berikutnya dan dipotong saat gajian.';
     }
     const empty = $('#debtEmpty');
     const allButton = $('#btnDebtHistoryAll');
@@ -8279,12 +8294,9 @@
       .slice(0, 4)
       .map(
         (debt) =>
-          '<tr><td>' + esc(fmtDate(debt.tanggal)) + '</td>' +
-          '<td>' + esc(debt.nama_karyawan) + '</td>' +
-          '<td>' + esc(debt.keterangan || '-') + '</td>' +
+          '<tr><td><button type="button" class="cell-link" data-action="debt-detail" data-id="' +
+          debt.id + '">' + esc(debt.nama_karyawan) + '</button></td>' +
           '<td class="text-right">' + fmtRp(debt.nominal) + '</td>' +
-          '<td class="text-right">' + fmtRp(debt.terbayar || 0) + '</td>' +
-          '<td class="text-right"><strong>' + fmtRp(debt.sisa) + '</strong></td>' +
           '<td><span class="badge ' + (debt.lunas ? 'green' : 'amber') + '">' +
           (debt.lunas ? 'Lunas' : 'Belum lunas') + '</span></td>' +
           '<td class="row-actions">' +
@@ -8296,16 +8308,50 @@
       .join('');
   }
 
-  function openDebtHistoryModal() {
+  function openDebtDetail(id) {
+    const debt = state.employeeDebts.find((row) => row.id === id);
+    if (!debt) return;
+    const row = (label, value) =>
+      '<div><span>' + esc(label) + '</span><strong>' +
+      esc(value || '-') + '</strong></div>';
+    $('#debtDetailTitle').textContent = debt.nama_karyawan;
+    $('#debtDetailSubtitle').textContent =
+      fmtDate(debt.tanggal) + ' · ' + (debt.lunas ? 'Lunas' : 'Belum lunas');
+    $('#debtDetailBody').innerHTML =
+      '<div class="payroll-pay-summary">' +
+      row('Nama', debt.nama_karyawan) +
+      row('Tanggal', fmtDate(debt.tanggal)) +
+      row('Keperluan', debt.keterangan || '-') +
+      row('Nominal hutang', fmtRp(debt.nominal)) +
+      row('Sudah dipotong', fmtRp(debt.terbayar || 0)) +
+      row('Sisa hutang', fmtRp(debt.sisa)) +
+      row(
+        'Status',
+        debt.lunas
+          ? 'Lunas'
+          : 'Belum lunas · sisa dibawa ke gaji berikutnya'
+      ) +
+      '</div>' +
+      '<div class="row-actions" style="margin-top:14px">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="edit-debt" data-id="' +
+      debt.id + '">Edit</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-action="delete-debt" data-id="' +
+      debt.id + '">Hapus</button>' +
+      '</div>';
+    openModal('#debtDetailModal');
+  }
+
+  function openDebtHistoryModal(debtRows, title) {
     const body = $('#debtHistoryBody');
     const empty = $('#debtHistoryEmpty');
     if (!body) return;
-    if (!state.employeeDebts.length) {
+    const rows = debtRows || state.employeeDebts || [];
+    if (!rows.length) {
       body.innerHTML = '';
       if (empty) empty.classList.remove('hidden');
     } else {
       if (empty) empty.classList.add('hidden');
-      body.innerHTML = state.employeeDebts
+      body.innerHTML = rows
         .map(
           (debt) =>
             '<tr><td>' + esc(fmtDate(debt.tanggal)) + '</td>' +
@@ -8319,8 +8365,10 @@
         )
         .join('');
     }
+    $('#debtHistoryTitle').textContent =
+      title || 'Seluruh hutang karyawan';
     $('#debtHistorySubtitle').textContent =
-      state.employeeDebts.length + ' catatan hutang karyawan.';
+      rows.length + ' catatan hutang karyawan.';
     openModal('#debtHistoryModal');
   }
 
@@ -8378,7 +8426,11 @@
     try {
       if (id) await API.updateEmployeeDebt(id, payload);
       else await API.createEmployeeDebt(payload);
-      closeModal('#debtModal');
+      if (!$('#debtDetailModal')?.classList.contains('hidden')) {
+        dismissModalStack(['#debtModal', '#debtDetailModal']);
+      } else {
+        closeModal('#debtModal');
+      }
       toast('Hutang karyawan tersimpan.', 'success');
       await loadEmployeeDebts();
       state.payrollSummary = await API.payrollSummary(todayISO());
@@ -8400,6 +8452,7 @@
     }
     try {
       await API.deleteEmployeeDebt(id);
+      dismissModalStack(['#debtDetailModal']);
       toast('Hutang karyawan dihapus.', 'success');
       await loadEmployeeDebts();
       state.payrollSummary = await API.payrollSummary(todayISO());
@@ -8533,6 +8586,7 @@
     $('#salaryPayTotal').textContent = fmtRp(nominal);
     $('#salaryPotonganHutang').value = Number(data.potongan_hutang || 0);
     $('#salaryBonus').value = Number(data.bonus || 0);
+    $('#salaryBonusKeterangan').value = data.bonus_keterangan || '';
     $('#salaryCicilanHutang').value = Number(data.cicilan_hutang || 0);
     $('#salaryCatatan').value = data.catatan || '';
     $('#salaryMetode').value = data.metode || 'CASH';
@@ -8564,10 +8618,6 @@
     const total = Number($('#salaryNominal').value || 0);
     const method = $('#salaryMetode').value;
     const methodLabel = method === 'TRANSFER' ? 'Transfer' : 'Tunai';
-    const bankInfo = $('#salaryBankInfo').textContent.trim();
-    const bonusInfo = $('#salaryBonusInfo').classList.contains('hidden')
-      ? ''
-      : $('#salaryBonusText').textContent.trim();
     if (
       !window.confirm(
         'Bayar ' +
@@ -8589,6 +8639,7 @@
         Number($('#salaryPotonganHutang').value || 0)
       ),
       bonus: String(Number($('#salaryBonus').value || 0)),
+      bonus_keterangan: $('#salaryBonusKeterangan').value.trim() || null,
       cicilan_hutang: String(
         Number($('#salaryCicilanHutang').value || 0)
       ),
@@ -8597,8 +8648,9 @@
     };
     if (employeeId) payload.employee_id = employeeId;
     try {
-      if (id) await API.updateSalaryPayment(id, payload);
-      else await API.createSalaryPayment(payload);
+      const saved = id
+        ? await API.updateSalaryPayment(id, payload)
+        : await API.createSalaryPayment(payload);
       dismissModalStack([
         '#salaryModal',
         '#payrollPayModal',
@@ -8613,26 +8665,23 @@
       } catch (err) {
         // Ringkasan tetap bisa dimuat ulang lewat tombol Muat ulang.
       }
-      const waTarget = waLink(
-        state.salaryPendingPhone,
-        [
-          'Nota pembayaran gaji',
-          'Karyawan: ' + employeeName,
-          'Periode: ' + period,
-          'Tanggal: ' + fmtDate(todayISO()),
-          'Total dibayarkan: ' + fmtRp(total),
-          'Metode: ' + methodLabel,
-          method === 'TRANSFER' && bankInfo ? 'Rekening: ' + bankInfo : '',
-          bonusInfo && bonusInfo !== '-' ? 'Bonus: ' + bonusInfo : '',
-        ]
-          .filter(Boolean)
-          .join('\n')
-      );
+      let receiptText = '';
+      try {
+        const receipt = await API.salaryReceipt(saved.id);
+        receiptText = (receipt.text || '').trim();
+      } catch (err) {
+        toast('Nota gaji gagal dimuat. Pembayaran tetap tersimpan.', 'warning', 6000);
+      }
+      const waTarget = receiptText
+        ? waLink(state.salaryPendingPhone, receiptText)
+        : null;
       if (waTarget) {
         const opened = await openExternalLink(waTarget);
         if (opened) {
           toast('Nota gaji dibuka di WhatsApp karyawan.', 'success');
         }
+      } else if (!receiptText) {
+        toast('Nota gaji tidak tersedia untuk dibuka.', 'warning');
       } else {
         toast('Nomor WhatsApp karyawan belum diisi.', 'warning');
       }
@@ -9208,6 +9257,7 @@
       closeModal('#employeePerfDetailModal');
       closeModal('#employeeDetailModal');
       closeModal('#employeeArchiveModal');
+      closeModal('#debtDetailModal');
       closeModal('#payrollModal');
       closeModal('#payrollPayModal');
     }
@@ -10024,6 +10074,12 @@
       closeModal('#debtModal')
     );
     $('#debtCancel').addEventListener('click', () => closeModal('#debtModal'));
+    $('#debtDetailClose').addEventListener('click', () =>
+      closeModal('#debtDetailModal')
+    );
+    $('#debtDetailDismiss').addEventListener('click', () =>
+      closeModal('#debtDetailModal')
+    );
     $('#btnDebtHistoryAll').addEventListener('click', openDebtHistoryModal);
     $('#debtHistoryClose').addEventListener('click', () =>
       closeModal('#debtHistoryModal')

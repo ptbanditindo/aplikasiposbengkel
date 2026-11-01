@@ -1174,8 +1174,6 @@
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur karyawan</span><input type="checkbox" id="employeeFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
             <button type="button" class="btn btn-ghost" id="btnRefreshEmployees">Muat ulang</button>
-            <button type="button" class="btn btn-outline" id="btnEmployeeArchive">Lihat arsip</button>
-            <button type="button" class="btn btn-primary" id="btnAddEmployee">+ Karyawan</button>
           </div>
         </div>
         <div class="card">
@@ -1183,6 +1181,10 @@
             <div>
               <h2>Daftar karyawan</h2>
               <p class="muted" id="employeeSummary">-</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-outline" id="btnEmployeeArchive">Lihat arsip</button>
+              <button type="button" class="btn btn-primary" id="btnAddEmployee">+ Karyawan</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -1210,7 +1212,7 @@
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Tanggal</th><th>Karyawan</th><th>Keperluan</th><th class="text-right">Nominal</th><th class="text-right">Sudah dipotong</th><th class="text-right">Sisa</th><th>Status</th><th></th></tr>
+                <tr><th>Nama</th><th class="text-right">Nominal hutang</th><th>Status</th><th></th></tr>
               </thead>
               <tbody id="debtBody"></tbody>
             </table>
@@ -1814,7 +1816,7 @@
       </div>
       <div class="payroll-pay-summary">
         <div><span>Gaji &amp; komisi</span><strong id="payrollPayGross">Rp 0</strong></div>
-        <div class="hidden" id="payrollPayDebtTotalRow"><span>Hutang karyawan</span><strong id="payrollPayDebtTotal">Rp 0</strong></div>
+        <div class="hidden" id="payrollPayDebtTotalRow"><span>Sisa hutang (termasuk bulan lalu)</span><strong id="payrollPayDebtTotal">Rp 0</strong></div>
         <div class="hidden" id="payrollPayDebtRow"><span id="payrollPayDebtLabel">Potong hutang</span><strong id="payrollPayDebt">Rp 0</strong></div>
         <div class="hidden" id="payrollPayBonusRow"><span>Bonus</span><strong id="payrollPayBonus">Rp 0</strong></div>
         <div><span>Total yang harus dibayarkan</span><strong id="payrollPayNet">Rp 0</strong></div>
@@ -1864,6 +1866,7 @@
         <input type="hidden" id="salaryNominal">
         <input type="hidden" id="salaryPotonganHutang" value="0">
         <input type="hidden" id="salaryBonus" value="0">
+        <input type="hidden" id="salaryBonusKeterangan">
         <input type="hidden" id="salaryCicilanHutang" value="0">
         <input type="hidden" id="salaryCatatan">
         <div class="payroll-pay-summary">
@@ -1928,6 +1931,22 @@
           <button type="submit" class="btn btn-primary">Simpan hutang</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="debtDetailModal" role="dialog" aria-modal="true" aria-labelledby="debtDetailTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="debtDetailTitle">Detail hutang karyawan</h3>
+          <p class="muted" id="debtDetailSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="debtDetailClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="debtDetailBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="debtDetailDismiss">Tutup</button>
+      </div>
     </div>
   </div>
 

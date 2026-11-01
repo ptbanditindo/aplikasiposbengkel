@@ -281,6 +281,9 @@ class SalaryPayment(Base):
     bonus: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
+    bonus_keterangan: Mapped[str] = mapped_column(
+        String(255), default="", nullable=False
+    )
     cicilan_hutang: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )

@@ -533,6 +533,90 @@ def performance(
     }
 
 
+def records_for_range(
+    db: Session, employee: Employee, start: date, end: date
+) -> List[ServiceRecord]:
+    return _employee_records(db, employee, start, end)
+
+
+def salary_due_for_receipt(employee: Employee) -> Decimal:
+    return _payroll_salary_due(employee)
+
+
+def commission_breakdown(
+    db: Session, employee: Employee, records: Iterable[ServiceRecord]
+) -> List[Dict[str, Any]]:
+    """Rincian komisi per nota untuk nota gaji karyawan."""
+    rows: List[Dict[str, Any]] = []
+    for record in records:
+        jasa, margin = _commission_components(record)
+        mechanic_ids = [row.employee_id for row in record.mechanics]
+        if employee.id in mechanic_ids:
+            share = Decimal("1") / Decimal(max(1, len(mechanic_ids)))
+            if record.cashier_employee_id == employee.id:
+                share = Decimal("1")
+        elif record.cashier_employee_id == employee.id:
+            share = Decimal("1")
+        else:
+            continue
+        override = next(
+            (
+                row
+                for row in record.commissions
+                if row.employee_id == employee.id
+            ),
+            None,
+        )
+        manual = override is not None
+        nominal_mode = employee.komisi_mode == "NOMINAL"
+        if manual:
+            total = money(override.nominal)
+            goods = Decimal("0.00")
+            service = Decimal("0.00")
+        elif nominal_mode:
+            total = _commission_for(db, employee, record)
+            goods = Decimal("0.00")
+            service = Decimal("0.00")
+        else:
+            barang_rate = Decimal(employee.komisi_barang_nilai or 0)
+            jasa_rate = Decimal(employee.komisi_jasa_nilai or 0)
+            goods = money(margin * barang_rate / Decimal("100") * share)
+            service = money(jasa * jasa_rate / Decimal("100") * share)
+            total = money(goods + service)
+        parts = []
+        for part in record.parts:
+            net_qty = int(part.jumlah or 0) - int(
+                getattr(part, "jumlah_retur", 0) or 0
+            )
+            if net_qty > 0:
+                parts.append(f"{part.nama_part} x{net_qty}")
+        jobs = [
+            (job.deskripsi or "Jasa") + " x" + str(int(job.jumlah or 0))
+            for job in record.jobs
+        ]
+        rows.append(
+            {
+                "no_nota": record.no_nota,
+                "waktu_service": record.waktu_service,
+                "customer_nama": record.unit.customer.nama,
+                "unit_deskripsi": record.unit.nopol
+                or record.unit.label_radiator
+                or "-",
+                "jasa": jasa,
+                "margin": margin,
+                "goods_commission": goods,
+                "service_commission": service,
+                "total": total,
+                "manual": manual,
+                "nominal_mode": nominal_mode,
+                "share": share,
+                "parts": parts,
+                "jobs": jobs,
+            }
+        )
+    return rows
+
+
 def payroll_cycle_start(employee: Employee, today: date) -> date:
     period = employee.payroll_period or "BULANAN"
     if period == "MINGGUAN":
