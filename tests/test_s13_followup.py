@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
+import pytest
+
 from database.models import ServiceJob, ServiceRecord
 from services.followup_service import add_months
 
@@ -61,7 +63,7 @@ def test_followup_ditolak_di_luar_jam(
     customer = create_customer(nama="Pelanggan Luar Jam")
     unit = create_unit(customer["id"], nopol="B 7019 JAM")
     record_id = _record_id(make_transaction(unit["id"]))
-    _shift_record(db_session, record_id, days_ago=7)
+    _shift_record(db_session, record_id, days_ago=30)
     item = _items(client, jenis="prospek")[0]
 
     start, end = _window_outside_now()
@@ -358,12 +360,12 @@ def test_prospek_batas_hari_cooldown_dan_arsip(
 ):
     customer = create_customer(nama="Pelanggan Prospek")
     unit = create_unit(customer["id"], nopol="B 7005 PRO")
-    record_id = _record_id(make_transaction(unit["id"]))
+    record_id = _record_id(make_transaction(unit["id"], bergaransi=False))
 
-    _shift_record(db_session, record_id, days_ago=6)
+    _shift_record(db_session, record_id, days_ago=29)
     assert _items(client, jenis="prospek") == []
 
-    _shift_record(db_session, record_id, days_ago=7)
+    _shift_record(db_session, record_id, days_ago=30)
     items = _items(client, jenis="prospek")
     assert len(items) == 1
     item = items[0]
@@ -435,7 +437,7 @@ def test_pesan_followup_mengikuti_nama_bengkel_dari_pengaturan(
     customer = create_customer(nama="Pelanggan Nama Bengkel")
     unit = create_unit(customer["id"], nopol="B 7021 NMB")
     record_id = _record_id(make_transaction(unit["id"]))
-    _shift_record(db_session, record_id, days_ago=7)
+    _shift_record(db_session, record_id, days_ago=30)
     item = _items(client, jenis="prospek")[0]
 
     body = client.post(
@@ -462,7 +464,7 @@ def test_garansi_akan_habis_followup_dan_hilangkan_pengingat(
     items = _items(client, jenis="garansi")
     assert len(items) == 1
     item = items[0]
-    assert item["sisa_hari"] == 5
+    assert item["sisa_hari"] == -2
     assert "Garansi" in item["judul"]
 
     body = client.post(
@@ -633,7 +635,7 @@ def test_filter_customer_dan_filter_arsip(
     ]
 
 
-def test_satu_pelanggan_beberapa_unit_tetap_satu_item(
+def test_satu_pelanggan_beberapa_unit_piutang_per_nota(
     client, create_customer, create_unit, make_transaction
 ):
     customer = create_customer(nama="Pelanggan Multi Unit")
@@ -652,10 +654,12 @@ def test_satu_pelanggan_beberapa_unit_tetap_satu_item(
         )
 
     items = _items(client, jenis="piutang")
-    assert len(items) == 1
-    item = items[0]
-    assert item["customer_id"] == customer["id"]
-    assert len(item["rincian"]) == 3
+    assert len(items) == 3
+    assert {item["customer_id"] for item in items} == {customer["id"]}
+    assert {item["no_nota"] for item in items} == {
+        item["rincian"][0]["no_nota"] for item in items
+    }
+    assert all(len(item["rincian"]) == 1 for item in items)
 
 
 def test_jadwal_wajib_followup_dulu_dan_tidak_datang(
@@ -802,8 +806,8 @@ def test_prospek_akan_datang_bisa_reschedule(
 ):
     customer = create_customer(nama="Pelanggan Prospek Jadwal")
     unit = create_unit(customer["id"], nopol="B 7018 PSJ")
-    record_id = _record_id(make_transaction(unit["id"]))
-    _shift_record(db_session, record_id, days_ago=7)
+    record_id = _record_id(make_transaction(unit["id"], bergaransi=False))
+    _shift_record(db_session, record_id, days_ago=30)
 
     item = _items(client, jenis="prospek")[0]
     client.post(
@@ -847,7 +851,7 @@ def test_dashboard_menampilkan_kartu_followup(
             bayar="40000",
         )
     )
-    _shift_record(db_session, record_id, days_ago=9)
+    _shift_record(db_session, record_id, days_ago=30)
 
     report_response = client.get("/api/reports/daily-cash")
     assert report_response.status_code == 200, report_response.text
@@ -860,3 +864,238 @@ def test_dashboard_menampilkan_kartu_followup(
     counts = client.get("/api/followup/counts").json()
     assert counts["prospek_count"] == 1
     assert counts["followup_hari_ini"] >= 1
+
+
+def test_unit_di_bengkel_tidak_masuk_followup_sampai_diambil(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    from database.models import PengerjaanNota
+
+    customer = create_customer(nama="Pelanggan Di Bengkel")
+    unit = create_unit(customer["id"], nopol="B 7022 BKL")
+    record_id = _record_id(
+        make_transaction(unit["id"], unit_ditinggal=True)
+    )
+    _shift_record(db_session, record_id, days_ago=40)
+
+    assert all(
+        item["customer_id"] != customer["id"]
+        for item in _items(client, filter="semua")
+    )
+
+    marker = db_session.query(PengerjaanNota).one()
+    marker.diambil_pada = datetime.now() - timedelta(days=30)
+    marker.status_pengerjaan = "SUDAH_DIAMBIL"
+    db_session.commit()
+
+    prospek = [
+        item for item in _items(client, jenis="prospek")
+        if item["customer_id"] == customer["id"]
+    ]
+    assert len(prospek) == 1
+
+
+def test_piutang_cadence_dua_minggu_dan_perlu_telepon(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    from database.models import FollowupItem
+    from services import whatsapp_service
+    from services.auth_service import OWNER
+    from services.errors import ConflictError
+
+    customer = create_customer(nama="Pelanggan Cadence")
+    unit = create_unit(customer["id"], nopol="B 7301 CDT")
+    record_id = _record_id(
+        make_transaction(
+            unit["id"],
+            jobs=[{"deskripsi": "Servis Radiator", "jumlah": 1, "harga": "150000"}],
+            jenis_bayar="KREDIT",
+            dp="50000",
+            bayar="50000",
+        )
+    )
+    record = db_session.get(ServiceRecord, record_id)
+    record.jatuh_tempo = date.today() - timedelta(days=1)
+    db_session.commit()
+
+    first = datetime.combine(date.today(), time(10, 0))
+    db_session.rollback()
+    whatsapp_service.remind_receivable(db_session, record_id, OWNER, now=first)
+    db_session.expire_all()
+    record = db_session.get(ServiceRecord, record_id)
+    assert record.piutang_reminder_ke == 1
+    assert record.piutang_next_at == first + timedelta(days=14)
+    assert record.piutang_perlu_telepon is False
+    item = db_session.query(FollowupItem).filter_by(
+        item_key="piutang:record:" + str(record_id)
+    ).one()
+    assert item.followup_terakhir is not None
+
+    db_session.rollback()
+    with pytest.raises(ConflictError):
+        whatsapp_service.remind_receivable(
+            db_session, record_id, OWNER, now=first + timedelta(days=13)
+        )
+
+    db_session.rollback()
+    whatsapp_service.remind_receivable(
+        db_session, record_id, OWNER, now=first + timedelta(days=14)
+    )
+    db_session.rollback()
+    whatsapp_service.remind_receivable(
+        db_session, record_id, OWNER, now=first + timedelta(days=28)
+    )
+    db_session.expire_all()
+    record = db_session.get(ServiceRecord, record_id)
+    assert record.piutang_reminder_ke == 3
+    assert record.piutang_next_at is None
+    assert record.piutang_perlu_telepon is True
+
+    db_session.rollback()
+    with pytest.raises(ConflictError) as blocked:
+        whatsapp_service.remind_receivable(
+            db_session, record_id, OWNER, now=first + timedelta(days=42)
+        )
+    assert "telepon" in str(blocked.value).lower()
+
+    from services import payment_service
+
+    db_session.rollback()
+    payment_service.reschedule_due_date(
+        db_session,
+        record_id,
+        (first + timedelta(days=50)).date(),
+        OWNER,
+        now=first + timedelta(days=43),
+    )
+    db_session.expire_all()
+    record = db_session.get(ServiceRecord, record_id)
+    assert record.piutang_reminder_ke == 0
+    assert record.piutang_next_at is None
+    assert record.piutang_perlu_telepon is False
+
+    receivables = client.get("/api/receivables").json()
+    row = receivables["items"][0]["records"][0]
+    assert row["pengingat_ke"] == 0
+    assert row["perlu_telepon"] is False
+
+
+def test_pengingat_gabungan_hanya_nota_jatuh_tempo(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    from services import whatsapp_service
+    from services.auth_service import OWNER
+
+    customer = create_customer(nama="Pelanggan Dua Tempo")
+    due_unit = create_unit(customer["id"], nopol="B 7302 DUE")
+    future_unit = create_unit(customer["id"], nopol="B 7303 FUT")
+    due_id = _record_id(
+        make_transaction(
+            due_unit["id"],
+            jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "100000"}],
+            jenis_bayar="KREDIT",
+            dp="30000",
+            bayar="30000",
+        )
+    )
+    future_id = _record_id(
+        make_transaction(
+            future_unit["id"],
+            jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "80000"}],
+            jenis_bayar="KREDIT",
+            dp="20000",
+            bayar="20000",
+        )
+    )
+    due_record = db_session.get(ServiceRecord, due_id)
+    due_record.jatuh_tempo = date.today() - timedelta(days=1)
+    future_record = db_session.get(ServiceRecord, future_id)
+    future_record.jatuh_tempo = date.today() + timedelta(days=7)
+    db_session.commit()
+    due_note = due_record.no_nota
+    future_note = future_record.no_nota
+
+    db_session.rollback()
+    moment = datetime.combine(date.today(), time(10, 0))
+    _log, message, _link = whatsapp_service.remind_customer_receivables(
+        db_session, customer["id"], OWNER, now=moment
+    )
+    assert due_note in message
+    assert future_note not in message
+
+    db_session.expire_all()
+    assert db_session.get(ServiceRecord, due_id).piutang_reminder_ke == 1
+    assert db_session.get(ServiceRecord, future_id).piutang_reminder_ke == 0
+
+    items = _items(client, jenis="piutang")
+    assert len(items) == 2
+
+
+def test_servis_berkala_satu_item_per_baris_jasa(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    radiator = _create_jasa(client, nama="Cuci Radiator", interval=3, harga="100000")
+    oli = _create_jasa(client, nama="Ganti Oli", interval=6, harga="75000")
+    customer = create_customer(nama="Pelanggan Dua Baris")
+    unit = create_unit(customer["id"], nopol="B 7304 BAR")
+    record_id = _record_id(
+        make_transaction(
+            unit["id"],
+            jobs=[
+                {
+                    "harga_jasa_id": radiator["id"],
+                    "deskripsi": "Cuci Radiator",
+                    "jumlah": 1,
+                    "harga": "100000",
+                },
+                {
+                    "harga_jasa_id": oli["id"],
+                    "deskripsi": "Ganti Oli",
+                    "jumlah": 1,
+                    "harga": "75000",
+                },
+            ],
+        )
+    )
+    _shift_record(db_session, record_id, days_ago=180)
+
+    items = [
+        row for row in _items(client, jenis="servis_berkala")
+        if row["customer_id"] == customer["id"]
+    ]
+    assert len(items) == 2
+    assert {row["item_nama"] for row in items} == {"Cuci Radiator", "Ganti Oli"}
+    assert len({row["item_key"] for row in items}) == 2
+    assert all(row["item_kind"] == "jasa" for row in items)
+
+
+def test_prospek_milestone_berikut_plus_60(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Milestone")
+    unit = create_unit(customer["id"], nopol="B 7305 MLS")
+    record_id = _record_id(
+        make_transaction(unit["id"], bergaransi=False)
+    )
+    _shift_record(db_session, record_id, days_ago=30)
+
+    item = _items(client, jenis="prospek")[0]
+    assert item["stage"] == 0
+    assert item["jatuh_tempo"] == (date.today() - timedelta(days=30) + timedelta(days=30)).isoformat()
+
+    response = client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    assert response.status_code == 200, response.text
+    db_session.expire_all()
+    from database.models import FollowupItem
+
+    row = db_session.get(FollowupItem, item["id"])
+    assert row.stage == 1
+
+    after = client.get(f"/api/followup/items/{item['id']}").json()["item"]
+    assert after["jatuh_tempo"] == (
+        date.today() - timedelta(days=30) + timedelta(days=90)
+    ).isoformat()
+    assert after["stage"] == 1

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from database.models import ServicePayment, WhatsAppLog
+from database.models import ServicePayment, ServiceRecord, WhatsAppLog
 from database.session import SessionLocal
 
 KATA_TERLARANG = ("hutang", "piutang", "tagihan", "kekurangan")
@@ -116,28 +116,31 @@ def test_pelunasan_tanpa_jatuh_tempo_sampai_lunas(
     _assert_pesan_pelanggan(completion)
 
 
-def test_whatsapp_jenis_piutang_memakai_teks_kendaraan_selesai(
+def test_whatsapp_jenis_pengerjaan_memakai_teks_kendaraan_selesai(
     client, create_customer, create_unit
 ):
     customer = create_customer(nama="Fitri Selesai", nomor_hp="0812-9999-0001")
     unit = create_unit(customer["id"], nopol="B 5503 SEL")
     body = _kredit(client, unit["id"]).json()
     record_id = body["record"]["id"]
+    edited = "Halo Bu Fitri, kendaraan sudah siap diambil di bengkel kami."
 
     response = client.post(
         f"/api/service-records/{record_id}/whatsapp",
-        json={"status": "DIBUKA", "jenis": "piutang"},
+        json={"status": "DIBUKA", "jenis": "pengerjaan", "pesan": edited},
     )
     assert response.status_code == 201, response.text
     attempt = response.json()
-    assert attempt["wa_text"] == body["receipt"]["completion_wa_text"]
+    assert attempt["wa_text"] == edited
     assert attempt["link"].startswith("https://wa.me/6281299990001?text=")
     _assert_pesan_pelanggan(attempt["wa_text"])
 
     with SessionLocal() as db:
         log = db.query(WhatsAppLog).one()
-        assert log.jenis == "piutang"
-        assert log.pesan == attempt["wa_text"]
+        assert log.jenis == "pengerjaan"
+        assert log.pesan == edited
+        record = db.get(ServiceRecord, record_id)
+        assert record.diingatkan_pada is None
 
 
 def test_jenis_whatsapp_tidak_dikenal_ditolak(client, create_customer, create_unit):

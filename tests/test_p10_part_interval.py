@@ -176,7 +176,7 @@ def test_followup_servis_berkala_muncul_dari_part(
     assert item["rincian"][0]["jatuh_tempo"] == item["jatuh_tempo"]
 
 
-def test_jasa_dan_part_interval_tetap_satu_item_per_pelanggan(
+def test_jasa_dan_part_interval_menjadi_dua_item_per_baris(
     client, create_customer, create_unit, make_transaction, db_session
 ):
     stock = _create_stock(client, "P10-BOTH", 3)
@@ -209,8 +209,18 @@ def test_jasa_dan_part_interval_tetap_satu_item_per_pelanggan(
     _shift_record(db_session, response.json()["record"]["id"], add_months(date.today(), -3))
 
     items = _servis_items(client, customer_id=customer["id"])
-    assert len(items) == 1
-    assert {row["jenis_item"] for row in items[0]["rincian"]} == {"jasa", "sparepart"}
+    assert len(items) == 2
+    assert {row["item_kind"] for row in items} == {"jasa", "sparepart"}
+    assert all(len(row["rincian"]) == 2 for row in items)
+    assert {row["item_nama"] for row in items} == {
+        "Cuci Radiator",
+        stock["nama"],
+    }
+    assert {
+        detail["jenis_item"]
+        for row in items
+        for detail in row["rincian"]
+    } == {"jasa", "sparepart"}
 
 
 def test_part_tanpa_interval_tidak_memunculkan_pengingat(

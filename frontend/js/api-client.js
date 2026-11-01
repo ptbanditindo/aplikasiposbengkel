@@ -188,6 +188,18 @@
       request('/api/customers', { method: 'POST', body: data }),
     customerUnits: (customerId) =>
       request('/api/customers/' + customerId + '/units'),
+    updateCustomerContact: (customerId, data) =>
+      request('/api/customers/' + customerId + '/contact', {
+        method: 'PUT',
+        body: data,
+      }),
+    customerWaLink: (customerId, jenis) =>
+      request(
+        '/api/customers/' +
+          customerId +
+          '/wa-link?jenis=' +
+          qs(jenis || 'chat')
+      ),
     createUnit: (data) => request('/api/units', { method: 'POST', body: data }),
     deleteUnit: (id) => request('/api/units/' + id, { method: 'DELETE' }),
 
@@ -248,6 +260,13 @@
       }),
     whatsappLogs: (limit) =>
       request('/api/whatsapp/logs?limit=' + qs(limit || 100)),
+    recordWaGate: (recordId, jenis) =>
+      request(
+        '/api/service-records/' +
+          recordId +
+          '/wa-gate?jenis=' +
+          qs(jenis || 'struk')
+      ),
 
     opsSettings: () => request('/api/settings/ops'),
     updateOpsSettings: (data) =>
@@ -276,6 +295,19 @@
       }),
 
     pengerjaan: () => request('/api/pengerjaan'),
+    pengerjaanByRecord: (recordId) =>
+      request('/api/pengerjaan/by-record/' + recordId),
+    pengerjaanDetail: (id) => request('/api/pengerjaan/' + id),
+    pengerjaanCreate: (recordId) =>
+      request('/api/pengerjaan', {
+        method: 'POST',
+        body: { record_id: recordId },
+      }),
+    pengerjaanStatus: (id, data) =>
+      request('/api/pengerjaan/' + id + '/status', {
+        method: 'POST',
+        body: data,
+      }),
     pengerjaanTaken: (id) =>
       request('/api/pengerjaan/' + id + '/diambil', { method: 'POST' }),
 

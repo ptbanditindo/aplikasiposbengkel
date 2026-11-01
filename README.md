@@ -35,15 +35,16 @@ build step) di `http://127.0.0.1:8000`.
   opsional, dengan atau tanpa tanggal rencana pembayaran, lalu dilunasi kapan
   saja dari detail nota. Daftar piutang per pelanggan menampilkan sisa, umur
   piutang, dan nota yang belum lunas, dengan tombol **Ingatkan** untuk langsung
-  membuka WhatsApp dan **Pelunasan** untuk mencatat pembayaran. Pengingat hanya
-  aktif pada hari jatuh tempo, terkunci setelah terkirim, dan terbuka lagi
-  lewat **Ubah** pada kolom jatuh tempo bila pelanggan minta perpanjangan.
+  membuka WhatsApp dan **Pelunasan** untuk mencatat pembayaran. Pengingat
+  pertama aktif pada hari jatuh tempo, lalu setiap 2 minggu sampai 3 kali;
+  setelah itu nota ditandai **Perlu telepon**. **Ubah** pada kolom jatuh tempo
+  membuka siklus pengingat baru tanpa menghapus riwayat.
   Daftar piutang memakai kartu ringkas per pelanggan; klik nama untuk membuka
   nota lengkap, sedangkan **Ingatkan**, **Chat**, dan **Pelunasan** tersedia
   langsung sebagai pintasan di kartu. Pelanggan dengan beberapa nota punya
   tombol **N nota** untuk membuka daftar notanya; satu klik **Ingatkan**
-  mengirim pesan untuk semua nota sekaligus dan mengunci seluruh tombol
-  pengingat sampai jatuh tempo salah satu nota diubah per nota.
+  mengirim satu pesan gabungan untuk nota yang sudah jatuh tempo. Nota yang
+  belum jatuh tempo tidak ikut dikunci dan tetap menunggu tanggalnya.
   Form pembayaran punya tombol **Kredit**: bila aktif, pembayaran boleh
   sebagian dan sisanya tetap tercatat di Piutang. Opsi **Unit ditinggal**
   menandai kendaraan yang masih di bengkel agar dapat dipakai follow-up saat
@@ -52,24 +53,38 @@ build step) di `http://127.0.0.1:8000`.
   struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
   membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor
   ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
-  Pesan follow-up memakai bahasa formal dan paragraf terpisah: pembuka
-  permintaan maaf, isi yang memperkenalkan bengkel dengan nama dari
-  Pengaturan, lalu penutup terima kasih. Template dipisah per keperluan:
-  kendaraan selesai, pengingat piutang, prospek, servis berkala, dan garansi;
-  pengingat piutang tidak lagi memakai kalimat “kendaraan siap diambil”.
+  Satu gerbang pusat memeriksa izin WhatsApp, jam follow-up, dan status DNC
+  sebelum tautan `wa.me` dibuat untuk follow-up, piutang, kendaraan selesai,
+  struk, maupun chat. Pesan follow-up memakai bahasa formal dan paragraf
+  terpisah: pembuka permintaan maaf, isi yang memperkenalkan bengkel dengan
+  nama dari Pengaturan, lalu penutup terima kasih. Setiap kategori punya 2–3
+  varian kalimat yang dipilih deterministik; pesan prospek pertama menawarkan
+  balasan **BERHENTI**. Template dipisah per keperluan: kendaraan selesai,
+  pengingat piutang, prospek, servis berkala, dan garansi; pengingat piutang
+  tidak memakai kalimat “kendaraan siap diambil”. Anti-gangguan membatasi
+  1 pesan per pelanggan per hari, 2 pesan per bulan untuk prospek/servis,
+  jeda 7 hari untuk prospek/servis, serta menggabungkan item sejenis yang
+  jatuh bersamaan. Prioritas pesan: Pengerjaan > Piutang > Garansi >
+  Servis berkala > Prospek.
 - **Follow-up & servis berkala** — menu **Follow up** tersendiri menampilkan
-  delapan kartu kategori: Piutang, Kendaraan selesai, Prospek, Berkendala,
-  Servis berkala, Garansi akan habis, serta Akan datang untuk garansi dan
-  servis berkala.
+  sembilan kartu kategori: Piutang, Kendaraan selesai, Prospek, Berkendala,
+  Servis berkala, Garansi akan habis, serta Akan datang untuk garansi, servis
+  berkala, dan prospek. Identitas item mengikuti unit, baris jasa/sparepart,
+  atau nota piutang, bukan sekadar pelanggan.
   Setiap kartu membuka daftar atau popup terkait. Kartu follow-up punya
   pintasan **Ingatkan** (WhatsApp dengan teks pengingat), **WA** (chat tanpa
   teks), **Detail**, dan **Status**; tombol **Nota** dihapus karena nota
   lengkap tersedia di Detail. Mengubah status prospek meminta konfirmasi;
   status **Masih kendala** memindahkan prospek ke kartu **Berkendala**.
-  Pintasan Status pada Prospek hanya berisi **Masih bagus**, **Masih
-  kendala**, dan **Akan datang service** (tanggal wajib); prospek berjadwal
-  tetap di daftar Prospek dan tanggalnya bisa diubah. Tombol Status baru
-  aktif setelah pelanggan diingatkan lewat Ingatkan/WA.
+  Prospek diingatkan pada hari ke-30, 60, dan 90 setelah unit diambil (tanpa
+  garansi: hari ke-30 dan ke-90). Unit bergaransi memakai jadwal bulanan
+  sampai H-7; prospek dilewati bila acuan+30 sudah melewati H-7 dan ditunda
+  bila garansi/servis unit itu jatuh tempo dalam 14 hari. Pintasan Status
+  Prospek berisi **Masih bagus**, **Masih kendala / belum bisa**, **Akan
+  datang service** (tanggal wajib), dan **Tidak perlu lagi**. **Belum bisa**
+  menunda kontak 2 atau 4 minggu; tiga kali tidak merespons menutup item
+  sampai servis berikutnya. Tombol Status baru aktif setelah pelanggan
+  diingatkan lewat Ingatkan/WA.
   Pengaturan menyediakan **jam mulai** dan **jam selesai follow up**; di luar
   rentang itu tombol Ingatkan follow-up dan pengingat piutang tidak bisa
   dipakai, dan backend menolak permintaannya.
@@ -78,8 +93,10 @@ build step) di `http://127.0.0.1:8000`.
   mengembalikan prospek ke daftar Prospek dengan tanggal kunjungan baru.
   Detail prospek tidak lagi memuat tombol Ingatkan/WA atau form status.
   Pada servis berkala dan garansi, status **Akan datang** beserta tanggal
-  memindahkan item ke kartu Akan datang, sedangkan **Tidak akan datang**
-  menghapusnya dari kolom follow up. Daftar Akan datang menampilkan pintasan
+  memindahkan item ke kartu Akan datang, sedangkan **Tidak akan datang** dan
+  **Tidak perlu lagi** menghapusnya dari kolom follow up. Garansi diingatkan
+  pada H-7 dan H; pengingat H dilewati bila H-7 sudah dibalas atau sudah ada
+  janji datang sebelum H, lalu item diarsipkan pada H+7. Daftar Akan datang menampilkan pintasan
   **Status** dan **WA** (chat tanpa teks). Detail item akan datang punya tiga
   tombol: **Datang**, **Tidak datang**, dan **Reschedule** (wajib tanggal);
   reschedule memperbarui jadwal tanpa mengeluarkan pelanggan dari kolom.
@@ -91,7 +108,9 @@ build step) di `http://127.0.0.1:8000`.
   sebelum dibuka, tautan dan riwayat memakai teks hasil editan itu. Kartu
   **Kendaraan selesai** membuka unit yang ditandai "Unit ditinggal" saat nota
   dicatat; kasir dapat mengabari pelanggan lewat WhatsApp (tombol terkunci
-  setelah pesan dibuka) lalu menandainya sudah diambil. Bila masih ada sisa
+  setelah pesan dibuka), mengubah status pengerjaan beserta riwayatnya, lalu
+  menandainya sudah diambil. Unit yang masih di bengkel tidak muncul di
+  prospek, garansi, servis berkala, atau piutang sampai diambil. Bila masih ada sisa
   tagihan, nota pembayaran dibuka lebih dulu dan unit baru ditandai diambil
   setelah pembayaran tersimpan. Setiap tarif jasa dan sparepart
   punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
@@ -117,6 +136,10 @@ build step) di `http://127.0.0.1:8000`.
 - **Tampilan terang/gelap** — antarmuka berbasis kertas putih dengan aksen
   warna pada angka dan status penting; pilihan Terang atau Gelap tersimpan per
   perangkat di Pengaturan dan langsung berlaku tanpa memuat ulang halaman.
+  Kontrol memakai satu geometri: 40 px di desktop dan 44 px di layar sempit
+  atau perangkat sentuh. Navigasi mobile menjadi satu baris yang dapat digeser,
+  modal panjang memakai footer aksi tetap, dan tabel tidak keluar dari layar.
+  Daftar lengkap teks dan popup ada di `PETA_TEKS_UI_DAN_POPUP.md`.
 - **APK Android** — gerbang PIN 6 angka native (PBKDF2 + salt, lockout
   bertingkat), shell WebView, backend berjalan di dalam aplikasi. Saat server
   disiapkan, layar menampilkan indikator loading lingkaran. Layar utama
@@ -220,7 +243,7 @@ tidak tersedia di PATH.
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir adalah versi **2.2.4** (versionCode 7).
+terakhir adalah versi **2.2.6** (versionCode 9).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
@@ -260,7 +283,7 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-288 test mencakup transaksi, kredit/pelunasan/piutang, WhatsApp, follow-up dan
+322 test mencakup transaksi, kredit/pelunasan/piutang, WhatsApp, follow-up dan
 servis berkala (jasa dan sparepart), void/retur, stok, garansi, laporan,
 pengaturan, label barang, printer, backup/restore, Telegram, serta pemeriksaan
 keamanan akses (PIN, sesi, token instalasi, loopback, host/origin). Jalur

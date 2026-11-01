@@ -8,17 +8,21 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    CustomerContactIn,
     CustomerCreate,
     CustomerOut,
     CustomerOverviewOut,
     UnitCreate,
     UnitOut,
+    WaLinkOut,
 )
-from database.models import VehicleOrUnit
+from database.models import Customer, VehicleOrUnit
 from database.session import get_db
-from services import customer_service
+from services import contact_gate_service, customer_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
+from services.errors import BusinessValidationError, ConflictError, NotFoundError
+from services.utils import normalize_whatsapp
 
 router = APIRouter(
     tags=["Pelanggan & Unit"], dependencies=[Depends(require_auth)]
@@ -127,3 +131,41 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
         keterangan=payload.keterangan,
     )
     return _unit_out(unit)
+
+
+@router.put("/customers/{customer_id}/contact", response_model=CustomerOut)
+def update_customer_contact(
+    customer_id: int,
+    payload: CustomerContactIn,
+    db: Session = Depends(get_db),
+):
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        raise NotFoundError("Pelanggan tidak ditemukan.")
+    if payload.wa_consent is not None:
+        customer.wa_consent = bool(payload.wa_consent)
+    if payload.do_not_contact is not None:
+        customer.do_not_contact = bool(payload.do_not_contact)
+    db.commit()
+    db.refresh(customer)
+    return CustomerOut.model_validate(customer)
+
+
+@router.get("/customers/{customer_id}/wa-link", response_model=WaLinkOut)
+def customer_wa_link(
+    customer_id: int,
+    jenis: str = Query(default="chat"),
+    db: Session = Depends(get_db),
+):
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        raise NotFoundError("Pelanggan tidak ditemukan.")
+    allowed, reason, warning = contact_gate_service.wa_gate(
+        db, customer, (jenis or "chat").strip().lower()
+    )
+    if not allowed:
+        raise ConflictError(reason)
+    digits = normalize_whatsapp(customer.nomor_hp)
+    if not digits:
+        raise BusinessValidationError("Nomor WhatsApp pelanggan belum valid.")
+    return WaLinkOut(link="https://wa.me/" + digits, peringatan=warning)

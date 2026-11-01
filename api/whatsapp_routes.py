@@ -8,13 +8,16 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    WaGateOut,
     WhatsAppAttemptIn,
     WhatsAppAttemptOut,
     WhatsAppLogOut,
 )
+from database.models import ServiceRecord
 from database.session import get_db
-from services import whatsapp_service
+from services import contact_gate_service, whatsapp_service
 from services.auth_service import Operator
+from services.errors import NotFoundError
 
 router = APIRouter(tags=["WhatsApp"], dependencies=[Depends(require_auth)])
 
@@ -36,6 +39,7 @@ def record_whatsapp_attempt(
         payload.status,
         operator,
         catatan=payload.catatan,
+        pesan=payload.pesan,
         jenis=payload.jenis,
     )
     return WhatsAppAttemptOut(
@@ -43,6 +47,7 @@ def record_whatsapp_attempt(
         nomor_masked=log.nomor_masked,
         link=link,
         wa_text=wa_text,
+        peringatan=getattr(log, "peringatan", ""),
         log=WhatsAppLogOut.model_validate(log),
     )
 
@@ -65,6 +70,7 @@ def remind_receivable(
         nomor_masked=log.nomor_masked,
         link=link,
         wa_text=wa_text,
+        peringatan=getattr(log, "peringatan", ""),
         log=WhatsAppLogOut.model_validate(log),
     )
 
@@ -87,8 +93,24 @@ def remind_customer(
         nomor_masked=log.nomor_masked,
         link=link,
         wa_text=wa_text,
+        peringatan=getattr(log, "peringatan", ""),
         log=WhatsAppLogOut.model_validate(log),
     )
+
+
+@router.get("/service-records/{record_id}/wa-gate", response_model=WaGateOut)
+def record_wa_gate(
+    record_id: int,
+    jenis: str = Query(default="struk"),
+    db: Session = Depends(get_db),
+):
+    record = db.get(ServiceRecord, record_id)
+    if record is None:
+        raise NotFoundError("Nota servis tidak ditemukan.")
+    allowed, reason, warning = contact_gate_service.wa_gate(
+        db, record.unit.customer, (jenis or "struk").strip().lower()
+    )
+    return WaGateOut(allowed=allowed, alasan=reason, peringatan=warning)
 
 
 @router.get(

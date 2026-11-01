@@ -134,6 +134,18 @@ with SessionLocal() as db:
         "ops.cooldown_hari": "3",
         "ops.garansi_akan_habis_hari": "14",
         "ops.servis_berkala_awal_hari": "30",
+        "ops.prospek_hari_1": "30",
+        "ops.prospek_hari_2": "60",
+        "ops.prospek_hari_3": "90",
+        "ops.garansi_arsip_hari": "7",
+        "ops.belum_bisa_hari": "14",
+        "ops.belum_bisa_panjang_hari": "28",
+        "ops.maks_pesan_hari": "1",
+        "ops.maks_pesan_bulan": "2",
+        "ops.jeda_prospek_servis_hari": "7",
+        "ops.maks_tidak_merespons": "3",
+        "ops.piutang_jeda_hari": "14",
+        "ops.piutang_maks_pengingat": "3",
     }.items():
         db.add(AppSetting(key=key, value=value))
 
@@ -535,7 +547,7 @@ with SessionLocal() as db:
     record(
         dewi_unit,
         "DEMO-0008",
-        at(-10, 9),
+        at(-35, 9),
         [("Ganti Oli", 1, Decimal("150000.00"), 6)],
         [("Oli Mesin 10W-40", 1, Decimal("65000.00"), 6)],
         keluhan="Ganti oli rutin.",
@@ -735,7 +747,6 @@ with SessionLocal() as db:
         ("piutang", budi.id),
         ("piutang", dewi.id),
         ("piutang", fajar.id),
-        ("piutang", rudi.id),
         ("piutang", hendra.id),
         ("garansi", budi.id),
         ("garansi", agus.id),
@@ -746,7 +757,6 @@ with SessionLocal() as db:
         ("servis_berkala", lina.id),
         ("prospek", budi.id),
         ("prospek", dewi.id),
-        ("prospek", fajar.id),
     ]
     missing = [key for key in required if key not in items]
     if missing:

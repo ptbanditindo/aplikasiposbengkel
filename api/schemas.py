@@ -102,7 +102,25 @@ class CustomerOut(ORMModel):
     nama: str
     nomor_hp: str
     alamat: Optional[str] = None
+    wa_consent: bool = True
+    do_not_contact: bool = False
     created_at: datetime
+
+
+class CustomerContactIn(StrictBase):
+    wa_consent: Optional[bool] = None
+    do_not_contact: Optional[bool] = None
+
+
+class WaLinkOut(CompatBase):
+    link: str
+    peringatan: str = ""
+
+
+class WaGateOut(CompatBase):
+    allowed: bool = True
+    alasan: str = ""
+    peringatan: str = ""
 
 
 class UnitCreate(CompatBase):
@@ -408,6 +426,10 @@ class ReceivableRecordOut(CompatBase):
     jatuh_tempo: Optional[date] = None
     diingatkan_pada: Optional[datetime] = None
     sudah_diingatkan: bool = False
+    pengingat_ke: int = 0
+    pengingat_berikutnya: Optional[datetime] = None
+    perlu_telepon: bool = False
+    tunda_sampai: Optional[datetime] = None
     bisa_diingatkan: bool = True
     umur_hari: int
     umur_bucket: str
@@ -436,12 +458,13 @@ class WhatsAppAttemptIn(StrictBase):
     status: str = Field(..., **_pattern("^(DIBUKA|DIBATALKAN|TIDAK_TERSEDIA)$"))
     catatan: Optional[str] = Field(default=None, max_length=500)
     pesan: Optional[str] = Field(default=None, max_length=4000)
-    jenis: str = Field(default="struk", **_pattern("^(struk|piutang)$"))
+    jenis: str = Field(default="struk", **_pattern("^(struk|piutang|pengerjaan)$"))
 
 
 class WhatsAppLogOut(ORMModel):
     id: int
     service_record_id: Optional[int] = None
+    followup_item_id: Optional[int] = None
     customer_id: Optional[int] = None
     nomor_masked: str
     status: str
@@ -454,6 +477,7 @@ class WhatsAppAttemptOut(CompatBase):
     nomor_masked: str
     link: str = ""
     wa_text: str = ""
+    peringatan: str = ""
     log: WhatsAppLogOut
 
 
@@ -477,6 +501,16 @@ class FollowupItemOut(CompatBase):
     id: int
     jenis: str
     jenis_label: str
+    item_key: Optional[str] = None
+    stage: int = 0
+    interval_bulan: Optional[int] = None
+    item_nama: Optional[str] = None
+    item_kind: Optional[str] = None
+    perlu_telepon: bool = False
+    pengingat_ke: int = 0
+    pengingat_berikutnya: Optional[datetime] = None
+    tunda_sampai: Optional[datetime] = None
+    bisa_alasan: str = ""
     customer_id: int
     customer_nama: str
     customer_alamat: Optional[str] = None
@@ -519,9 +553,13 @@ class PengerjaanItemOut(CompatBase):
     total_servis: Money = ZERO_MONEY
     sisa_bayar: Money = ZERO_MONEY
     status_pengerjaan: str
+    status_label: str = ""
     janji_ambil: Optional[date] = None
     dibuat_pada: datetime
     diambil_pada: Optional[datetime] = None
+    hari_di_bengkel: int = 0
+    terlambat: bool = False
+    catatan_terakhir: Optional[str] = None
     dikabari_pada: Optional[datetime] = None
     sudah_dikabari: bool = False
 
@@ -529,6 +567,43 @@ class PengerjaanItemOut(CompatBase):
 class PengerjaanListOut(CompatBase):
     items: List[PengerjaanItemOut] = Field(default_factory=list)
     jumlah: int = 0
+
+
+class PengerjaanMarkerIn(StrictBase):
+    record_id: int = Field(..., gt=0)
+
+
+class PengerjaanStatusIn(StrictBase):
+    status: str = Field(
+        ...,
+        **_pattern(
+            "^(SEDANG_DIKERJAKAN|MENUNGGU_SPAREPART|MENUNGGU_PERSETUJUAN"
+            "|SELESAI_SIAP_DIAMBIL|SUDAH_DIAMBIL)$"
+        ),
+    )
+    janji_ambil: Optional[date] = None
+    catatan: Optional[str] = Field(default=None, max_length=500)
+
+
+class PengerjaanEventOut(ORMModel):
+    id: int
+    pengerjaan_id: int
+    from_status: Optional[str] = None
+    to_status: str
+    operator: str
+    catatan: Optional[str] = None
+    created_at: datetime
+
+
+class PengerjaanDetailOut(CompatBase):
+    item: PengerjaanItemOut
+    events: List[PengerjaanEventOut] = Field(default_factory=list)
+
+
+class PengerjaanStatusOut(CompatBase):
+    item: PengerjaanItemOut
+    wa_text: str = ""
+    link: str = ""
 
 
 class FollowupCountsOut(CompatBase):
@@ -550,6 +625,7 @@ class FollowupActionResultOut(CompatBase):
     item: FollowupItemOut
     wa_text: str = ""
     link: str = ""
+    peringatan: str = ""
     log: WhatsAppLogOut
 
 
@@ -558,12 +634,13 @@ class FollowupStatusIn(StrictBase):
         ...,
         **_pattern(
             "^(BARU|SUDAH_FOLLOWUP|JANJI_BAYAR|MASIH_KENDALA|SELESAI|ARSIP"
-            "|AKAN_DATANG|TIDAK_DATANG)$"
+            "|AKAN_DATANG|TIDAK_DATANG|SUDAH_BAYAR)$"
         ),
     )
     alasan: Optional[str] = Field(default=None, max_length=500)
     janji_bayar: Optional[date] = None
     tanggal_service: Optional[date] = None
+    tunda_hari: Optional[int] = Field(default=None, ge=1, le=120)
 
 
 class FollowupEventOut(ORMModel):
@@ -814,6 +891,18 @@ class OpsSettingsIn(CompatBase):
     cooldown_hari: int = Field(default=7, ge=0, le=90)
     garansi_akan_habis_hari: int = Field(default=7, ge=1, le=90)
     servis_berkala_awal_hari: int = Field(default=14, ge=1, le=90)
+    piutang_jeda_hari: int = Field(default=14, ge=1, le=90)
+    piutang_maks_pengingat: int = Field(default=3, ge=1, le=12)
+    prospek_hari_1: int = Field(default=30, ge=7, le=180)
+    prospek_hari_2: int = Field(default=60, ge=30, le=365)
+    prospek_hari_3: int = Field(default=90, ge=60, le=540)
+    garansi_arsip_hari: int = Field(default=7, ge=1, le=90)
+    belum_bisa_hari: int = Field(default=14, ge=1, le=60)
+    belum_bisa_panjang_hari: int = Field(default=28, ge=7, le=120)
+    maks_pesan_hari: int = Field(default=1, ge=1, le=5)
+    maks_pesan_bulan: int = Field(default=2, ge=1, le=20)
+    jeda_prospek_servis_hari: int = Field(default=7, ge=1, le=90)
+    maks_tidak_merespons: int = Field(default=3, ge=1, le=10)
     followup_jam_mulai: str = Field(
         default="08:00", **_pattern(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     )

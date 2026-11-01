@@ -107,6 +107,18 @@ OPS_INT_KEYS = {
     "cooldown_hari": (0, 90, 7),
     "garansi_akan_habis_hari": (1, 90, 7),
     "servis_berkala_awal_hari": (1, 90, 14),
+    "piutang_jeda_hari": (1, 90, 14),
+    "piutang_maks_pengingat": (1, 12, 3),
+    "prospek_hari_1": (7, 180, 30),
+    "prospek_hari_2": (30, 365, 60),
+    "prospek_hari_3": (60, 540, 90),
+    "garansi_arsip_hari": (1, 90, 7),
+    "belum_bisa_hari": (1, 60, 14),
+    "belum_bisa_panjang_hari": (7, 120, 28),
+    "maks_pesan_hari": (1, 5, 1),
+    "maks_pesan_bulan": (1, 20, 2),
+    "jeda_prospek_servis_hari": (1, 90, 7),
+    "maks_tidak_merespons": (1, 10, 3),
 }
 OPS_TIME_KEYS = {
     "followup_jam_mulai": "08:00",
@@ -156,7 +168,7 @@ def followup_window_label(ops: Dict[str, Any]) -> str:
     def fmt(minutes: int) -> str:
         return f"{minutes // 60:02d}.{minutes % 60:02d}"
 
-    return f"{fmt(start)}–{fmt(end)}"
+    return f"{fmt(start)}-{fmt(end)}"
 
 
 def within_followup_window(

@@ -41,6 +41,9 @@ class Customer(Base):
     wa_consent: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
+    do_not_contact: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -176,6 +179,15 @@ class ServiceRecord(Base):
     # Waktu pengingat piutang dikirim; dikosongkan saat jatuh tempo diubah.
     diingatkan_pada: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True
+    )
+    piutang_reminder_ke: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    piutang_next_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    piutang_perlu_telepon: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
     )
     # Rencana pembayaran untuk nota kredit (null bila bukan kredit).
     rencana_bayar: Mapped[Optional[Decimal]] = mapped_column(
@@ -315,6 +327,33 @@ class PengerjaanNota(Base):
     service_record: Mapped["ServiceRecord"] = relationship()
     unit: Mapped[Optional["VehicleOrUnit"]] = relationship()
     customer: Mapped[Optional["Customer"]] = relationship()
+    events: Mapped[List["PengerjaanNotaEvent"]] = relationship(
+        back_populates="pengerjaan",
+        cascade="all, delete-orphan",
+        order_by="PengerjaanNotaEvent.created_at, PengerjaanNotaEvent.id",
+    )
+
+
+class PengerjaanNotaEvent(Base):
+    """Riwayat perubahan status pengerjaan unit."""
+
+    __tablename__ = "pengerjaan_nota_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pengerjaan_id: Mapped[int] = mapped_column(
+        ForeignKey("pengerjaan_nota.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_status: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    operator: Mapped[str] = mapped_column(String(64), default="Pemilik", nullable=False)
+    catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, nullable=False, index=True
+    )
+
+    pengerjaan: Mapped["PengerjaanNota"] = relationship(back_populates="events")
 
 
 class WhatsAppLog(Base):
@@ -330,11 +369,14 @@ class WhatsAppLog(Base):
     service_record_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("service_records.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    followup_item_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("followup_items.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     customer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
     )
     nomor_masked: Mapped[str] = mapped_column(String(32), nullable=False)
-    # struk | followup | garansi | piutang
+    # struk | followup | garansi | piutang | pengerjaan
     jenis: Mapped[str] = mapped_column(
         String(16), default="struk", nullable=False
     )
@@ -357,17 +399,25 @@ class FollowupItem(Base):
     __tablename__ = "followup_items"
     __table_args__ = (
         Index(
-            "ux_followup_items_active",
-            "jenis",
-            "customer_id",
+            "ux_followup_items_key_active",
+            "item_key",
             unique=True,
-            sqlite_where=text("status != 'ARSIP'"),
+            sqlite_where=text("status != 'ARSIP' AND item_key IS NOT NULL"),
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # prospek | servis_berkala | garansi | piutang
     jenis: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    item_key: Mapped[Optional[str]] = mapped_column(String(180), nullable=True, index=True)
+    stage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    interval_bulan: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    item_nama: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    item_kind: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    reference_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    no_response_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    perlu_telepon: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    tunda_sampai: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     customer_id: Mapped[int] = mapped_column(
         ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -392,6 +442,7 @@ class FollowupItem(Base):
     alasan_arsip: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    cycle_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )

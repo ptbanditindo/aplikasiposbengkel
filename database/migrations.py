@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 21
 
 
 def get_user_version(conn) -> int:
@@ -597,6 +597,175 @@ def _migrate_017_hapus_penugasan_followup(cursor) -> None:
         cursor.execute("UPDATE followup_items SET diambil_pada = NULL")
 
 
+def _migrate_018_log_pengerjaan(cursor) -> None:
+    """Pisahkan log pengerjaan dari piutang dan tautkan log ke item follow-up."""
+    _add_column(
+        cursor,
+        "wa_message_logs",
+        "followup_item_id",
+        "followup_item_id INTEGER",
+    )
+    _add_column(
+        cursor,
+        "followup_items",
+        "cycle_started_at",
+        "cycle_started_at DATETIME",
+    )
+    if "wa_message_logs" in _tables(cursor):
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS ix_wa_message_logs_followup_item_id "
+            "ON wa_message_logs (followup_item_id)"
+        )
+    if "followup_items" in _tables(cursor):
+        cursor.execute(
+            "UPDATE followup_items SET cycle_started_at = created_at "
+            "WHERE cycle_started_at IS NULL"
+        )
+
+
+
+def _migrate_019_pengerjaan_events(cursor) -> None:
+    """Riwayat status pengerjaan unit."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS pengerjaan_nota_events ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "pengerjaan_id INTEGER NOT NULL, "
+        "from_status VARCHAR(24), "
+        "to_status VARCHAR(24) NOT NULL, "
+        "operator VARCHAR(64) NOT NULL DEFAULT 'Pemilik', "
+        "catatan TEXT, "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(pengerjaan_id) REFERENCES pengerjaan_nota (id) "
+        "ON DELETE CASCADE)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_pengerjaan_nota_events_pengerjaan_id "
+        "ON pengerjaan_nota_events (pengerjaan_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_pengerjaan_nota_events_created_at "
+        "ON pengerjaan_nota_events (created_at)"
+    )
+    cursor.execute(
+        "INSERT INTO pengerjaan_nota_events "
+        "(pengerjaan_id, from_status, to_status, operator, catatan, created_at) "
+        "SELECT p.id, NULL, p.status_pengerjaan, p.diubah_oleh, "
+        "'Riwayat awal setelah migrasi.', p.dibuat_pada "
+        "FROM pengerjaan_nota p "
+        "WHERE NOT EXISTS (SELECT 1 FROM pengerjaan_nota_events e "
+        "WHERE e.pengerjaan_id = p.id)"
+    )
+
+
+
+def _migrate_020_item_identity(cursor) -> None:
+    """Identitas follow-up per unit, baris servis, dan nota piutang."""
+    _add_column(
+        cursor,
+        "customers",
+        "do_not_contact",
+        "do_not_contact BOOLEAN NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "piutang_reminder_ke",
+        "piutang_reminder_ke INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "piutang_next_at",
+        "piutang_next_at DATETIME",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "piutang_perlu_telepon",
+        "piutang_perlu_telepon BOOLEAN NOT NULL DEFAULT 0",
+    )
+    for column, ddl in (
+        ("item_key", "item_key VARCHAR(180)"),
+        ("stage", "stage INTEGER NOT NULL DEFAULT 0"),
+        ("interval_bulan", "interval_bulan INTEGER"),
+        ("item_nama", "item_nama VARCHAR(255)"),
+        ("item_kind", "item_kind VARCHAR(24)"),
+        ("reference_date", "reference_date DATE"),
+        ("no_response_count", "no_response_count INTEGER NOT NULL DEFAULT 0"),
+        ("perlu_telepon", "perlu_telepon BOOLEAN NOT NULL DEFAULT 0"),
+    ):
+        _add_column(cursor, "followup_items", column, ddl)
+    if "followup_items" not in _tables(cursor):
+        return
+    cursor.execute("DROP INDEX IF EXISTS ux_followup_items_active")
+    cursor.execute(
+        "SELECT id, jenis, customer_id, unit_id, service_record_id, status, created_at "
+        "FROM followup_items ORDER BY id"
+    )
+    rows = cursor.fetchall()
+    used = set()
+    for item_id, jenis, customer_id, unit_id, record_id, status, created_at in rows:
+        key = None
+        archive = False
+        if jenis == "servis_berkala":
+            key = f"servis:legacy:{item_id}"
+            archive = status != "ARSIP"
+        elif jenis in {"prospek", "garansi"}:
+            base = (
+                f"lifecycle:unit:{unit_id}"
+                if unit_id is not None
+                else f"lifecycle:customer:{customer_id}"
+            )
+            if base in used:
+                key = f"lifecycle:legacy:{item_id}"
+                archive = status != "ARSIP"
+            else:
+                key = base
+                used.add(base)
+        elif jenis == "piutang":
+            base = (
+                f"piutang:record:{record_id}"
+                if record_id is not None
+                else f"piutang:customer:{customer_id}"
+            )
+            if base in used:
+                key = f"{base}:legacy:{item_id}"
+                archive = status != "ARSIP"
+            else:
+                key = base
+                used.add(base)
+        else:
+            key = f"other:{item_id}"
+        cursor.execute(
+            "UPDATE followup_items SET item_key = ?, item_kind = ?, "
+            "reference_date = COALESCE(reference_date, substr(created_at, 1, 10)) "
+            "WHERE id = ?",
+            (key, jenis, item_id),
+        )
+        if archive:
+            cursor.execute(
+                "UPDATE followup_items SET status = 'ARSIP', "
+                "alasan_arsip = 'Migrasi identitas item.', "
+                "archived_at = COALESCE(archived_at, created_at) WHERE id = ?",
+                (item_id,),
+            )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_followup_items_key_active "
+        "ON followup_items (item_key) "
+        "WHERE status != 'ARSIP' AND item_key IS NOT NULL"
+    )
+
+
+
+def _migrate_021_followup_tunda(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "followup_items",
+        "tunda_sampai",
+        "tunda_sampai DATETIME",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -615,6 +784,10 @@ MIGRATIONS: List[Migration] = [
     (15, _migrate_015_pengerjaan_nota),
     (16, _migrate_016_ingat_piutang),
     (17, _migrate_017_hapus_penugasan_followup),
+    (18, _migrate_018_log_pengerjaan),
+    (19, _migrate_019_pengerjaan_events),
+    (20, _migrate_020_item_identity),
+    (21, _migrate_021_followup_tunda),
 ]
 
 

@@ -14,13 +14,18 @@ from api.schemas import (
     FollowupItemOut,
     FollowupListOut,
     FollowupStatusIn,
+    PengerjaanDetailOut,
+    PengerjaanEventOut,
     PengerjaanItemOut,
     PengerjaanListOut,
+    PengerjaanMarkerIn,
+    PengerjaanStatusIn,
+    PengerjaanStatusOut,
     WhatsAppAttemptIn,
     WhatsAppLogOut,
 )
 from database.session import get_db
-from services import followup_service, pengerjaan_service
+from services import followup_service, pengerjaan_service, settings_service, whatsapp_service
 from services.auth_service import Operator
 
 router = APIRouter(tags=["Follow-up"], dependencies=[Depends(require_auth)])
@@ -63,6 +68,70 @@ def list_pengerjaan(db: Session = Depends(get_db)):
     return PengerjaanListOut.model_validate(pengerjaan_service.list_items(db))
 
 
+@router.post("/pengerjaan", response_model=PengerjaanItemOut, status_code=201)
+def create_pengerjaan(
+    payload: PengerjaanMarkerIn,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    marker = pengerjaan_service.create_marker(db, payload.record_id, operator)
+    return PengerjaanItemOut.model_validate(
+        pengerjaan_service.serialize_item(marker)
+    )
+
+
+@router.get(
+    "/pengerjaan/by-record/{record_id}",
+    response_model=Optional[PengerjaanItemOut],
+)
+def pengerjaan_by_record(record_id: int, db: Session = Depends(get_db)):
+    result = pengerjaan_service.get_by_record(db, record_id)
+    if result is None:
+        return None
+    return PengerjaanItemOut.model_validate(result)
+
+
+@router.get("/pengerjaan/{marker_id}", response_model=PengerjaanDetailOut)
+def pengerjaan_detail(marker_id: int, db: Session = Depends(get_db)):
+    return PengerjaanDetailOut.model_validate(
+        pengerjaan_service.detail(db, marker_id)
+    )
+
+
+@router.post(
+    "/pengerjaan/{marker_id}/status",
+    response_model=PengerjaanStatusOut,
+)
+def change_pengerjaan_status(
+    marker_id: int,
+    payload: PengerjaanStatusIn,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    marker = pengerjaan_service.change_status(
+        db,
+        marker_id,
+        payload.status,
+        operator,
+        janji_ambil=payload.janji_ambil,
+        catatan=payload.catatan,
+    )
+    info = settings_service.get_bengkel_info(db)
+    text = whatsapp_service.pengerjaan_status_wa_text(
+        marker.service_record, marker.status_pengerjaan, info
+    )
+    link = whatsapp_service.build_link(
+        marker.service_record.unit.customer.nomor_hp, text
+    )
+    return PengerjaanStatusOut(
+        item=PengerjaanItemOut.model_validate(
+            pengerjaan_service.serialize_item(marker)
+        ),
+        wa_text=text,
+        link=link,
+    )
+
+
 @router.post("/pengerjaan/{marker_id}/diambil", response_model=PengerjaanItemOut)
 def mark_pengerjaan_taken(
     marker_id: int,
@@ -100,6 +169,7 @@ def record_followup(
         item=_item_out(db, result["item"]),
         wa_text=result["wa_text"],
         link=result["link"],
+        peringatan=getattr(result["log"], "peringatan", ""),
         log=WhatsAppLogOut.model_validate(result["log"]),
     )
 
@@ -122,5 +192,6 @@ def change_followup_status(
         alasan=payload.alasan,
         janji_bayar=payload.janji_bayar,
         tanggal_service=payload.tanggal_service,
+        tunda_hari=payload.tunda_hari,
     )
     return _item_out(db, item)

@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261147">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261154">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -212,7 +212,7 @@
         <div class="page-head">
           <div>
             <h1>Transaksi kasir</h1>
-            <p class="muted">Harga jasa dan sparepart bisa disesuaikan di kolom harga deal.</p>
+            <p class="muted">Ubah harga deal bila perlu. Tarif master tetap.</p>
           </div>
           <button type="button" class="btn btn-ghost" id="posReset">Kosongkan form</button>
         </div>
@@ -318,7 +318,7 @@
                 <span class="step-num" aria-hidden="true">4</span>
                 <div>
                   <h2>Rincian pengerjaan</h2>
-                  <p class="muted">Harga master hanya patokan. Harga deal boleh naik atau turun.</p>
+                  <p class="muted">Harga master hanya patokan. Harga deal bisa berbeda.</p>
                 </div>
               </div>
 
@@ -349,7 +349,7 @@
               <div class="line-form line-form--part">
                 <div class="line-form-head">
                   <h4>Sparepart</h4>
-                  <span class="tiny muted" id="partStockHint">Stok gudang otomatis dipotong.</span>
+                  <span class="tiny muted" id="partStockHint">Stok gudang berkurang otomatis.</span>
                 </div>
                 <div class="line-grid">
                   <select class="input" id="partPicker"></select>
@@ -379,7 +379,7 @@
               <div class="card-head">
                 <div>
                   <h2>Ringkasan nota</h2>
-                  <p class="muted" id="summaryCustomer">Belum ada pelanggan dipilih</p>
+                  <p class="muted" id="summaryCustomer">Belum ada pelanggan dipilih.</p>
                 </div>
               </div>
 
@@ -552,7 +552,7 @@
         <div class="page-head">
           <div>
             <h1>Stok sparepart</h1>
-            <p class="muted">Harga master hanya patokan awal untuk kasir.</p>
+            <p class="muted">Harga master menjadi patokan awal.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
@@ -583,7 +583,7 @@
         <div class="page-head">
           <div>
             <h1>Tarif jasa</h1>
-            <p class="muted">Patokan ongkos pengerjaan untuk kasir.</p>
+            <p class="muted">Tarif awal untuk kasir.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-primary" id="btnAddJasa">+ Tarif jasa</button>
@@ -806,8 +806,16 @@
               <input type="number" class="input" id="opsTempoHari" min="1" max="365" step="1" inputmode="numeric">
             </label>
             <label class="field">
-              <span>Ingatkan prospek setelah (hari)</span>
-              <input type="number" class="input" id="opsProspekHari" min="1" max="365" step="1" inputmode="numeric">
+              <span>Prospek tahap 1 (hari)</span>
+              <input type="number" class="input" id="opsProspek1" min="7" max="180" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Prospek tahap 2 (hari)</span>
+              <input type="number" class="input" id="opsProspek2" min="30" max="365" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Prospek tahap 3 (hari)</span>
+              <input type="number" class="input" id="opsProspek3" min="60" max="540" step="1" inputmode="numeric">
             </label>
             <label class="field">
               <span>Jeda follow-up WhatsApp (hari)</span>
@@ -820,6 +828,42 @@
             <label class="field">
               <span>Tampilkan servis berkala H- (hari)</span>
               <input type="number" class="input" id="opsServisHari" min="1" max="90" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Jeda pengingat piutang (hari)</span>
+              <input type="number" class="input" id="opsPiutangJeda" min="1" max="90" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Maksimal pengingat piutang</span>
+              <input type="number" class="input" id="opsPiutangMaks" min="1" max="12" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Arsip garansi setelah (hari)</span>
+              <input type="number" class="input" id="opsGaransiArsip" min="1" max="90" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Belum bisa dihubungi lagi (hari)</span>
+              <input type="number" class="input" id="opsBelumBisa" min="1" max="60" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Belum bisa, pilihan panjang (hari)</span>
+              <input type="number" class="input" id="opsBelumBisaPanjang" min="7" max="120" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Batas tidak merespons (kali)</span>
+              <input type="number" class="input" id="opsMaksTidakRespon" min="1" max="10" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Batas pesan per hari</span>
+              <input type="number" class="input" id="opsMaksHari" min="1" max="5" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Batas pesan per bulan</span>
+              <input type="number" class="input" id="opsMaksBulan" min="1" max="20" step="1" inputmode="numeric">
+            </label>
+            <label class="field">
+              <span>Jeda prospek dan servis (hari)</span>
+              <input type="number" class="input" id="opsJedaProspek" min="1" max="90" step="1" inputmode="numeric">
             </label>
             <label class="field">
               <span>Jam mulai follow up</span>
@@ -894,7 +938,7 @@
             </div>
             <div class="backup-action hidden" id="shareBackupWrap">
               <button type="button" class="btn btn-outline" id="settingsShareBackup">Bagikan database</button>
-              <span class="tiny muted">Database real sampai detik ini.</span>
+              <span class="tiny muted">Data terbaru saat ini.</span>
             </div>
           </div>
           <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
@@ -1041,7 +1085,7 @@
           </div>
         </div>
 
-        <div class="stats-grid stats-grid--secondary">
+        <div class="stats-grid stats-grid--secondary stats-grid--followup">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
             <span class="stat-label">Piutang</span>
             <strong id="followupStatReceivable">Rp 0</strong>
@@ -1050,12 +1094,12 @@
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka kendaraan yang masih di bengkel" data-action="open-pengerjaan">
             <span class="stat-label">Kendaraan selesai</span>
             <strong id="followupStatPengerjaan">0</strong>
-            <span class="stat-sub">Siap dikabari</span>
+            <span class="stat-sub">Siap dihubungi</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka prospek pelanggan" data-action="open-followup" data-jenis="prospek" data-exclude-status="MASIH_KENDALA">
             <span class="stat-label">Prospek</span>
             <strong id="followupStatProspek">0</strong>
-            <span class="stat-sub">Tanya service</span>
+            <span class="stat-sub">Kabar unit pasca servis</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka prospek yang masih berkendala" data-action="open-followup" data-jenis="prospek" data-status="MASIH_KENDALA">
             <span class="stat-label">Berkendala</span>
@@ -1065,22 +1109,27 @@
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-exclude-status="AKAN_DATANG">
             <span class="stat-label">Servis berkala</span>
             <strong id="followupStatDueService">0</strong>
-            <span class="stat-sub">Jatuh tempo dekat</span>
+            <span class="stat-sub">Mendekati jadwal</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka garansi akan habis" data-action="open-followup" data-jenis="garansi" data-exclude-status="AKAN_DATANG">
             <span class="stat-label">Garansi akan habis</span>
             <strong id="followupStatWarrantyEnding">0</strong>
-            <span class="stat-sub">Ingatkan pelanggan</span>
+            <span class="stat-sub">Perlu diingatkan</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang garansi" data-action="open-followup" data-jenis="garansi" data-status="AKAN_DATANG">
-            <span class="stat-label">Akan datang — Garansi</span>
+            <span class="stat-label">Akan datang: Garansi</span>
             <strong id="followupStatAkanGaransi">0</strong>
-            <span class="stat-sub">Sudah ada tanggal</span>
+            <span class="stat-sub">Sudah dijadwalkan</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang servis berkala" data-action="open-followup" data-jenis="servis_berkala" data-status="AKAN_DATANG">
-            <span class="stat-label">Akan datang — Servis berkala</span>
+            <span class="stat-label">Akan datang: Servis berkala</span>
             <strong id="followupStatAkanServis">0</strong>
-            <span class="stat-sub">Sudah ada tanggal</span>
+            <span class="stat-sub">Sudah dijadwalkan</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka jadwal akan datang prospek" data-action="open-followup" data-jenis="prospek" data-status="AKAN_DATANG">
+            <span class="stat-label">Akan datang: Prospek</span>
+            <strong id="followupStatAkanProspek">0</strong>
+            <span class="stat-sub">Sudah dijadwalkan</span>
           </article>
         </div>
       </section>
@@ -1088,7 +1137,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.2.4</span>
+        <span>BengkelPOS Radiator v2.2.6</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -1382,7 +1431,7 @@
       <div class="modal-head">
         <div>
           <h3 id="stockModalTitle">Tambah sparepart</h3>
-          <p class="muted">Harga jual di sini adalah patokan awal kasir.</p>
+          <p class="muted">Harga jual ini menjadi patokan awal kasir.</p>
         </div>
         <button type="button" class="icon-btn" id="stockModalClose" aria-label="Tutup">&times;</button>
       </div>
@@ -1625,17 +1674,54 @@
     </div>
   </div>
 
+  <!-- ============================ PENGERJAAN STATUS MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="pengerjaanStatusModal" role="dialog" aria-modal="true" aria-labelledby="pengerjaanStatusTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="pengerjaanStatusTitle">Status pengerjaan</h3>
+          <p class="muted" id="pengerjaanStatusSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="pengerjaanStatusClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="pengerjaanStatusBody">
+        <div class="form-grid">
+          <label class="field"><span>Status</span>
+            <select class="input" id="pengerjaanStatusSelect">
+              <option value="SEDANG_DIKERJAKAN">Sedang dikerjakan</option>
+              <option value="MENUNGGU_SPAREPART">Menunggu sparepart</option>
+              <option value="MENUNGGU_PERSETUJUAN">Menunggu persetujuan</option>
+              <option value="SELESAI_SIAP_DIAMBIL">Selesai, siap diambil</option>
+              <option value="SUDAH_DIAMBIL">Sudah diambil</option>
+            </select>
+          </label>
+          <label class="field"><span>Janji ambil (opsional)</span>
+            <input type="date" class="input" id="pengerjaanJanjiAmbil">
+          </label>
+        </div>
+        <label class="field"><span>Catatan</span>
+          <input type="text" class="input" id="pengerjaanStatusCatatan" maxlength="500" placeholder="Opsional">
+        </label>
+        <div class="detail-section" id="pengerjaanStatusHistory"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="pengerjaanStatusDismiss">Tutup</button>
+        <button type="button" class="btn btn-primary" id="pengerjaanStatusSave" data-action="pengerjaan-status-save">Simpan status</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261147"></script>
-  <script src="/static/js/api-client.js?v=20261147"></script>
-  <script src="/static/js/printer-manager.js?v=20261147"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261147"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261147"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261147"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261147"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261147"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261147"></script>
-  <script src="/static/js/app.js?v=20261147"></script>
+  <script src="/static/js/native-bridge.js?v=20261154"></script>
+  <script src="/static/js/api-client.js?v=20261154"></script>
+  <script src="/static/js/printer-manager.js?v=20261154"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261154"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261154"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261154"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261154"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261154"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261154"></script>
+  <script src="/static/js/app.js?v=20261154"></script>
 </body>
 </html>

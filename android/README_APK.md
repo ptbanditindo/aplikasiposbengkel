@@ -133,23 +133,19 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 ## Hasil build terakhir
 
-> Catatan: setelah build 2.2.4, jenis bayar DP dihapus dari POS dan API; nota
-> baru hanya memakai LUNAS atau KREDIT (uang muka opsional di KREDIT). Build
-> 2.2.4 di bawah masih memuat DP sampai APK dibangun ulang dengan versionCode
-> yang lebih tinggi.
-
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.329.642 byte
-- SHA-256: `a6feb95031eb6af46fb6621b87a5d00aa0772aa3af11cc8e64f44df261e52094`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.4`, versionCode `7`,
+- Ukuran: 45.100.792 byte
+- SHA-256: `3b1bef67f561085cf1233f1f2097e2dbf8df50fe4316af0ef724eff1f0668c0d`
+- Paket: `com.bengkelpos.radiator`, versionName `2.2.6`, versionCode `9`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 249.495 byte, SHA-256
-  `045c7ef7feb32f531a7ff41496eba3f9caa8aae4675f7e1e19994fd84bd8130b`.
-  ZIP ini memuat laporan laba bersih sparepart/jasa, detail nota DP yang
-  disederhanakan, kirim WhatsApp otomatis saat cetak gagal, perbaikan tata
-  letak kasir di HP, dan kartu Tugas follow-up tanpa panel pengingat.
-- Unit test JVM dan pytest tidak dijalankan ulang untuk 2.2.4; hasil terakhir
-  yang tercatat adalah 308 test JVM dan 288 test pytest (2.2.3).
+- Asset `assets/bengkel_backend.zip`: 277.337 byte, SHA-256
+  `a6c451e599a06c461cf1e9ee4290328eb96a5fce8d4c2025d99b37092f1fe9d6`.
+  ZIP ini memuat logika follow-up Tahap 1-5: penanda pengerjaan, status
+  pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
+  servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,
+  prioritas, penggabungan pesan, varian template, dan sembilan kartu Follow up.
+- Pytest dua stack lulus 322 test. Unit test Kotlin tidak dijalankan ulang pada
+  build ini; hasil terakhir yang tercatat adalah 308 test JVM.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 

@@ -3598,3 +3598,131 @@ a.btn { text-decoration: none; }
 }
   .payment-form .form-grid { grid-template-columns: 1fr; }
 }
+
+/* ===================== Konsistensi kontrol web dan APK ==================== */
+/* Palet warna tetap. Lapisan ini hanya menyamakan geometri, jarak, dan
+   target sentuh agar tampilan web dan WebView APK tidak berbeda. */
+@media (min-width: 981px) {
+  .btn { height: 40px; }
+  .btn-sm { height: 34px; }
+  .btn-xs { height: 30px; }
+  .icon-btn { width: 40px; height: 40px; }
+  .nav-tab { height: 40px; min-height: 40px; }
+  .segmented button { min-height: 36px; }
+  .printer-pill { min-height: 36px; }
+}
+
+@media (max-width: 980px), (pointer: coarse) {
+  .nav-tabs {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+    height: 44px;
+    min-height: 44px;
+    padding-inline: 14px;
+    scroll-snap-align: start;
+  }
+  .btn,
+  .btn-sm,
+  .btn-xs,
+  .btn-lg { height: 44px; min-height: 44px; padding-inline: 14px; }
+  .btn-xs { font-size: 12.5px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .segmented button,
+  .segmented.sm button { height: 44px; min-height: 44px; }
+  .printer-pill { min-height: 44px; }
+  .input:not(textarea),
+  select.input,
+  .search-row .input { height: 44px; min-height: 44px; }
+  .search-row { align-items: stretch; }
+  .search-row .input { flex: 1 1 auto; width: 100%; }
+  .settings-collapsible > .card-head { min-height: 44px; }
+  .pengerjaan-actions,
+  .receivable-actions,
+  .followup-actions,
+  .modal-actions,
+  .page-actions { gap: 8px; }
+  .receivable-due-edit { min-height: 40px; padding: 8px 0; }
+  .receivable-name,
+  .cell-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 760px) {
+  .stats-grid--report .stat-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  #receivablesModal .modal,
+  #pengerjaanModal .modal {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #receivablesModal #receivablesBody,
+  #pengerjaanModal #pengerjaanBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  #receivablesModal .modal-actions,
+  #pengerjaanModal .modal-actions {
+    flex: 0 0 auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+  }
+}
+
+@media (max-width: 560px) {
+  .nav-tab { height: 44px; }
+  .modal-actions .btn { width: auto; flex: 1 1 auto; }
+  .form-actions .btn { width: 100%; }
+}
+
+/* Preferensi pesan pelanggan */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 14px;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .checkbox-row {
+    min-height: 44px;
+  }
+}
+
+/* Kartu Follow up: 9 kartu agar tidak menyisakan sel kosong. */
+@media (min-width: 1000px) {
+  .stats-grid--followup {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .stats-grid--followup .stat-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}

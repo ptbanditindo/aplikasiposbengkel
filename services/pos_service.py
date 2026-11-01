@@ -17,6 +17,7 @@ from config import settings
 from database.models import (
     HargaJasa,
     PengerjaanNota,
+    PengerjaanNotaEvent,
     ServiceJob,
     ServicePart,
     ServicePayment,
@@ -314,15 +315,25 @@ def _create_transaction_locked(
 
         operator_label = operator.label if operator is not None else "Kasir"
         if bool(getattr(payload, "unit_ditinggal", False)):
+            marker = PengerjaanNota(
+                service_record_id=record.id,
+                unit_id=unit.id,
+                customer_id=unit.customer_id,
+                status_pengerjaan="SEDANG_DIKERJAKAN",
+                dibuat_pada=now,
+                diubah_pada=now,
+                diubah_oleh=operator_label,
+            )
+            db.add(marker)
+            db.flush()
             db.add(
-                PengerjaanNota(
-                    service_record_id=record.id,
-                    unit_id=unit.id,
-                    customer_id=unit.customer_id,
-                    status_pengerjaan="SEDANG_DIKERJAKAN",
-                    dibuat_pada=now,
-                    diubah_pada=now,
-                    diubah_oleh=operator_label,
+                PengerjaanNotaEvent(
+                    pengerjaan_id=marker.id,
+                    from_status=None,
+                    to_status="SEDANG_DIKERJAKAN",
+                    operator=operator_label,
+                    catatan="Unit ditinggal saat nota dibuat.",
+                    created_at=now,
                 )
             )
         if money(total_dibayar) > 0:

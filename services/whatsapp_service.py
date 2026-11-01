@@ -5,9 +5,9 @@ membuat tautan `wa.me`, dan mencatat status upaya yang dilakukan kasir.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from sqlalchemy import select
@@ -34,7 +34,14 @@ JENIS_STRUK = "struk"
 JENIS_FOLLOWUP = "followup"
 JENIS_GARANSI = "garansi"
 JENIS_PIUTANG = "piutang"
-VALID_JENIS = {JENIS_STRUK, JENIS_FOLLOWUP, JENIS_GARANSI, JENIS_PIUTANG}
+JENIS_PENGERJAAN = "pengerjaan"
+VALID_JENIS = {
+    JENIS_STRUK,
+    JENIS_FOLLOWUP,
+    JENIS_GARANSI,
+    JENIS_PIUTANG,
+    JENIS_PENGERJAAN,
+}
 
 def formal_opening(
     bengkel: Dict[str, str], customer_nama: Optional[str] = None
@@ -91,12 +98,27 @@ def receivable_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
         if record.jatuh_tempo
         else ""
     )
-    body = (
-        f"Kami ingin mengingatkan bahwa pembayaran nota {record.no_nota} "
-        f"untuk {unit} masih memiliki sisa sebesar {format_rupiah(sisa)}."
-        + due
-        + " Apabila pembayaran sudah dilakukan, mohon abaikan pesan ini."
-    )
+    variants = [
+        (
+            f"Kami ingin mengingatkan bahwa pembayaran nota {record.no_nota} "
+            f"untuk {unit} masih memiliki sisa sebesar {format_rupiah(sisa)}."
+            + due
+            + " Apabila pembayaran sudah dilakukan, mohon abaikan pesan ini."
+        ),
+        (
+            f"Mohon izin mengingatkan kembali pembayaran nota {record.no_nota} "
+            f"untuk {unit}. Pada nota ini masih ada sisa sebesar "
+            f"{format_rupiah(sisa)}." + due
+            + " Jika pembayaran sudah dilakukan, mohon abaikan pesan ini."
+        ),
+        (
+            f"Kami ingin menyampaikan informasi pembayaran nota {record.no_nota} "
+            f"untuk {unit}. Saat ini masih ada sisa sebesar "
+            f"{format_rupiah(sisa)}." + due
+            + " Apabila sudah dilakukan pembayaran, mohon abaikan pesan ini."
+        ),
+    ]
+    body = variants[int(record.id or 0) % len(variants)]
     return (
         f"{formal_opening(bengkel, customer.nama)} {body}\n\n"
         "Terima kasih atas perhatian dan kerja samanya."
@@ -140,6 +162,42 @@ def receivable_wa_text_multi(
     )
 
 
+PENGERJAAN_STATUS_TEXT = {
+    "SEDANG_DIKERJAKAN": "Kami ingin menginformasikan bahwa kendaraan {unit} dengan nota {nota} sedang dikerjakan.",
+    "MENUNGGU_SPAREPART": "Kami ingin menginformasikan bahwa pengerjaan kendaraan {unit} dengan nota {nota} sedang menunggu ketersediaan sparepart.",
+    "MENUNGGU_PERSETUJUAN": "Kami ingin meminta persetujuan Bapak/Ibu untuk melanjutkan pengerjaan kendaraan {unit} dengan nota {nota}.",
+    "SELESAI_SIAP_DIAMBIL": "Kami ingin menyampaikan bahwa kendaraan {unit} dengan nota {nota} sudah selesai dikerjakan dan siap diambil di bengkel kami.",
+    "SUDAH_DIAMBIL": "Kami ingin menyampaikan bahwa kendaraan {unit} dengan nota {nota} sudah diambil. Terima kasih telah mempercayakan servis kepada kami.",
+}
+
+
+def pengerjaan_status_wa_text(
+    record: ServiceRecord, status: str, bengkel: Dict[str, str]
+) -> str:
+    """Pesan pengerjaan untuk status tertentu, bukan pesan piutang."""
+    customer = record.unit.customer
+    unit = describe_unit(record.unit)
+    normalized = (status or "").strip().upper()
+    body = PENGERJAAN_STATUS_TEXT.get(normalized)
+    if body is None:
+        body = (
+            "Kami ingin menginformasikan pembaruan pengerjaan kendaraan "
+            "{unit} dengan nota {nota}."
+        )
+    body = body.format(unit=unit, nota=record.no_nota)
+    sisa = payment_service.record_sisa(record)
+    if normalized == "SELESAI_SIAP_DIAMBIL" and sisa > 0:
+        body += (
+            f" Sisa pembayaran {format_rupiah(sisa)} dapat diselesaikan "
+            "saat pengambilan."
+        )
+    return (
+        f"{formal_opening(bengkel, customer.nama)} {body}\n\n"
+        "Terima kasih atas perhatian Bapak/Ibu."
+    )
+
+
+
 def build_link(nomor: str, message: str) -> str:
     digits = normalize_whatsapp(nomor)
     if not digits:
@@ -156,6 +214,7 @@ def append_attempt(
     message: str,
     operator: Operator,
     record: Optional[ServiceRecord] = None,
+    followup_item_id: Optional[int] = None,
     catatan: Optional[str] = None,
     now: Optional[datetime] = None,
 ):
@@ -183,8 +242,16 @@ def append_attempt(
         else ""
     )
     moment = now or datetime.now()
+    warning = ""
+    if normalized == STATUS_OPENED:
+        from services import contact_gate_service
+
+        warning = contact_gate_service.ensure_can_open(
+            db, customer, normalized_jenis, moment
+        )
     log = WhatsAppLog(
         service_record_id=record.id if record is not None else None,
+        followup_item_id=followup_item_id,
         customer_id=customer.id,
         jenis=normalized_jenis,
         nomor_masked=mask_phone(customer.nomor_hp),
@@ -193,6 +260,7 @@ def append_attempt(
         operator=operator.label,
         created_at=moment,
     )
+    log.peringatan = warning
     db.add(log)
     audit_service.record_event(
         db,
@@ -218,15 +286,16 @@ def log_attempt(
     status: str,
     operator: Operator,
     catatan: Optional[str] = None,
+    pesan: Optional[str] = None,
     now: Optional[datetime] = None,
     jenis: str = JENIS_STRUK,
 ):
     """Catat upaya WhatsApp nota. Mengembalikan (log, wa_text, link)."""
     normalized_jenis = (jenis or JENIS_STRUK).strip().lower()
     normalized_status = (status or "").strip().upper()
-    if normalized_jenis not in {JENIS_STRUK, JENIS_PIUTANG}:
+    if normalized_jenis not in {JENIS_STRUK, JENIS_PIUTANG, JENIS_PENGERJAAN}:
         raise BusinessValidationError(
-            "Jenis pesan WhatsApp nota harus struk atau piutang."
+            "Jenis pesan WhatsApp nota harus struk, piutang, atau pengerjaan."
         )
     moment = now or datetime.now()
     with db.begin():
@@ -238,9 +307,10 @@ def log_attempt(
             # Impor lokal agar tidak melingkar: receipt_service memakai layanan ini.
             from services.receipt_service import receipt_wa_text
 
-            message = receipt_wa_text(record, info)
+            default_message = receipt_wa_text(record, info)
         else:
-            message = completion_wa_text(record, info)
+            default_message = completion_wa_text(record, info)
+        message = (pesan or "").strip() or default_message
         log, link = append_attempt(
             db,
             record.unit.customer,
@@ -252,27 +322,60 @@ def log_attempt(
             catatan=catatan,
             now=moment,
         )
-        if (
-            normalized_jenis == JENIS_PIUTANG
-            and normalized_status == STATUS_OPENED
-            and (record.status or "NORMAL") == "NORMAL"
-            and (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
-            and payment_service.record_sisa(record) > 0
-        ):
-            record.diingatkan_pada = moment
-            from services import followup_service
-
-            followup_service.sync_items(db, commit=False)
-            followup_service.mark_piutang_followed(
-                db,
-                record.unit.customer.id,
-                moment,
-                operator.label,
-                "Pemberitahuan kendaraan selesai lewat WhatsApp.",
-            )
 
     db.refresh(log)
     return log, message, link
+
+
+def piutang_reminder_state(
+    record: ServiceRecord, ops: Dict[str, Any], moment: datetime
+) -> Tuple[bool, str]:
+    """Kelayakan pengingat piutang: jatuh tempo, jeda 2 minggu, maksimal 3 kali."""
+    reminder_ke = int(record.piutang_reminder_ke or 0)
+    maks = int(ops.get("piutang_maks_pengingat", 3))
+    jeda = int(ops.get("piutang_jeda_hari", 14))
+    if reminder_ke >= maks:
+        return (
+            False,
+            "Pengingat piutang sudah {0} kali. Hubungi pelanggan lewat telepon.".format(
+                maks
+            ),
+        )
+    if reminder_ke == 0:
+        if record.jatuh_tempo is not None and moment.date() < record.jatuh_tempo:
+            return (
+                False,
+                "Pengingat bisa dikirim mulai "
+                + record.jatuh_tempo.strftime("%d-%m-%Y")
+                + ".",
+            )
+        return True, ""
+    next_at = record.piutang_next_at
+    if next_at is not None and moment < next_at:
+        return (
+            False,
+            "Pengingat berikutnya bisa dikirim setelah "
+            + next_at.strftime("%d-%m-%Y %H:%M")
+            + ".",
+        )
+    return True, ""
+
+
+def apply_piutang_reminder(
+    record: ServiceRecord, ops: Dict[str, Any], moment: datetime
+) -> int:
+    """Naikkan hitungan pengingat; setelah batas, tandai perlu telepon."""
+    maks = int(ops.get("piutang_maks_pengingat", 3))
+    jeda = int(ops.get("piutang_jeda_hari", 14))
+    record.piutang_reminder_ke = int(record.piutang_reminder_ke or 0) + 1
+    record.diingatkan_pada = moment
+    if record.piutang_reminder_ke >= maks:
+        record.piutang_next_at = None
+        record.piutang_perlu_telepon = True
+    else:
+        record.piutang_next_at = moment + timedelta(days=jeda)
+        record.piutang_perlu_telepon = False
+    return record.piutang_reminder_ke
 
 
 def remind_receivable(
@@ -281,11 +384,7 @@ def remind_receivable(
     operator: Operator,
     now: Optional[datetime] = None,
 ):
-    """Kirim pengingat piutang sekali per siklus jatuh tempo.
-
-    Pengingat hanya boleh dibuka pada hari jatuh tempo atau setelahnya.
-    Mengubah jatuh tempo mengosongkan penanda sehingga pengingat aktif lagi.
-    """
+    """Kirim pengingat piutang sesuai jadwal: jatuh tempo lalu tiap 2 minggu."""
     moment = now or datetime.now()
     with db.begin():
         record = db.get(ServiceRecord, record_id)
@@ -298,18 +397,24 @@ def remind_receivable(
             or payment_service.record_sisa(record) <= 0
         ):
             raise ConflictError("Nota ini sudah lunas.")
-        if record.diingatkan_pada is not None:
-            raise ConflictError(
-                "Pengingat nota ini sudah dikirim. Ubah jatuh tempo untuk "
-                "mengingatkan lagi."
-            )
         ops = settings_service.get_ops_settings(db)
+        ready, reason = piutang_reminder_state(record, ops, moment)
+        if not ready:
+            raise ConflictError(reason)
         if not settings_service.within_followup_window(ops, moment):
             raise ConflictError(settings_service.followup_window_message(ops))
-        if record.jatuh_tempo is not None and moment.date() < record.jatuh_tempo:
-            raise BusinessValidationError(
-                "Pengingat bisa dikirim mulai "
-                f"{record.jatuh_tempo.strftime('%d-%m-%Y')}."
+        from services import contact_gate_service
+
+        blocked = contact_gate_service.daily_cap_reason(
+            db, record.unit.customer.id, moment, ops
+        )
+        if blocked:
+            raise ConflictError(blocked)
+        if contact_gate_service.blocked_by_pengerjaan(
+            db, record.unit.customer.id
+        ):
+            raise ConflictError(
+                "Masih ada unit pelanggan di bengkel. Kabari pengambilan lebih dulu."
             )
         info = settings_service.get_bengkel_info(db)
         message = receivable_wa_text(record, info)
@@ -323,13 +428,13 @@ def remind_receivable(
             record=record,
             now=moment,
         )
-        record.diingatkan_pada = moment
+        apply_piutang_reminder(record, ops, moment)
         from services import followup_service
 
         followup_service.sync_items(db, commit=False)
         followup_service.mark_piutang_followed(
             db,
-            record.unit.customer.id,
+            record.id,
             moment,
             operator.label,
             "Pengingat piutang dari daftar piutang.",
@@ -345,7 +450,7 @@ def remind_customer_receivables(
     operator: Operator,
     now: Optional[datetime] = None,
 ):
-    """Kirim satu pengingat untuk semua nota piutang pelanggan."""
+    """Satu pesan untuk nota pelanggan yang jatuh tempo, sesuai jadwal masing-masing."""
     moment = now or datetime.now()
     with db.begin():
         customer = db.get(Customer, customer_id)
@@ -375,36 +480,37 @@ def remind_customer_receivables(
         ]
         if not records:
             raise ConflictError("Tidak ada piutang berjalan.")
-        pending = [record for record in records if record.diingatkan_pada is None]
-        if not pending:
-            raise ConflictError(
-                "Pengingat pelanggan ini sudah dikirim. Ubah jatuh tempo per "
-                "nota untuk mengingatkan lagi."
-            )
         ops = settings_service.get_ops_settings(db)
+        eligible: List[ServiceRecord] = []
+        reasons: List[str] = []
+        for record in records:
+            ready, reason = piutang_reminder_state(record, ops, moment)
+            if ready:
+                eligible.append(record)
+            elif reason:
+                reasons.append(reason)
+        if not eligible:
+            raise ConflictError(
+                reasons[0] if reasons else "Belum ada nota yang jatuh tempo."
+            )
         if not settings_service.within_followup_window(ops, moment):
             raise ConflictError(settings_service.followup_window_message(ops))
-        today = moment.date()
-        eligible = [
-            record
-            for record in pending
-            if record.jatuh_tempo is None or record.jatuh_tempo <= today
-        ]
-        if not eligible:
-            earliest = min(
-                record.jatuh_tempo
-                for record in pending
-                if record.jatuh_tempo is not None
-            )
-            raise BusinessValidationError(
-                "Pengingat bisa dikirim mulai "
-                f"{earliest.strftime('%d-%m-%Y')}."
+        from services import contact_gate_service
+
+        blocked = contact_gate_service.daily_cap_reason(
+            db, customer.id, moment, ops
+        )
+        if blocked:
+            raise ConflictError(blocked)
+        if contact_gate_service.blocked_by_pengerjaan(db, customer.id):
+            raise ConflictError(
+                "Masih ada unit pelanggan di bengkel. Kabari pengambilan lebih dulu."
             )
         info = settings_service.get_bengkel_info(db)
-        message = receivable_wa_text_multi(records, info)
+        message = receivable_wa_text_multi(eligible, info)
         log = None
         link = ""
-        for record in records:
+        for record in eligible:
             log, link = append_attempt(
                 db,
                 customer,
@@ -415,17 +521,18 @@ def remind_customer_receivables(
                 record=record,
                 now=moment,
             )
-            record.diingatkan_pada = moment
+            apply_piutang_reminder(record, ops, moment)
         from services import followup_service
 
         followup_service.sync_items(db, commit=False)
-        followup_service.mark_piutang_followed(
-            db,
-            customer.id,
-            moment,
-            operator.label,
-            "Pengingat piutang pelanggan.",
-        )
+        for record in eligible:
+            followup_service.mark_piutang_followed(
+                db,
+                record.id,
+                moment,
+                operator.label,
+                "Pengingat piutang pelanggan.",
+            )
 
     db.refresh(log)
     return log, message, link

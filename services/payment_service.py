@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from database.models import (
     Customer,
+    FollowupItem,
     ServicePayment,
     ServiceRecord,
     VehicleOrUnit,
@@ -238,6 +239,9 @@ def reschedule_due_date(
         previous = record.jatuh_tempo
         record.jatuh_tempo = jatuh_tempo
         record.diingatkan_pada = None
+        record.piutang_reminder_ke = 0
+        record.piutang_next_at = None
+        record.piutang_perlu_telepon = False
         audit_service.record_event(
             db,
             operator,
@@ -288,14 +292,36 @@ def _unpaid_records(
 
 
 def receivables(
-    db: Session, today: Optional[date] = None, customer_id: Optional[int] = None
+    db: Session,
+    today: Optional[date] = None,
+    customer_id: Optional[int] = None,
+    now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     day = today or date.today()
+    moment = now or datetime.now()
     ops = settings_service.get_ops_settings(db)
-    window_open = settings_service.within_followup_window(ops)
+    window_open = settings_service.within_followup_window(ops, moment)
+    from services import contact_gate_service
+
+    gate_cache: Dict[int, bool] = {}
+    tunda_by_record: Dict[int, datetime] = {}
+    for row in db.scalars(
+        select(FollowupItem).where(
+            FollowupItem.jenis == "piutang",
+            FollowupItem.tunda_sampai.is_not(None),
+        )
+    ).all():
+        if row.tunda_sampai is not None and moment < row.tunda_sampai:
+            tunda_by_record[row.service_record_id] = row.tunda_sampai
     groups: Dict[int, Dict[str, Any]] = {}
     for record in _unpaid_records(db, day, customer_id):
         customer = record.unit.customer
+        if customer.id not in gate_cache:
+            gate_cache[customer.id] = bool(
+                contact_gate_service.daily_cap_reason(
+                    db, customer.id, moment, ops
+                )
+            ) or contact_gate_service.blocked_by_pengerjaan(db, customer.id)
         group = groups.get(customer.id)
         if group is None:
             group = {
@@ -314,8 +340,19 @@ def receivables(
         sisa = record_sisa(record)
         age = max((day - record.waktu_service.date()).days, 0)
         overdue = bool(record.jatuh_tempo and record.jatuh_tempo < day)
-        sudah_diingatkan = record.diingatkan_pada is not None
+        reminder_ke = int(record.piutang_reminder_ke or 0)
+        next_at = record.piutang_next_at
+        tunda_sampai = tunda_by_record.get(record.id)
+        perlu_telepon = bool(record.piutang_perlu_telepon or reminder_ke >= 3)
+        sudah_diingatkan = bool(
+            reminder_ke > 0 and next_at is not None and next_at > moment
+        )
         tempo_tiba = record.jatuh_tempo is None or record.jatuh_tempo <= day
+        cadence_ready = (
+            reminder_ke == 0 and tempo_tiba
+        ) or (
+            reminder_ke < 3 and next_at is not None and next_at <= moment
+        )
         group["jumlah_nota"] += 1
         group["total_sisa"] += sisa
         group["umur_tertua_hari"] = max(group["umur_tertua_hari"], age)
@@ -336,8 +373,16 @@ def receivables(
                 "jatuh_tempo": record.jatuh_tempo,
                 "diingatkan_pada": record.diingatkan_pada,
                 "sudah_diingatkan": sudah_diingatkan,
+                "pengingat_ke": reminder_ke,
+                "pengingat_berikutnya": next_at,
+                "perlu_telepon": perlu_telepon,
+                "tunda_sampai": tunda_sampai,
                 "bisa_diingatkan": bool(
-                    tempo_tiba and not sudah_diingatkan and window_open
+                    cadence_ready
+                    and not perlu_telepon
+                    and tunda_sampai is None
+                    and window_open
+                    and not gate_cache[customer.id]
                 ),
                 "umur_hari": age,
                 "umur_bucket": _age_bucket(age),

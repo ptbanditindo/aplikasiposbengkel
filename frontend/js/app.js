@@ -143,7 +143,7 @@
     return {
       start,
       end,
-      label: start.replace(':', '.') + '–' + end.replace(':', '.'),
+      label: start.replace(':', '.') + '-' + end.replace(':', '.'),
     };
   }
 
@@ -483,6 +483,14 @@
     $$('.view').forEach((section) => section.classList.add('hidden'));
     const target = $('#view-' + view);
     if (target) target.classList.remove('hidden');
+    const activeTab = $('.nav-tab.active');
+    if (activeTab && activeTab.scrollIntoView) {
+      activeTab.scrollIntoView({
+        block: 'nearest',
+        inline: 'center',
+        behavior: 'smooth',
+      });
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (view === 'dashboard') loadDashboard();
@@ -589,7 +597,7 @@
     const label = $('#summaryCustomer');
     if (!label) return;
     if (!state.selectedCustomer) {
-      label.textContent = 'Belum ada pelanggan dipilih';
+      label.textContent = 'Belum ada pelanggan dipilih.';
       return;
     }
     if (!state.selectedUnit) {
@@ -1158,7 +1166,7 @@
     const hint = $('#partStockHint');
     const intervalHint = $('#partIntervalHint');
     if (!stock) {
-      if (hint) hint.textContent = 'Stok gudang otomatis dipotong.';
+      if (hint) hint.textContent = 'Stok gudang berkurang otomatis.';
       $('#partInterval').value = '0';
       if (intervalHint) intervalHint.classList.add('hidden');
       return;
@@ -1256,7 +1264,7 @@
     $('#partHarga').value = '';
     $('#partModal').value = '';
     $('#partInterval').value = '0';
-    $('#partStockHint').textContent = 'Stok gudang otomatis dipotong.';
+    $('#partStockHint').textContent = 'Stok gudang berkurang otomatis.';
     $('#partIntervalHint').classList.add('hidden');
     renderItems();
   }
@@ -2247,16 +2255,23 @@
         toast('Pesan kendaraan selesai belum tersedia.', 'warning');
         return;
       }
+      const gate = await API.recordWaGate(id, 'pengerjaan');
+      if (!gate.allowed) {
+        toast(gate.alasan, 'warning', 7000);
+        return;
+      }
+      if (gate.peringatan) toast(gate.peringatan, 'warning', 7000);
       openWaPreview({
         judul: 'Kendaraan selesai · ' + receipt.no_nota,
         subtitle: 'Periksa pesan untuk ' + receipt.customer_nama + '.',
         nomor: receiptWaNumber(receipt),
         text: receipt.completion_wa_text,
         note: 'Membuka WhatsApp akan mencatat upaya pemberitahuan. Kasir tetap menekan kirim di WhatsApp.',
-        onOpen: async () => {
+        onOpen: async (text) => {
           await API.recordWhatsapp(receipt.id, {
             status: 'DIBUKA',
-            jenis: 'piutang',
+            jenis: 'pengerjaan',
+            pesan: text,
           });
           toast('Pemberitahuan kendaraan selesai tercatat.', 'success');
           if (state.detailRecord && state.detailRecord.id === receipt.id) {
@@ -2282,6 +2297,16 @@
     if (!waDigits(receiptWaNumber(receipt))) return false;
     const text = String(receipt.wa_text || '').trim();
     if (!text) return false;
+    try {
+      const gate = await API.recordWaGate(receipt.id, 'struk');
+      if (!gate.allowed) {
+        toast(gate.alasan, 'warning', 7000);
+        return false;
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+      return false;
+    }
     const link = waLink(receiptWaNumber(receipt), text);
     if (!link) return false;
 
@@ -4104,6 +4129,39 @@
     );
   }
 
+
+  function recordPengerjaanSection(receipt) {
+    if (!receipt || (receipt.status || 'NORMAL') === 'VOID') return '';
+    const marker = state.detailPengerjaan;
+    if (marker) {
+      const closed = marker.status_pengerjaan === 'SUDAH_DIAMBIL';
+      return (
+        '<div class="detail-section">' +
+        '<h4 class="detail-section-title">Pengerjaan unit</h4>' +
+        '<p class="detail-text">Status: <strong>' +
+        esc(PENGERJAAN_STATUS_LABELS[marker.status_pengerjaan] || marker.status_pengerjaan) +
+        '</strong> · ' +
+        intValue(marker.hari_di_bengkel, 0) +
+        ' hari di bengkel</p>' +
+        (closed
+          ? ''
+          : '<button type="button" class="btn btn-outline btn-sm" data-action="pengerjaan-status" data-id="' +
+            marker.id +
+            '">Ubah status pengerjaan</button>') +
+        '</div>'
+      );
+    }
+    return (
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Pengerjaan unit</h4>' +
+      '<p class="detail-text">Unit belum ditandai masih di bengkel.</p>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="record-mark-workshop" data-id="' +
+      receipt.id +
+      '">Tandai unit di bengkel</button>' +
+      '</div>'
+    );
+  }
+
   function renderRecordDetail(receipt) {
     const jobs = receipt.jobs || [];
     const parts = receipt.parts || [];
@@ -4240,6 +4298,7 @@
           esc(receipt.catatan_garansi) +
           '</p></div>'
         : '') +
+      recordPengerjaanSection(receipt) +
       paymentSectionHtml(receipt) +
       returnHistoryHtml(state.detailReturns);
   }
@@ -4251,11 +4310,13 @@
         API.receipt(id),
         API.returns(id),
         API.payments(id),
+        API.pengerjaanByRecord(id),
       ]);
       const receipt = results[0];
       state.detailRecord = receipt;
       state.detailReturns = results[1] || [];
       state.detailPayments = results[2] || [];
+      state.detailPengerjaan = results[3] || null;
       renderRecordDetail(receipt);
       openModal('#recordModal');
     } catch (err) {
@@ -4450,6 +4511,19 @@
       '<div class="detail-unit-list">' +
       unitsHtml +
       '</div></div>' +
+      '<div class="detail-section">' +
+      '<h4 class="detail-section-title">Preferensi pesan</h4>' +
+      '<label class="checkbox-row"><input type="checkbox" id="customerWaConsent"' +
+      (customer.wa_consent === false ? '' : ' checked') +
+      '> Pelanggan memberi izin WhatsApp</label>' +
+      '<label class="checkbox-row"><input type="checkbox" id="customerDnc"' +
+      (customer.do_not_contact ? ' checked' : '') +
+      '> Berhenti dihubungi (DNC)</label>' +
+      '<p class="tiny muted">DNC memblokir prospek, garansi, dan servis berkala. Piutang dan pengerjaan tetap bisa dikirim dengan peringatan.</p>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="customer-contact-save" data-id="' +
+      customer.id +
+      '">Simpan preferensi</button>' +
+      '</div>' +
       '<div class="detail-section" id="customerReceivableSection"></div>' +
       '<div class="detail-section" id="customerFollowupSection"></div>' +
       '<div class="detail-section" id="customerHistorySection"></div>';
@@ -4646,16 +4720,25 @@
   /* ------------------------------ Follow-up ------------------------------- */
   const FOLLOWUP_STATUS_LABELS = {
     BARU: 'Baru',
-    SUDAH_FOLLOWUP: 'Sudah follow up',
+    SUDAH_FOLLOWUP: 'Sudah dihubungi',
     JANJI_BAYAR: 'Janji bayar',
     MASIH_KENDALA: 'Masih kendala',
     SELESAI: 'Selesai',
     ARSIP: 'Arsip',
     AKAN_DATANG: 'Akan datang service',
     TIDAK_DATANG: 'Tidak akan datang service',
+    SUDAH_BAYAR: 'Sudah bayar',
   };
 
   const FOLLOWUP_JADWAL_JENIS = ['servis_berkala', 'garansi'];
+
+  const PENGERJAAN_STATUS_LABELS = {
+    SEDANG_DIKERJAKAN: 'Sedang dikerjakan',
+    MENUNGGU_SPAREPART: 'Menunggu sparepart',
+    MENUNGGU_PERSETUJUAN: 'Menunggu persetujuan',
+    SELESAI_SIAP_DIAMBIL: 'Selesai, siap diambil',
+    SUDAH_DIAMBIL: 'Sudah diambil',
+  };
 
   function followupStatusLabel(status) {
     return FOLLOWUP_STATUS_LABELS[status] || status || '-';
@@ -4668,8 +4751,9 @@
   };
 
   const FOLLOWUP_AKAN_DATANG_TITLES = {
-    garansi: 'Akan datang — Garansi',
-    servis_berkala: 'Akan datang — Servis berkala',
+    garansi: 'Akan datang: Garansi',
+    servis_berkala: 'Akan datang: Servis berkala',
+    prospek: 'Akan datang: Prospek',
   };
 
   function followupCardHtml(item, view) {
@@ -4680,11 +4764,13 @@
       item.status !== 'TIDAK_DATANG';
     const akanDatangView = view === 'AKAN_DATANG';
     const jadwal = FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0;
-    const remindTitle = isFollowupWindowOpen()
-      ? 'Follow up belum bisa dilakukan sekarang'
-      : 'Follow up hanya bisa dilakukan antara pukul ' +
-        followupWindow().label +
-        '.';
+    const remindTitle =
+      item.bisa_alasan ||
+      (isFollowupWindowOpen()
+        ? 'Follow up belum bisa dilakukan sekarang'
+        : 'Follow up hanya bisa dilakukan antara pukul ' +
+          followupWindow().label +
+          '.');
     const remindButton = item.bisa_followup
       ? '<button type="button" class="btn btn-primary btn-xs" data-action="followup-wa" data-id="' +
         item.id +
@@ -4739,6 +4825,19 @@
       '<span class="badge gray">' +
       esc(item.status_label) +
       '</span>' +
+      (item.perlu_telepon
+        ? '<span class="badge red">Perlu telepon</span>'
+        : '') +
+      (item.jenis === 'piutang' && item.pengingat_ke
+        ? '<span class="badge gray">Pengingat ' +
+          intValue(item.pengingat_ke, 0) +
+          'x</span>'
+        : '') +
+      (item.tunda_sampai
+        ? '<span class="badge gray">Ditunda s.d. ' +
+          esc(fmtDate(item.tunda_sampai)) +
+          '</span>'
+        : '') +
       '</div><div class="pengerjaan-actions">' +
       actions +
       '</div></div></div>'
@@ -4835,6 +4934,7 @@
       set('followupStatWarrantyEnding', daily.garansi_akan_habis || 0);
       set('followupStatAkanGaransi', daily.akan_datang_garansi || 0);
       set('followupStatAkanServis', daily.akan_datang_servis || 0);
+      set('followupStatAkanProspek', daily.akan_datang_prospek || 0);
     } catch (err) {
       toast('Follow up gagal dimuat. Coba muat ulang.', 'error', 6000);
     }
@@ -5212,7 +5312,7 @@
       note: 'Membuka WhatsApp akan mencatat upaya follow-up. Kasir tetap menekan kirim di WhatsApp.',
       onOpen: async (text) => {
         await API.followupItem(id, { status: 'DIBUKA', pesan: text });
-        toast('Upaya follow-up tercatat.', 'success');
+        toast('Follow-up tercatat.', 'success');
         if (detailOpen) await openFollowupDetail(id);
         if (listOpen) await loadFollowupList();
         refreshFollowupViews();
@@ -5304,12 +5404,20 @@
         return;
       }
     }
-    const link = waLink(detail.item.nomor_hp, '');
-    if (!link) {
-      toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
-      return;
+    const item = detail.item;
+    const jenis =
+      item.jenis === 'garansi'
+        ? 'garansi'
+        : item.jenis === 'piutang'
+          ? 'piutang'
+          : 'chat';
+    try {
+      const gate = await API.customerWaLink(item.customer_id, jenis);
+      if (gate.peringatan) toast(gate.peringatan, 'warning', 7000);
+      await openExternalLink(gate.link);
+    } catch (err) {
+      toast(err.message, 'warning', 7000);
     }
-    await openExternalLink(link);
   }
 
   function followupStatusShortcutHtml(item) {
@@ -5317,42 +5425,59 @@
     const akanDatang = item.status === 'AKAN_DATANG';
     const berkendala =
       item.jenis === 'prospek' && item.status === 'MASIH_KENDALA';
-    const locked = jadwal && !item.sudah_followup;
+    const piutang = item.jenis === 'piutang';
+    const locked =
+      (jadwal || item.jenis === 'prospek') && !item.sudah_followup;
+    const jadwalOptions =
+      '<option value="SELESAI">Datang</option>' +
+      '<option value="TIDAK_DATANG">Tidak datang</option>' +
+      '<option value="AKAN_DATANG">Akan datang service (wajib tanggal)</option>' +
+      '<option value="MASIH_KENDALA">Belum bisa dihubungi lagi</option>' +
+      '<option value="ARSIP">Tidak perlu lagi</option>';
     let options;
-    let dateField;
     if (berkendala) {
       options =
         '<option value="SELESAI">Sudah datang</option>' +
         '<option value="TIDAK_DATANG">Tidak datang</option>' +
         '<option value="AKAN_DATANG">Reschedule (wajib tanggal)</option>';
-      dateField =
-        '<label class="field"><span>Tanggal kunjungan (wajib bila reschedule)</span>' +
-        '<input type="date" class="input" id="followupShortcutTanggal" value="' +
-        esc(item.tanggal_service || '') +
-        '></label>';
     } else if (jadwal) {
       options = akanDatang
         ? '<option value="SELESAI">Datang</option>' +
           '<option value="TIDAK_DATANG">Tidak datang</option>' +
           '<option value="AKAN_DATANG">Reschedule (ubah tanggal)</option>'
-        : '<option value="AKAN_DATANG">Akan datang service</option>' +
-          '<option value="TIDAK_DATANG">Tidak akan datang service</option>';
-      dateField =
-        '<label class="field"><span>Tanggal service (wajib bila akan datang/reschedule)</span>' +
-        '<input type="date" class="input" id="followupShortcutTanggal" value="' +
-        esc(item.tanggal_service || '') +
-        '></label>';
+        : jadwalOptions;
+    } else if (piutang) {
+      options =
+        '<option value="JANJI_BAYAR">Janji bayar (wajib tanggal)</option>' +
+        '<option value="MASIH_KENDALA">Belum bisa</option>' +
+        '<option value="SUDAH_BAYAR">Sudah bayar (cek sisa)</option>' +
+        '<option value="SUDAH_FOLLOWUP">Tidak merespons</option>';
     } else {
       options =
         '<option value="BARU">Masih bagus</option>' +
-        '<option value="MASIH_KENDALA">Masih kendala</option>' +
-        '<option value="AKAN_DATANG">Akan datang service</option>';
-      dateField =
-        '<label class="field"><span>Tanggal kunjungan (wajib bila akan datang)</span>' +
-        '<input type="date" class="input" id="followupShortcutTanggal" value="' +
-        esc(item.tanggal_service || '') +
-        '"></label>';
+        '<option value="MASIH_KENDALA">Masih kendala / belum bisa</option>' +
+        '<option value="AKAN_DATANG">Akan datang service</option>' +
+        '<option value="ARSIP">Tidak perlu lagi</option>';
     }
+    const dateField =
+      '<label class="field"><span>Tanggal service/kunjungan</span>' +
+      '<input type="date" class="input" id="followupShortcutTanggal" value="' +
+      esc(item.tanggal_service || '') +
+      '"></label>';
+    const janjiField =
+      '<label class="field"><span>Tanggal janji bayar</span>' +
+      '<input type="date" class="input" id="followupShortcutJanji" value="' +
+      esc(item.janji_bayar || '') +
+      '"></label>';
+    const ops = (state.config && state.config.ops) || {};
+    const tundaShort = intValue(ops.belum_bisa_hari, 14);
+    const tundaLong = intValue(ops.belum_bisa_panjang_hari, 28);
+    const tundaField =
+      '<label class="field"><span>Hubungi lagi setelah</span>' +
+      '<select class="input" id="followupShortcutTunda">' +
+      '<option value="' + tundaShort + '">2 minggu (' + tundaShort + ' hari)</option>' +
+      '<option value="' + tundaLong + '">4 minggu (' + tundaLong + ' hari)</option>' +
+      '</select></label>';
     return (
       '<div class="followup-form">' +
       '<div class="form-grid">' +
@@ -5362,6 +5487,8 @@
       options +
       '</select></label>' +
       dateField +
+      (piutang ? janjiField : '') +
+      tundaField +
       '</div>' +
       '<label class="field"><span>Catatan</span>' +
       '<input type="text" class="input" id="followupShortcutAlasan" maxlength="500" placeholder="Opsional"></label>' +
@@ -5390,7 +5517,9 @@
     const save = $('#followupStatusSave');
     if (save) {
       save.disabled =
-        FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0 && !item.sudah_followup;
+        (FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0 ||
+          item.jenis === 'prospek') &&
+        !item.sudah_followup;
     }
     openModal('#followupStatusModal');
   }
@@ -5417,6 +5546,20 @@
       }
       payload.tanggal_service = tanggal;
     }
+    if (target === 'JANJI_BAYAR') {
+      const janjiEl = $('#followupShortcutJanji');
+      const janji = janjiEl ? janjiEl.value : '';
+      if (!janji) {
+        toast('Isi tanggal janji bayar.', 'warning');
+        if (janjiEl) janjiEl.focus();
+        return;
+      }
+      payload.janji_bayar = janji;
+    }
+    if (target === 'MASIH_KENDALA') {
+      const tundaEl = $('#followupShortcutTunda');
+      payload.tunda_hari = parseInt(tundaEl ? tundaEl.value : '14', 10) || 14;
+    }
     const reasonEl = $('#followupShortcutAlasan');
     const reason = reasonEl ? reasonEl.value.trim() : '';
     if (reason) {
@@ -5425,6 +5568,8 @@
       payload.alasan = 'Pelanggan tidak akan datang.';
     } else if (target === 'SELESAI') {
       payload.alasan = 'Pelanggan datang.';
+    } else if (target === 'ARSIP') {
+      payload.alasan = 'Tidak perlu lagi.';
     }
     const berkendala =
       item.jenis === 'prospek' && item.status === 'MASIH_KENDALA';
@@ -5436,15 +5581,21 @@
           : target === 'AKAN_DATANG'
             ? 'Reschedule'
             : target
-      : item.jenis === 'prospek'
-        ? target === 'BARU'
-          ? 'Masih bagus'
-          : target === 'MASIH_KENDALA'
-            ? 'Masih kendala'
-            : target === 'AKAN_DATANG'
-              ? 'Akan datang service'
-              : FOLLOWUP_STATUS_LABELS[target] || target
-        : FOLLOWUP_STATUS_LABELS[target] || target;
+      : target === 'MASIH_KENDALA'
+        ? item.jenis === 'piutang'
+          ? 'Belum bisa'
+          : 'Masih kendala / belum bisa'
+        : target === 'JANJI_BAYAR'
+          ? 'Janji bayar'
+          : item.jenis === 'prospek'
+            ? target === 'BARU'
+              ? 'Masih bagus'
+              : target === 'AKAN_DATANG'
+                ? 'Akan datang service'
+                : target === 'ARSIP'
+                  ? 'Tidak perlu lagi'
+                  : FOLLOWUP_STATUS_LABELS[target] || target
+            : FOLLOWUP_STATUS_LABELS[target] || target;
     if (
       !berkendala &&
       item.jenis === 'prospek' &&
@@ -5481,6 +5632,27 @@
     }
   }
 
+  async function saveCustomerContact(customerId) {
+    const consent = $('#customerWaConsent');
+    const dnc = $('#customerDnc');
+    if (!consent || !dnc) return;
+    try {
+      const updated = await API.updateCustomerContact(customerId, {
+        wa_consent: Boolean(consent.checked),
+        do_not_contact: Boolean(dnc.checked),
+      });
+      if (state.detailCustomer && state.detailCustomer.id === updated.id) {
+        Object.assign(state.detailCustomer, updated);
+      }
+      const row = (state.customers || []).find((item) => item.id === updated.id);
+      if (row) Object.assign(row, updated);
+      toast('Preferensi pesan disimpan.', 'success');
+      refreshFollowupViews();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
   /* ------------------------------- Piutang -------------------------------- */
   function openReceivables(customerId) {
     state.receivablesCustomerId = customerId || null;
@@ -5514,6 +5686,12 @@
   }
 
   function receivableCustomerRemindButton(customer, records) {
+    const perluTelepon = records.some((record) => record.perlu_telepon);
+    if (perluTelepon) {
+      return (
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="Pengingat piutang sudah mencapai batas. Hubungi pelanggan lewat telepon.">Perlu telepon</button>'
+      );
+    }
     const allReminded = records.every((record) => record.sudah_diingatkan);
     if (allReminded) {
       const latest = records.reduce(
@@ -5533,6 +5711,10 @@
       (record) => !record.sudah_diingatkan && record.bisa_diingatkan
     );
     if (!eligible) {
+      const nextTimes = records
+        .filter((record) => record.pengingat_berikutnya)
+        .map((record) => record.pengingat_berikutnya)
+        .sort();
       const pending = records
         .filter((record) => !record.sudah_diingatkan && record.jatuh_tempo)
         .map((record) => record.jatuh_tempo)
@@ -5547,9 +5729,13 @@
           ? 'Pengingat hanya bisa dikirim antara pukul ' +
             followupWindow().label +
             '.'
-          : pending.length
-            ? 'Pengingat bisa dikirim mulai ' + fmtDate(pending[0]) + '.'
-            : 'Pengingat belum bisa dikirim.';
+          : nextTimes.length
+            ? 'Pengingat berikutnya bisa dikirim setelah ' +
+              fmtDateTime(nextTimes[0]) +
+              '.'
+            : pending.length
+              ? 'Pengingat bisa dikirim mulai ' + fmtDate(pending[0]) + '.'
+              : 'Pengingat belum bisa dikirim.';
       return (
         '<button type="button" class="btn btn-outline btn-xs" disabled title="' +
         esc(title) +
@@ -5564,11 +5750,23 @@
   }
 
   function receivableRemindButton(record) {
+    if (record.perlu_telepon) {
+      return (
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="Pengingat piutang sudah mencapai batas. Hubungi pelanggan lewat telepon.">Perlu telepon</button>'
+      );
+    }
     if (record.sudah_diingatkan) {
+      const next = record.pengingat_berikutnya
+        ? ' Pengingat berikutnya setelah ' +
+          fmtDateTime(record.pengingat_berikutnya) +
+          '.'
+        : '';
       return (
         '<button type="button" class="btn btn-outline btn-xs" disabled title="Sudah diingatkan ' +
         esc(fmtDateTime(record.diingatkan_pada)) +
-        '. Ubah jatuh tempo untuk mengingatkan lagi.">Diingatkan</button>'
+        '.' +
+        esc(next) +
+        '">Diingatkan</button>'
       );
     }
     if (record.bisa_diingatkan === false) {
@@ -5579,7 +5777,15 @@
           ? 'Pengingat hanya bisa dikirim antara pukul ' +
             followupWindow().label +
             '.'
-          : 'Pengingat bisa dikirim mulai ' + fmtDate(record.jatuh_tempo) + '.';
+          : record.tunda_sampai
+            ? 'Ditunda sampai ' + fmtDateTime(record.tunda_sampai) + '.'
+            : record.pengingat_berikutnya
+              ? 'Pengingat berikutnya bisa dikirim setelah ' +
+                fmtDateTime(record.pengingat_berikutnya) +
+                '.'
+              : 'Pengingat bisa dikirim mulai ' +
+                fmtDate(record.jatuh_tempo) +
+                '.';
       return (
         '<button type="button" class="btn btn-outline btn-xs" disabled title="' +
         esc(title) +
@@ -5607,6 +5813,14 @@
   }
 
   function receivableDueCell(record) {
+    const cadence = record.perlu_telepon
+      ? 'Perlu telepon'
+      : record.pengingat_ke
+        ? 'Pengingat ' + intValue(record.pengingat_ke, 0) + 'x' +
+          (record.pengingat_berikutnya
+            ? ' · berikut ' + fmtDateTime(record.pengingat_berikutnya)
+            : '')
+        : '';
     return (
       '<div class="receivable-due"><span class="receivable-due-date">' +
       esc(record.jatuh_tempo ? fmtDate(record.jatuh_tempo) : 'Belum diatur') +
@@ -5614,7 +5828,9 @@
       record.id +
       '">' +
       (record.jatuh_tempo ? 'Ubah' : 'Atur') +
-      '</button></div>'
+      '</button>' +
+      (cadence ? '<span class="cell-sub">' + esc(cadence) + '</span>' : '') +
+      '</div>'
     );
   }
 
@@ -5754,7 +5970,7 @@
       const result = await API.remindReceivable(recordId);
       const opened = await openExternalLink(result.link);
       if (opened) {
-        toast('Pengingat dibuka di WhatsApp. Tekan kirim di WhatsApp.', 'success');
+        toast('Pengingat dibuka di WhatsApp. Tekan kirim untuk mengirim pesan.', 'success');
       }
       await loadReceivables();
     } catch (err) {
@@ -5776,7 +5992,7 @@
       const opened = await openExternalLink(result.link);
       if (opened) {
         toast(
-          'Pengingat dibuka di WhatsApp. Tekan kirim di WhatsApp.',
+          'Pengingat dibuka di WhatsApp. Tekan kirim untuk mengirim pesan.',
           'success'
         );
       }
@@ -5789,17 +6005,13 @@
   }
 
   async function chatReceivableCustomer(customerId) {
-    const data = state.receivables;
-    const customer = data
-      ? (data.items || []).find((item) => item.customer_id === customerId)
-      : null;
-    if (!customer) return;
-    const link = waLink(customer.nomor_hp);
-    if (!link) {
-      toast('Nomor WhatsApp pelanggan belum valid.', 'warning');
-      return;
+    try {
+      const gate = await API.customerWaLink(customerId, 'piutang');
+      if (gate.peringatan) toast(gate.peringatan, 'warning', 7000);
+      await openExternalLink(gate.link);
+    } catch (err) {
+      toast(err.message, 'warning', 7000);
     }
-    await openExternalLink(link);
   }
 
   function findReceivableRecord(recordId) {
@@ -5905,6 +6117,16 @@
           : '<button type="button" class="btn btn-primary btn-xs" data-action="record-completion" data-id="' +
             item.record_id +
             '">Kabari WA</button>';
+        const statusBadge =
+          '<span class="badge gray">' +
+          esc(item.status_label || PENGERJAAN_STATUS_LABELS[item.status_pengerjaan] || item.status_pengerjaan) +
+          '</span>';
+        const ageLabel =
+          '<span class="cell-sub">' +
+          intValue(item.hari_di_bengkel, 0) +
+          ' hari di bengkel' +
+          (item.terlambat ? ' · terlambat' : '') +
+          '</span>';
         return (
           '<div class="receivable-group is-clickable" role="button" tabindex="0" title="Buka nota" data-action="record-detail" data-id="' +
           item.record_id +
@@ -5921,7 +6143,10 @@
           esc(item.no_nota) +
           '</strong><span class="cell-sub">' +
           esc(fmtDate(item.waktu_service)) +
-          '</span></div><div class="pengerjaan-actions">' +
+          '</span>' + statusBadge + ageLabel + '</div><div class="pengerjaan-actions">' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="pengerjaan-status" data-id="' +
+          item.id +
+          '">Status</button>' +
           waButton +
           '<button type="button" class="btn btn-outline btn-xs" data-action="pengerjaan-taken" data-id="' +
           item.id +
@@ -5971,6 +6196,101 @@
       loadDashboard();
       if (!$('#view-followup').classList.contains('hidden')) {
         loadFollowupPage();
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+
+  async function openPengerjaanStatus(id) {
+    try {
+      const detail = await API.pengerjaanDetail(id);
+      const item = detail.item;
+      state.pengerjaanStatus = detail;
+      $('#pengerjaanStatusTitle').textContent = item.customer_nama;
+      $('#pengerjaanStatusSubtitle').textContent =
+        item.no_nota + ' · ' + (item.unit_deskripsi || '-');
+      const select = $('#pengerjaanStatusSelect');
+      select.value = item.status_pengerjaan;
+      $('#pengerjaanJanjiAmbil').value = item.janji_ambil || '';
+      $('#pengerjaanStatusCatatan').value = '';
+      const events = detail.events || [];
+      $('#pengerjaanStatusHistory').innerHTML = events.length
+        ? '<h4 class="detail-section-title">Riwayat status</h4>' +
+          '<div class="followup-event-list">' +
+          events
+            .map(
+              (event) =>
+                '<div class="followup-event"><div><strong>' +
+                esc(PENGERJAAN_STATUS_LABELS[event.from_status] || event.from_status || '-') +
+                ' → ' +
+                esc(PENGERJAAN_STATUS_LABELS[event.to_status] || event.to_status) +
+                '</strong>' +
+                (event.catatan ? '<div>' + esc(event.catatan) + '</div>' : '') +
+                '<small>' +
+                esc(fmtDateTime(event.created_at)) +
+                ' · ' +
+                esc(event.operator || '-') +
+                '</small></div></div>'
+            )
+            .join('') +
+          '</div>'
+        : '';
+      openModal('#pengerjaanStatusModal');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function submitPengerjaanStatus() {
+    const detail = state.pengerjaanStatus;
+    if (!detail) return;
+    const item = detail.item;
+    const target = $('#pengerjaanStatusSelect').value;
+    const janji = $('#pengerjaanJanjiAmbil').value || null;
+    const catatan = $('#pengerjaanStatusCatatan').value.trim();
+    const button = $('#pengerjaanStatusSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const result = await API.pengerjaanStatus(item.id, {
+        status: target,
+        janji_ambil: janji,
+        catatan: catatan || null,
+      });
+      closeModal('#pengerjaanStatusModal');
+      state.pengerjaanStatus = null;
+      toast('Status pengerjaan diperbarui.', 'success');
+      await loadPengerjaan();
+      loadDashboard();
+      if (!$('#view-followup').classList.contains('hidden')) {
+        loadFollowupPage();
+      }
+      if (
+        state.detailRecord &&
+        state.detailRecord.id === item.record_id &&
+        !$('#recordModal').classList.contains('hidden')
+      ) {
+        await openRecordDetail(item.record_id);
+      }
+      if (target !== item.status_pengerjaan && result.wa_text) {
+        openWaPreview({
+          judul: 'Status pengerjaan · ' + item.no_nota,
+          subtitle: 'Periksa pesan status sebelum dibuka.',
+          nomor: item.nomor_hp,
+          text: result.wa_text,
+          note: 'Membuka WhatsApp akan mencatat pesan pengerjaan. Kasir tetap menekan kirim.',
+          onOpen: async (text) => {
+            await API.recordWhatsapp(item.record_id, {
+              status: 'DIBUKA',
+              jenis: 'pengerjaan',
+              pesan: text,
+            });
+            await loadPengerjaan();
+          },
+        });
       }
     } catch (err) {
       toast(err.message, 'error', 7000);
@@ -6068,6 +6388,10 @@
       );
       return;
     }
+    if (action === 'customer-contact-save') {
+      await saveCustomerContact(Number(target.dataset.id));
+      return;
+    }
     if (action === 'open-receivables') {
       openReceivables(null);
       return;
@@ -6129,10 +6453,32 @@
       return;
     }
 
+    if (action === 'pengerjaan-status-save') {
+      await submitPengerjaanStatus();
+      return;
+    }
+
     if (!id) return;
 
     if (action === 'pengerjaan-taken') {
       await markPengerjaanTaken(id);
+      return;
+    }
+
+    if (action === 'pengerjaan-status') {
+      await openPengerjaanStatus(id);
+      return;
+    }
+
+    if (action === 'record-mark-workshop') {
+      try {
+        await API.pengerjaanCreate(id);
+        toast('Unit ditandai masih di bengkel.', 'success');
+        await openRecordDetail(id);
+        await loadPengerjaan();
+      } catch (err) {
+        toast(err.message, 'error', 6000);
+      }
       return;
     }
 
@@ -6859,10 +7205,21 @@
 
   const OPS_INT_FIELDS = [
     { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
-    { id: 'opsProspekHari', key: 'prospek_hari', low: 1, high: 365, label: 'Pengingat prospek' },
+    { id: 'opsProspek1', key: 'prospek_hari_1', low: 7, high: 180, label: 'Prospek tahap 1' },
+    { id: 'opsProspek2', key: 'prospek_hari_2', low: 30, high: 365, label: 'Prospek tahap 2' },
+    { id: 'opsProspek3', key: 'prospek_hari_3', low: 60, high: 540, label: 'Prospek tahap 3' },
     { id: 'opsCooldownHari', key: 'cooldown_hari', low: 0, high: 90, label: 'Jeda follow-up' },
     { id: 'opsGaransiHari', key: 'garansi_akan_habis_hari', low: 1, high: 90, label: 'Pengingat garansi' },
+    { id: 'opsGaransiArsip', key: 'garansi_arsip_hari', low: 1, high: 90, label: 'Arsip garansi' },
     { id: 'opsServisHari', key: 'servis_berkala_awal_hari', low: 1, high: 90, label: 'Pengingat servis berkala' },
+    { id: 'opsPiutangJeda', key: 'piutang_jeda_hari', low: 1, high: 90, label: 'Jeda pengingat piutang' },
+    { id: 'opsPiutangMaks', key: 'piutang_maks_pengingat', low: 1, high: 12, label: 'Maksimal pengingat piutang' },
+    { id: 'opsBelumBisa', key: 'belum_bisa_hari', low: 1, high: 60, label: 'Belum bisa dihubungi lagi' },
+    { id: 'opsBelumBisaPanjang', key: 'belum_bisa_panjang_hari', low: 7, high: 120, label: 'Belum bisa, pilihan panjang' },
+    { id: 'opsMaksHari', key: 'maks_pesan_hari', low: 1, high: 5, label: 'Batas pesan per hari' },
+    { id: 'opsMaksBulan', key: 'maks_pesan_bulan', low: 1, high: 20, label: 'Batas pesan per bulan' },
+    { id: 'opsJedaProspek', key: 'jeda_prospek_servis_hari', low: 1, high: 90, label: 'Jeda prospek dan servis' },
+    { id: 'opsMaksTidakRespon', key: 'maks_tidak_merespons', low: 1, high: 10, label: 'Batas tidak merespons' },
   ];
 
   function fillOpsForm() {
@@ -7571,6 +7928,12 @@
     );
     $('#pengerjaanDismiss').addEventListener('click', () =>
       closeModal('#pengerjaanModal')
+    );
+    $('#pengerjaanStatusClose').addEventListener('click', () =>
+      closeModal('#pengerjaanStatusModal')
+    );
+    $('#pengerjaanStatusDismiss').addEventListener('click', () =>
+      closeModal('#pengerjaanStatusModal')
     );
 
     $('#receiptClose').addEventListener('click', () => closeModal('#receiptModal'));

@@ -229,7 +229,7 @@ def test_piutang_dikelompokkan_per_pelanggan_dan_kartu_sama(
     assert report["piutang_total"] == receivables["total_sisa"]
 
 
-def test_ingatkan_pelanggan_multi_nota_sekaligus_dan_mengunci_semua(
+def test_ingatkan_hanya_nota_jatuh_tempo_dan_mengunci_nota_itu(
     client, create_customer, create_unit
 ):
     customer = create_customer(nama="Multi Piutang", nomor_hp="081200000222")
@@ -257,15 +257,20 @@ def test_ingatkan_pelanggan_multi_nota_sekaligus_dan_mengunci_semua(
     assert sent.status_code == 201, sent.text
     body = sent.json()
     assert first_record["no_nota"] in body["wa_text"]
-    assert second_record["no_nota"] in body["wa_text"]
+    assert second_record["no_nota"] not in body["wa_text"]
     assert "Total sisa" in body["wa_text"]
     assert body["link"].startswith("https://wa.me/6281200000222?text=")
 
     receivables = client.get("/api/receivables").json()
     assert receivables["jumlah_nota"] == 2
-    for record in receivables["items"][0]["records"]:
-        assert record["sudah_diingatkan"] is True
-        assert record["bisa_diingatkan"] is False
+    rows = {
+        record["id"]: record for record in receivables["items"][0]["records"]
+    }
+    assert rows[first_record["id"]]["sudah_diingatkan"] is True
+    assert rows[first_record["id"]]["pengingat_ke"] == 1
+    assert rows[first_record["id"]]["bisa_diingatkan"] is False
+    assert rows[second_record["id"]]["sudah_diingatkan"] is False
+    assert rows[second_record["id"]]["pengingat_ke"] == 0
 
     again = client.post(f"/api/customers/{customer['id']}/remind")
     assert again.status_code == 409
@@ -288,7 +293,9 @@ def test_ingatkan_pelanggan_multi_nota_sekaligus_dan_mengunci_semua(
             )
             .all()
         )
-        assert all(row.diingatkan_pada is not None for row in rows)
+        by_id = {row.id: row for row in rows}
+        assert by_id[first_record["id"]].diingatkan_pada is not None
+        assert by_id[second_record["id"]].diingatkan_pada is None
 
 
 def test_laporan_memisahkan_nilai_nota_dan_uang_diterima(

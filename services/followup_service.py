@@ -18,11 +18,13 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from database.models import (
     FollowupEvent,
     FollowupItem,
+    PengerjaanNota,
     ServiceRecord,
     VehicleOrUnit,
     WhatsAppLog,
 )
 from services import payment_service, settings_service, whatsapp_service
+from services import contact_gate_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
@@ -48,6 +50,7 @@ STATUS_SELESAI = "SELESAI"
 STATUS_ARSIP = "ARSIP"
 STATUS_AKAN_DATANG = "AKAN_DATANG"
 STATUS_TIDAK_DATANG = "TIDAK_DATANG"
+STATUS_SUDAH_BAYAR = "SUDAH_BAYAR"
 STATUS_VALUES = {
     STATUS_BARU,
     STATUS_SUDAH,
@@ -57,16 +60,18 @@ STATUS_VALUES = {
     STATUS_ARSIP,
     STATUS_AKAN_DATANG,
     STATUS_TIDAK_DATANG,
+    STATUS_SUDAH_BAYAR,
 }
 STATUS_LABELS = {
     STATUS_BARU: "Baru",
-    STATUS_SUDAH: "Sudah follow up",
+    STATUS_SUDAH: "Sudah dihubungi",
     STATUS_JANJI: "Janji bayar",
     STATUS_KENDALA: "Masih kendala",
     STATUS_SELESAI: "Selesai",
     STATUS_ARSIP: "Arsip",
     STATUS_AKAN_DATANG: "Akan datang service",
     STATUS_TIDAK_DATANG: "Tidak akan datang service",
+    STATUS_SUDAH_BAYAR: "Sudah bayar",
 }
 OPEN_STATUSES = {
     STATUS_BARU,
@@ -78,6 +83,7 @@ OPEN_STATUSES = {
 JADWAL_JENIS = {JENIS_SERVIS, JENIS_GARANSI}
 
 SYSTEM_OPERATOR = "Sistem"
+AUTO_ARCHIVE_REASON = "Sumber pengingat sudah tidak aktif."
 WA_JENIS = {
     JENIS_PROSPEK: whatsapp_service.JENIS_FOLLOWUP,
     JENIS_SERVIS: whatsapp_service.JENIS_FOLLOWUP,
@@ -150,207 +156,369 @@ def _record_source(
 
 def _collect_sources(
     db: Session, today: date, ops: Dict[str, Any]
-) -> Dict[Tuple[str, int], Dict[str, Any]]:
-    """Hitung pengingat aktif dari nota; satu sumber per pelanggan/jenis."""
+) -> Dict[str, Dict[str, Any]]:
+    """Hitung sumber follow-up per unit, baris servis, dan nota piutang."""
     records = _load_records(db)
-    by_customer: Dict[int, List[ServiceRecord]] = {}
+    pengerjaan_rows = list(db.scalars(select(PengerjaanNota)).all())
+    open_record_ids = {
+        row.service_record_id
+        for row in pengerjaan_rows
+        if row.diambil_pada is None
+    }
+    taken_by_unit: Dict[int, datetime] = {}
+    for row in pengerjaan_rows:
+        if row.diambil_pada is None or row.unit_id is None:
+            continue
+        current = taken_by_unit.get(row.unit_id)
+        if current is None or row.diambil_pada > current:
+            taken_by_unit[row.unit_id] = row.diambil_pada
+
+    def reference_day(record: ServiceRecord) -> date:
+        taken = taken_by_unit.get(record.unit_id)
+        return taken.date() if taken is not None else record.waktu_service.date()
+
+    by_unit: Dict[int, List[ServiceRecord]] = {}
     for record in records:
-        by_customer.setdefault(record.unit.customer_id, []).append(record)
+        if record.id in open_record_ids:
+            continue
+        by_unit.setdefault(record.unit_id, []).append(record)
 
-    horizon_garansi = today + timedelta(days=int(ops["garansi_akan_habis_hari"]))
+    existing_rows = list(
+        db.scalars(
+            select(FollowupItem).where(FollowupItem.status != STATUS_ARSIP)
+        ).all()
+    )
+    existing_by_key = {
+        row.item_key: row for row in existing_rows if row.item_key
+    }
+
     horizon_servis = today + timedelta(days=int(ops["servis_berkala_awal_hari"]))
-    prospek_hari = int(ops["prospek_hari"])
 
-    sources: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    def add_source(
+        key: str,
+        jenis: str,
+        record: ServiceRecord,
+        due: date,
+        judul: str,
+        rincian: List[Dict[str, Any]],
+        **extra: Any,
+    ) -> None:
+        sources[key] = {
+            "jenis": jenis,
+            "item_key": key,
+            "customer": record.unit.customer,
+            "unit": record.unit,
+            "record": record,
+            "jatuh_tempo": due,
+            "judul": judul,
+            "rincian": rincian,
+            **extra,
+        }
 
-    for customer_id, customer_records in by_customer.items():
-        latest = customer_records[0]
+    sources: Dict[str, Dict[str, Any]] = {}
 
-        # --- Prospek pasca servis ---
-        latest_day = latest.waktu_service.date()
-        age = (today - latest_day).days
-        if age >= prospek_hari and is_valid_whatsapp(latest.unit.customer.nomor_hp):
-            sources[(JENIS_PROSPEK, customer_id)] = _record_source(
-                JENIS_PROSPEK,
-                latest,
-                latest_day + timedelta(days=prospek_hari),
-                f"Follow up pasca servis {describe_unit(latest.unit)}",
-                [
-                    {
-                        "no_nota": latest.no_nota,
-                        "tanggal_servis": latest_day,
-                        "umur_hari": age,
-                        "pekerjaan": _label_acuan(latest),
-                        "garansi_sampai": latest.garansi_sampai
-                        if latest.bergaransi
-                        else None,
-                    }
-                ],
+    for unit_id, unit_records in by_unit.items():
+        if not unit_records:
+            continue
+        latest = unit_records[0]
+        reference = reference_day(latest)
+        lifecycle_key = "lifecycle:unit:" + str(unit_id)
+        existing = existing_by_key.get(lifecycle_key)
+        stage = (
+            int(existing.stage)
+            if existing is not None
+            and existing.jenis in {JENIS_PROSPEK, JENIS_GARANSI}
+            else 0
+        )
+
+        warranty_record = next(
+            (
+                record
+                for record in unit_records
+                if record.bergaransi
+                and record.garansi_sampai is not None
+                and record.garansi_sampai
+                + timedelta(days=int(ops["garansi_arsip_hari"]))
+                >= today
+                and not _fully_returned(record)
+                and record.status_klaim != "Sudah claim"
+            ),
+            None,
+        )
+
+        lifecycle_source = None
+        no_reminder = False
+        if warranty_record is not None:
+            expiry = warranty_record.garansi_sampai
+            h7 = expiry - timedelta(days=int(ops["garansi_akan_habis_hari"]))
+            archive_after = expiry + timedelta(
+                days=int(ops["garansi_arsip_hari"])
+            )
+            if h7 <= today <= archive_after:
+                answered = (
+                    existing is not None
+                    and existing.followup_terakhir is not None
+                    and existing.followup_terakhir.date() >= h7
+                )
+                promised = (
+                    existing is not None
+                    and existing.status == STATUS_AKAN_DATANG
+                    and existing.tanggal_service is not None
+                    and existing.tanggal_service <= expiry
+                )
+                no_reminder = today >= expiry and (answered or promised)
+                if today >= expiry and not no_reminder:
+                    due = expiry
+                    stage = max(stage, 2)
+                else:
+                    due = h7 if today < expiry else expiry
+                    stage = max(stage, 1)
+                lifecycle_source = (
+                    JENIS_GARANSI,
+                    warranty_record,
+                    due,
+                    "Garansi "
+                    + describe_unit(warranty_record.unit)
+                    + " berakhir "
+                    + _format_date(expiry),
+                    [
+                        {
+                            "no_nota": warranty_record.no_nota,
+                            "tanggal_servis": warranty_record.waktu_service.date(),
+                            "pekerjaan": _label_acuan(warranty_record),
+                            "garansi_sampai": expiry,
+                            "sisa_hari": (expiry - today).days,
+                        }
+                    ],
+                )
+            elif today < h7:
+                milestone_days = (
+                    int(ops["prospek_hari_1"]),
+                    int(ops["prospek_hari_2"]),
+                    int(ops["prospek_hari_3"]),
+                )
+                if reference + timedelta(days=milestone_days[0]) < h7:
+                    milestones = [
+                        days
+                        for days in milestone_days
+                        if reference + timedelta(days=days) < h7
+                    ]
+                    if milestones and stage < len(milestones):
+                        due = reference + timedelta(days=milestones[stage])
+                        lifecycle_source = (
+                            JENIS_PROSPEK,
+                            latest,
+                            due,
+                            "Follow up pasca servis " + describe_unit(latest.unit),
+                            [
+                                {
+                                    "no_nota": latest.no_nota,
+                                    "tanggal_servis": reference,
+                                    "umur_hari": max((today - reference).days, 0),
+                                    "pekerjaan": _label_acuan(latest),
+                                    "garansi_sampai": expiry,
+                                }
+                            ],
+                        )
+        else:
+            milestones = [int(ops["prospek_hari_1"]), int(ops["prospek_hari_3"])]
+            if stage < len(milestones):
+                due = reference + timedelta(days=milestones[stage])
+                lifecycle_source = (
+                    JENIS_PROSPEK,
+                    latest,
+                    due,
+                    "Follow up pasca servis " + describe_unit(latest.unit),
+                    [
+                        {
+                            "no_nota": latest.no_nota,
+                            "tanggal_servis": reference,
+                            "umur_hari": max((today - reference).days, 0),
+                            "pekerjaan": _label_acuan(latest),
+                            "garansi_sampai": None,
+                        }
+                    ],
+                )
+
+        if lifecycle_source is not None:
+            jenis, record, due, judul, rincian = lifecycle_source
+            add_source(
+                lifecycle_key,
+                jenis,
+                record,
+                due,
+                judul,
+                rincian,
+                stage=stage,
+                item_kind="lifecycle",
+                reference_date=reference,
+                no_reminder=no_reminder,
             )
 
-        # --- Garansi akan habis ---
-        garansi_record: Optional[ServiceRecord] = None
-        for record in customer_records:
-            if _fully_returned(record):
-                continue
-            if not record.bergaransi or record.garansi_sampai is None:
-                continue
-            if record.status_klaim == "Sudah claim":
-                continue
-            if today <= record.garansi_sampai <= horizon_garansi:
-                if (
-                    garansi_record is None
-                    or record.garansi_sampai < garansi_record.garansi_sampai
-                ):
-                    garansi_record = record
-        if garansi_record is not None:
-            sources[(JENIS_GARANSI, customer_id)] = _record_source(
-                JENIS_GARANSI,
-                garansi_record,
-                garansi_record.garansi_sampai,
-                f"Garansi {describe_unit(garansi_record.unit)} berakhir "
-                f"{_format_date(garansi_record.garansi_sampai)}",
-                [
-                    {
-                        "no_nota": garansi_record.no_nota,
-                        "tanggal_servis": garansi_record.waktu_service.date(),
-                        "pekerjaan": _label_acuan(garansi_record),
-                        "garansi_sampai": garansi_record.garansi_sampai,
-                        "sisa_hari": (garansi_record.garansi_sampai - today).days,
-                    }
-                ],
-            )
-
-        # --- Servis berkala dari baris jasa dan sparepart nota ---
         seen_rows: set = set()
-        servis_rows: List[Dict[str, Any]] = []
-        for record in customer_records:
+        servis_rows: Dict[str, Dict[str, Any]] = {}
+        for record in unit_records:
             if _fully_returned(record):
                 continue
+            servis_day = reference_day(record)
             for job in record.jobs:
                 interval = int(getattr(job, "interval_servis_bulan", 0) or 0)
                 if interval <= 0:
                     continue
-                key = (
-                    "jasa",
+                identifier = (
                     job.harga_jasa_id
                     if job.harga_jasa_id is not None
-                    else (job.deskripsi or "").strip().lower(),
+                    else (job.deskripsi or "").strip().lower()
                 )
+                key = ("servis:" + str(unit_id) + ":jasa:" + str(identifier))[:180]
                 if key in seen_rows:
                     continue
                 seen_rows.add(key)
-                servis_day = record.waktu_service.date()
-                servis_rows.append(
-                    {
-                        "no_nota": record.no_nota,
-                        "jenis_item": "jasa",
-                        "nama": job.deskripsi,
-                        "pekerjaan": job.deskripsi,
-                        "tanggal_servis": servis_day,
-                        "interval_bulan": interval,
-                        "jatuh_tempo": add_months(servis_day, interval),
-                        "record": record,
-                    }
-                )
+                servis_rows[key] = {
+                    "no_nota": record.no_nota,
+                    "jenis_item": "jasa",
+                    "nama": job.deskripsi,
+                    "pekerjaan": job.deskripsi,
+                    "tanggal_servis": servis_day,
+                    "interval_bulan": interval,
+                    "jatuh_tempo": add_months(servis_day, interval),
+                    "record": record,
+                    "item_key": key,
+                    "item_nama": job.deskripsi,
+                }
             for part in record.parts:
                 interval = int(getattr(part, "interval_servis_bulan", 0) or 0)
                 if interval <= 0:
                     continue
-                key = (
-                    "part",
+                identifier = (
                     part.stock_item_id
                     if part.stock_item_id is not None
-                    else (part.nama_part or "").strip().lower(),
+                    else (part.nama_part or "").strip().lower()
                 )
+                key = ("servis:" + str(unit_id) + ":part:" + str(identifier))[:180]
                 if key in seen_rows:
                     continue
                 seen_rows.add(key)
-                servis_day = record.waktu_service.date()
-                label = f"Sparepart {part.nama_part}"
-                servis_rows.append(
-                    {
-                        "no_nota": record.no_nota,
-                        "jenis_item": "sparepart",
-                        "nama": part.nama_part,
-                        "pekerjaan": label,
-                        "tanggal_servis": servis_day,
-                        "interval_bulan": interval,
-                        "jatuh_tempo": add_months(servis_day, interval),
-                        "record": record,
-                    }
-                )
-        due_rows = [row for row in servis_rows if row["jatuh_tempo"] <= horizon_servis]
-        if due_rows:
-            nearest = min(
-                due_rows,
-                key=lambda row: (row["jatuh_tempo"], row["no_nota"]),
+                servis_rows[key] = {
+                    "no_nota": record.no_nota,
+                    "jenis_item": "sparepart",
+                    "nama": part.nama_part,
+                    "pekerjaan": "Sparepart " + part.nama_part,
+                    "tanggal_servis": servis_day,
+                    "interval_bulan": interval,
+                    "jatuh_tempo": add_months(servis_day, interval),
+                    "record": record,
+                    "item_key": key,
+                    "item_nama": part.nama_part,
+                }
+
+        for key, row in servis_rows.items():
+            existing = existing_by_key.get(key)
+            stage = 0
+            if (
+                existing is not None
+                and existing.service_record_id == row["record"].id
+            ):
+                stage = int(existing.stage or 0)
+            due = add_months(
+                row["tanggal_servis"],
+                row["interval_bulan"] * (stage + 1),
             )
-            record = nearest["record"]
-            sources[(JENIS_SERVIS, customer_id)] = _record_source(
+            if due > horizon_servis:
+                continue
+            record = row["record"]
+            rincian = [
+                {
+                    "no_nota": other["no_nota"],
+                    "jenis_item": other["jenis_item"],
+                    "nama": other["nama"],
+                    "pekerjaan": other["pekerjaan"],
+                    "tanggal_servis": other["tanggal_servis"],
+                    "interval_bulan": other["interval_bulan"],
+                    "jatuh_tempo": other["jatuh_tempo"],
+                }
+                for other in servis_rows.values()
+                if other["record"].id == record.id
+            ]
+            add_source(
+                key,
                 JENIS_SERVIS,
                 record,
-                nearest["jatuh_tempo"],
-                f"Servis berkala {describe_unit(record.unit)}: "
-                f"{nearest['pekerjaan']}",
-                [
-                    {
-                        "no_nota": row["no_nota"],
-                        "jenis_item": row["jenis_item"],
-                        "nama": row["nama"],
-                        "pekerjaan": row["pekerjaan"],
-                        "tanggal_servis": row["tanggal_servis"],
-                        "interval_bulan": row["interval_bulan"],
-                        "jatuh_tempo": row["jatuh_tempo"],
-                    }
-                    for row in sorted(
-                        servis_rows, key=lambda row: row["jatuh_tempo"]
-                    )
-                    if row["record"].id == record.id
-                ],
+                due,
+                "Servis berkala "
+                + describe_unit(record.unit)
+                + ": "
+                + row["pekerjaan"],
+                rincian,
+                stage=stage,
+                interval_bulan=row["interval_bulan"],
+                item_nama=row["item_nama"],
+                item_kind=row["jenis_item"],
+                reference_date=row["tanggal_servis"],
             )
 
-        # --- Piutang (digabung per pelanggan) ---
-        unpaid = [
-            record
-            for record in customer_records
-            if record.status_bayar == "BELUM_LUNAS" and _sisa(record) > 0
-        ]
-        if unpaid:
-            nearest_due = min(
-                (
-                    record.jatuh_tempo
-                    for record in unpaid
-                    if record.jatuh_tempo is not None
-                ),
-                default=None,
-            )
-            anchor = next(
-                (record for record in unpaid if record.jatuh_tempo == nearest_due),
-                unpaid[0],
-            )
-            total_sisa = sum((_sisa(record) for record in unpaid), Decimal("0.00"))
-            sources[(JENIS_PIUTANG, customer_id)] = _record_source(
+        for record in unit_records:
+            if record.status_bayar != "BELUM_LUNAS" or _sisa(record) <= 0:
+                continue
+            key = "piutang:record:" + str(record.id)
+            due = record.jatuh_tempo or reference_day(record)
+            add_source(
+                key,
                 JENIS_PIUTANG,
-                anchor,
-                nearest_due or anchor.waktu_service.date(),
-                f"Piutang {len(unpaid)} nota",
+                record,
+                due,
+                "Piutang nota " + record.no_nota,
                 [
                     {
                         "no_nota": record.no_nota,
-                        "tanggal_servis": record.waktu_service.date(),
+                        "tanggal_servis": reference_day(record),
                         "total_servis": record.total_servis,
                         "sisa_bayar": _sisa(record),
                         "jatuh_tempo": record.jatuh_tempo,
                     }
-                    for record in sorted(
-                        unpaid, key=lambda row: row.waktu_service
-                    )
                 ],
+                item_kind="nota",
+                reference_date=reference_day(record),
             )
 
-    return sources
+    servis_due_by_unit: Dict[int, List[date]] = {}
+    for source in sources.values():
+        if source["jenis"] == JENIS_SERVIS:
+            servis_due_by_unit.setdefault(source["unit"].id, []).append(
+                source["jatuh_tempo"]
+            )
+    for key in list(sources):
+        source = sources[key]
+        if source["jenis"] != JENIS_PROSPEK:
+            continue
+        existing = existing_by_key.get(key)
+        known = existing is not None and existing.status != STATUS_ARSIP
+        if not known and source["jatuh_tempo"] > today:
+            del sources[key]
+            continue
+        if known:
+            continue
+        nearby_servis = servis_due_by_unit.get(source["unit"].id, [])
+        tunda_hari = int(ops["servis_berkala_awal_hari"])
+        if any(abs((due - today).days) <= tunda_hari for due in nearby_servis):
+            del sources[key]
+            continue
+        garansi_sampai = (
+            source["rincian"][0].get("garansi_sampai")
+            if source["rincian"]
+            else None
+        )
+        if garansi_sampai is not None and (
+            (
+                garansi_sampai
+                - timedelta(days=int(ops["garansi_akan_habis_hari"]))
+                - today
+            ).days
+            <= tunda_hari
+        ):
+            del sources[key]
 
+    return sources
 
 def _same_cycle(item: FollowupItem, source: Dict[str, Any]) -> bool:
     record = source["record"]
@@ -396,6 +564,13 @@ def _update_item(
     )
     item.unit_id = record.unit_id
     item.service_record_id = record.id
+    item.jenis = source.get("jenis", item.jenis)
+    item.item_key = source.get("item_key", item.item_key)
+    item.stage = int(source.get("stage", 0) or 0)
+    item.interval_bulan = source.get("interval_bulan")
+    item.item_nama = source.get("item_nama")
+    item.item_kind = source.get("item_kind")
+    item.reference_date = source.get("reference_date")
     item.judul = source["judul"]
     item.jatuh_tempo = source["jatuh_tempo"]
     if new_cycle:
@@ -406,6 +581,7 @@ def _update_item(
         item.tanggal_service = None
         item.alasan_arsip = None
         item.archived_at = None
+        item.cycle_started_at = now
         _add_event(
             db,
             item,
@@ -437,7 +613,7 @@ def sync_items(
     today: Optional[date] = None,
     now: Optional[datetime] = None,
     commit: bool = True,
-) -> Dict[Tuple[str, int], Dict[str, Any]]:
+) -> Dict[str, Dict[str, Any]]:
     """Sinkronkan pengingat aktif dari nota tanpa menghapus riwayat."""
     day = today or date.today()
     moment = now or datetime.now()
@@ -445,9 +621,10 @@ def sync_items(
     sources = _collect_sources(db, day, ops)
     items = list(db.scalars(select(FollowupItem)).all())
 
-    by_key: Dict[Tuple[str, int], List[FollowupItem]] = {}
+    by_key: Dict[str, List[FollowupItem]] = {}
     for item in items:
-        by_key.setdefault((item.jenis, item.customer_id), []).append(item)
+        key = item.item_key or f"legacy:{item.id}"
+        by_key.setdefault(key, []).append(item)
 
     for key, source in sources.items():
         rows = by_key.get(key, [])
@@ -458,15 +635,30 @@ def sync_items(
         if any(row.status == STATUS_ARSIP and _same_cycle(row, source) for row in rows):
             # Pengingat untuk siklus ini sudah diarsipkan manual.
             continue
+        if any(
+            row.status == STATUS_ARSIP
+            and row.service_record_id == source["record"].id
+            and (row.alasan_arsip or "") != AUTO_ARCHIVE_REASON
+            for row in rows
+        ):
+            # Arsip manual berlaku sampai nota/unit memulai siklus baru.
+            continue
         item = FollowupItem(
-            jenis=key[0],
-            customer_id=key[1],
+            jenis=source["jenis"],
+            item_key=key,
+            customer_id=source["customer"].id,
             unit_id=source["record"].unit_id,
             service_record_id=source["record"].id,
             judul=source["judul"],
             jatuh_tempo=source["jatuh_tempo"],
             status=STATUS_BARU,
+            stage=int(source.get("stage", 0) or 0),
+            interval_bulan=source.get("interval_bulan"),
+            item_nama=source.get("item_nama"),
+            item_kind=source.get("item_kind"),
+            reference_date=source.get("reference_date"),
             created_at=moment,
+            cycle_started_at=moment,
             updated_at=moment,
         )
         db.add(item)
@@ -482,7 +674,7 @@ def sync_items(
             _archive_item(
                 db,
                 item,
-                "Sumber pengingat sudah tidak aktif.",
+                AUTO_ARCHIVE_REASON,
                 SYSTEM_OPERATOR,
                 moment,
             )
@@ -513,10 +705,58 @@ def _serialize(
     moment = now or datetime.now()
     valid_number = is_valid_whatsapp(customer.nomor_hp)
     on_cooldown = cooldown_until is not None and moment < cooldown_until
+    tunda_aktif = item.tunda_sampai is not None and moment < item.tunda_sampai
+    piutang_ke = 0
+    piutang_berikutnya = None
+    perlu_telepon = bool(item.perlu_telepon)
+    piutang_ready = True
+    if item.jenis == JENIS_PIUTANG and record is not None:
+        piutang_ke = int(record.piutang_reminder_ke or 0)
+        piutang_berikutnya = record.piutang_next_at
+        perlu_telepon = perlu_telepon or bool(record.piutang_perlu_telepon)
+        piutang_ready, _reason = whatsapp_service.piutang_reminder_state(
+            record, ops, moment
+        )
+    bisa_alasan = ""
+    no_reminder = bool(source and source.get("no_reminder"))
+    dnc_blocked = bool(customer.do_not_contact) and item.jenis in {
+        JENIS_PROSPEK,
+        JENIS_SERVIS,
+        JENIS_GARANSI,
+    }
+    if no_reminder:
+        bisa_alasan = "Garansi H-7 sudah dibalas atau sudah ada janji datang."
+    elif dnc_blocked:
+        bisa_alasan = "Pelanggan meminta berhenti dihubungi (DNC)."
+    elif not valid_number:
+        bisa_alasan = "Nomor WhatsApp pelanggan belum valid."
+    elif on_cooldown:
+        bisa_alasan = "Jeda follow up belum selesai."
+    elif tunda_aktif:
+        bisa_alasan = "Follow up ditunda sampai " + item.tunda_sampai.strftime(
+            "%d/%m/%Y %H:%M"
+        ) + "."
+    elif perlu_telepon:
+        bisa_alasan = "Pengingat piutang sudah mencapai batas. Hubungi lewat telepon."
+    elif not piutang_ready:
+        bisa_alasan = "Pengingat piutang belum jatuh tempo atau sedang dijeda."
+    elif not settings_service.within_followup_window(ops, moment):
+        bisa_alasan = "Di luar jam follow up."
     bisa = (
-        item.status not in {STATUS_ARSIP, STATUS_SELESAI, STATUS_TIDAK_DATANG}
+        item.status
+        not in {
+            STATUS_ARSIP,
+            STATUS_SELESAI,
+            STATUS_TIDAK_DATANG,
+            STATUS_SUDAH_BAYAR,
+        }
         and valid_number
+        and not no_reminder
+        and not dnc_blocked
         and not on_cooldown
+        and not tunda_aktif
+        and not perlu_telepon
+        and piutang_ready
         and settings_service.within_followup_window(ops, moment)
     )
     status_label = STATUS_LABELS.get(item.status, item.status)
@@ -526,6 +766,14 @@ def _serialize(
         "id": item.id,
         "jenis": item.jenis,
         "jenis_label": JENIS_LABELS.get(item.jenis, item.jenis),
+        "item_key": item.item_key,
+        "stage": item.stage or 0,
+        "interval_bulan": item.interval_bulan,
+        "item_nama": item.item_nama,
+        "item_kind": item.item_kind,
+        "perlu_telepon": perlu_telepon,
+        "pengingat_ke": piutang_ke,
+        "pengingat_berikutnya": piutang_berikutnya,
         "customer_id": item.customer_id,
         "customer_nama": customer.nama,
         "customer_alamat": customer.alamat,
@@ -551,9 +799,27 @@ def _serialize(
         "tanggal_service": item.tanggal_service,
         "alasan_arsip": item.alasan_arsip,
         "cooldown_sampai": cooldown_until,
+        "tunda_sampai": item.tunda_sampai,
+        "bisa_alasan": bisa_alasan,
         "bisa_followup": bisa,
         "rincian": list(source["rincian"]) if source else [],
     }
+
+
+def _apply_policy(
+    db: Session,
+    data: Dict[str, Any],
+    item: FollowupItem,
+    moment: datetime,
+    ops: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not data.get("bisa_followup"):
+        return data
+    blocked = contact_gate_service.policy_reason(db, item, moment, ops)
+    if blocked:
+        data["bisa_followup"] = False
+        data["bisa_alasan"] = blocked
+    return data
 
 
 def _item_statement(jenis: Optional[str], customer_id: Optional[int]):
@@ -576,7 +842,7 @@ def _active_items(
 ) -> List[FollowupItem]:
     statement = _item_statement(jenis, customer_id).where(
         FollowupItem.status.notin_(
-            [STATUS_ARSIP, STATUS_TIDAK_DATANG, STATUS_SELESAI]
+            [STATUS_ARSIP, STATUS_TIDAK_DATANG, STATUS_SELESAI, STATUS_SUDAH_BAYAR]
         )
     )
     return list(db.scalars(statement).unique().all())
@@ -619,7 +885,13 @@ def list_items(
             reverse=True,
         )
         serialized = [
-            _serialize(item, sources.get((item.jenis, item.customer_id)), ops, day, moment)
+            _apply_policy(
+                db,
+                _serialize(item, sources.get(item.item_key), ops, day, moment),
+                item,
+                moment,
+                ops,
+            )
             for item in items
         ]
         return {"items": serialized, "jumlah": len(serialized)}
@@ -659,8 +931,9 @@ def list_items(
     )
     serialized = []
     for item in items:
-        source = sources.get((item.jenis, item.customer_id))
-        serialized.append(_serialize(item, source, ops, day, moment))
+        source = sources.get(item.item_key)
+        data = _serialize(item, source, ops, day, moment)
+        serialized.append(_apply_policy(db, data, item, moment, ops))
     return {"items": serialized, "jumlah": len(serialized)}
 
 
@@ -730,10 +1003,16 @@ def serialize_item(
     if source is None:
         ops = settings_service.get_ops_settings(db)
         sources = _collect_sources(db, day, ops)
-        source = sources.get((item.jenis, item.customer_id))
+        source = sources.get(item.item_key)
     else:
         ops = settings_service.get_ops_settings(db)
-    return _serialize(item, source, ops, day, moment)
+    return _apply_policy(
+        db,
+        _serialize(item, source, ops, day, moment),
+        item,
+        moment,
+        ops,
+    )
 
 
 def _get_item(db: Session, item_id: int) -> FollowupItem:
@@ -783,32 +1062,61 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
 
     if item.jenis == JENIS_GARANSI and record is not None:
         days = (record.garansi_sampai - today).days if record.garansi_sampai else 0
-        body = (
-            f"Kami ingin menginformasikan bahwa garansi servis {unit} "
-            f"tanggal {tanggal} akan berakhir pada "
-            f"{_format_date(record.garansi_sampai)} ({days} hari lagi). "
-            f"Bagaimana kondisi {unit} setelah {pekerjaan}? Apabila masih ada "
-            f"{_gejala(record)}, kami berharap Bapak/Ibu berkenan memeriksakan "
-            "kembali ke bengkel kami sebelum masa garansi berakhir."
-        )
+        variants = [
+            (
+                f"Kami ingin menginformasikan bahwa garansi servis {unit} "
+                f"tanggal {tanggal} akan berakhir pada "
+                f"{_format_date(record.garansi_sampai)} ({days} hari lagi). "
+                f"Bagaimana kondisi {unit} setelah {pekerjaan}? Apabila masih ada "
+                f"{_gejala(record)}, kami berharap Bapak/Ibu berkenan memeriksakan "
+                "kembali ke bengkel kami sebelum masa garansi berakhir."
+            ),
+            (
+                f"Kami ingin mengingatkan bahwa garansi servis {unit} tanggal "
+                f"{tanggal} berakhir pada {_format_date(record.garansi_sampai)} "
+                f"({days} hari lagi). Kami berharap Bapak/Ibu berkenan memeriksa "
+                f"kembali {unit} apabila masih ada {_gejala(record)} sebelum masa "
+                "garansi berakhir."
+            ),
+            (
+                f"Menjelang berakhirnya garansi servis {unit} tanggal {tanggal} "
+                f"pada {_format_date(record.garansi_sampai)} ({days} hari lagi), "
+                f"kami ingin menanyakan kondisi {unit} setelah {pekerjaan}. "
+                "Apabila masih ada keluhan, silakan menghubungi kami untuk "
+                "pemeriksaan sebelum masa garansi berakhir."
+            ),
+        ]
+        body = variants[int(item.id or 0) % len(variants)]
         return (
             f"{opening} {body}\n\n"
             "Terima kasih atas perhatian Bapak/Ibu."
         )
 
     if item.jenis == JENIS_SERVIS and record is not None:
-        interval = 0
-        for row in list(record.jobs) + list(record.parts):
-            interval = max(interval, int(getattr(row, "interval_servis_bulan", 0) or 0))
+        interval = int(item.interval_bulan or 0)
         jadwal = _format_date(item.jatuh_tempo)
-        body = (
-            f"Kami ingin mengingatkan bahwa servis terakhir {pekerjaan} "
-            f"pada {unit} dilaksanakan tanggal {tanggal}. Sesuai jadwal servis "
-            "berkala"
-            + (f" {interval} bulan" if interval else "")
-            + f", waktunya servis kembali sekitar {jadwal}. "
-            "Kami berharap Bapak/Ibu berkenan datang untuk menjadwalkan servis."
-        )
+        jadwal_text = f" {interval} bulan" if interval else ""
+        variants = [
+            (
+                f"Kami ingin mengingatkan bahwa servis terakhir {pekerjaan} "
+                f"pada {unit} dilaksanakan tanggal {tanggal}. Sesuai jadwal servis "
+                f"berkala{jadwal_text}, waktunya servis kembali sekitar {jadwal}. "
+                "Kami berharap Bapak/Ibu berkenan datang untuk menjadwalkan servis."
+            ),
+            (
+                f"Servis berkala{jadwal_text} untuk {unit} sudah mendekati jadwal "
+                f"pada {jadwal}. Servis terakhir {pekerjaan} dilakukan tanggal "
+                f"{tanggal}. Kami berharap Bapak/Ibu berkenan menjadwalkan "
+                "kedatangan ke bengkel kami."
+            ),
+            (
+                f"Kami ingin mengingatkan jadwal servis berkala{jadwal_text} "
+                f"untuk {unit}, yaitu sekitar {jadwal}. Sebelumnya, {pekerjaan} "
+                f"dilakukan tanggal {tanggal}. Apabila berkenan, kami dapat "
+                "membantu menyiapkan jadwal kedatangan Bapak/Ibu."
+            ),
+        ]
+        body = variants[int(item.id or 0) % len(variants)]
         return (
             f"{opening} {body}\n\n"
             "Terima kasih atas perhatian Bapak/Ibu."
@@ -827,17 +1135,155 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
             "Terima kasih atas perhatian dan kerja samanya."
         )
 
+    variants = [
+        (
+            f"Kami ingin menanyakan kondisi {unit} setelah servis {pekerjaan} "
+            f"tanggal {tanggal}. Apakah masih ada kendala? "
+            f"{_garansi_clause(record, today)}"
+            "Kami berharap Bapak/Ibu berkenan menghubungi kami apabila perlu "
+            "dilakukan pemeriksaan ulang."
+        ),
+        (
+            f"Kami ingin memastikan {unit} tetap nyaman digunakan setelah "
+            f"servis {pekerjaan} tanggal {tanggal}. "
+            f"{_garansi_clause(record, today)}"
+            "Apabila ada keluhan, kami siap membantu pemeriksaan ulang."
+        ),
+        (
+            f"Setelah servis {pekerjaan} tanggal {tanggal}, kami ingin "
+            f"menanyakan kabar {unit}. "
+            f"{_garansi_clause(record, today)}"
+            "Silakan menghubungi kami jika Bapak/Ibu memerlukan pemeriksaan "
+            "lanjutan."
+        ),
+    ]
+    body = variants[int(item.id or 0) % len(variants)]
+    first_contact = (
+        item.stage == 0 and item.followup_terakhir is None
+    )
+    if first_contact:
+        body += (
+            " Jika Bapak/Ibu tidak ingin dihubungi lagi, cukup balas BERHENTI."
+        )
+    return (
+        f"{opening} {body}\n\n"
+        "Terima kasih atas perhatian Bapak/Ibu."
+    )
+
+
+def _group_message(db: Session, items: List[FollowupItem], today: date) -> str:
+    """Satu pesan formal untuk beberapa pengingat sejenis yang jatuh bersamaan."""
+    info = settings_service.get_bengkel_info(db)
+    customer = items[0].customer
+    opening = whatsapp_service.formal_opening(info, customer.nama)
+    lines = []
+    for row in items:
+        jadwal = _format_date(row.jatuh_tempo)
+        lines.append("- " + row.judul + " (jadwal " + jadwal + ")")
     body = (
-        f"Kami ingin menanyakan kondisi {unit} setelah servis {pekerjaan} "
-        f"tanggal {tanggal}. Apakah masih ada kendala? "
-        f"{_garansi_clause(record, today)}"
-        "Kami berharap Bapak/Ibu berkenan menghubungi kami apabila perlu "
-        "dilakukan pemeriksaan ulang."
+        "Kami ingin menyampaikan beberapa pengingat berikut:\n"
+        + "\n".join(lines)
+        + "\n\nApabila sudah ditindaklanjuti, mohon abaikan pesan ini."
     )
     return (
         f"{opening} {body}\n\n"
         "Terima kasih atas perhatian Bapak/Ibu."
     )
+
+
+def _piutang_group_records(
+    db: Session,
+    item: FollowupItem,
+    ops: Dict[str, Any],
+    moment: datetime,
+) -> List[ServiceRecord]:
+    """Nota piutang pelanggan yang sudah jatuh tempo dan siap diingatkan."""
+    rows = db.scalars(
+        select(FollowupItem)
+        .where(
+            FollowupItem.customer_id == item.customer_id,
+            FollowupItem.jenis == JENIS_PIUTANG,
+            FollowupItem.status.in_([STATUS_BARU, STATUS_SUDAH, STATUS_KENDALA]),
+        )
+        .options(joinedload(FollowupItem.service_record))
+        .order_by(FollowupItem.jatuh_tempo.asc(), FollowupItem.id.asc())
+    ).unique().all()
+    records: List[ServiceRecord] = []
+    for row in rows:
+        record = row.service_record
+        if record is None:
+            continue
+        if (record.status or "NORMAL") != "NORMAL":
+            continue
+        if (record.status_bayar or "LUNAS") == "LUNAS" or _sisa(record) <= 0:
+            continue
+        ready, _reason = whatsapp_service.piutang_reminder_state(
+            record, ops, moment
+        )
+        if ready:
+            records.append(record)
+    return records
+
+
+def _merge_group(
+    db: Session,
+    item: FollowupItem,
+    day: date,
+    moment: datetime,
+    ops: Dict[str, Any],
+) -> List[FollowupItem]:
+    """Item sejenis yang jatuh bersamaan agar satu pesan mencakup semuanya."""
+    if item.jenis == JENIS_PIUTANG:
+        record_ids = {
+            record.id
+            for record in _piutang_group_records(db, item, ops, moment)
+        }
+        if not record_ids:
+            return [item]
+        rows = db.scalars(
+            select(FollowupItem)
+            .where(
+                FollowupItem.customer_id == item.customer_id,
+                FollowupItem.jenis == JENIS_PIUTANG,
+                FollowupItem.status.in_(
+                    [STATUS_BARU, STATUS_SUDAH, STATUS_KENDALA]
+                ),
+                FollowupItem.service_record_id.in_(record_ids),
+            )
+            .order_by(FollowupItem.jatuh_tempo.asc(), FollowupItem.id.asc())
+        ).all()
+        return list(rows) or [item]
+
+    rows = list(
+        db.scalars(
+            select(FollowupItem)
+            .where(
+                FollowupItem.customer_id == item.customer_id,
+                FollowupItem.jenis == item.jenis,
+                FollowupItem.status.in_(
+                    [STATUS_BARU, STATUS_SUDAH, STATUS_KENDALA]
+                ),
+                FollowupItem.jatuh_tempo.is_not(None),
+                FollowupItem.jatuh_tempo <= day,
+            )
+            .order_by(FollowupItem.jatuh_tempo.asc(), FollowupItem.id.asc())
+        ).all()
+    )
+    group = []
+    cooldown = int(ops.get("cooldown_hari", 7))
+    for row in rows:
+        if row.tunda_sampai is not None and moment < row.tunda_sampai:
+            continue
+        if (
+            cooldown > 0
+            and row.followup_terakhir is not None
+            and moment < row.followup_terakhir + timedelta(days=cooldown)
+        ):
+            continue
+        group.append(row)
+    if item not in group:
+        group.append(item)
+    return group
 
 
 def follow_up(
@@ -864,7 +1310,11 @@ def follow_up(
         item = _get_item(db, item_id)
         if item.status == STATUS_ARSIP:
             raise ConflictError("Item sudah diarsipkan.")
-        if item.status in {STATUS_SELESAI, STATUS_TIDAK_DATANG}:
+        if item.status in {
+            STATUS_SELESAI,
+            STATUS_TIDAK_DATANG,
+            STATUS_SUDAH_BAYAR,
+        }:
             raise ConflictError("Item sudah ditutup.")
         if not settings_service.within_followup_window(ops, moment):
             raise ConflictError(settings_service.followup_window_message(ops))
@@ -876,44 +1326,108 @@ def follow_up(
                     "Follow up baru bisa diulang setelah "
                     f"{until.strftime('%d/%m/%Y %H:%M')}."
                 )
-
-        message = (pesan or "").strip() or _message(db, item, day)
-        log, link = whatsapp_service.append_attempt(
-            db,
-            item.customer,
-            jenis=WA_JENIS.get(item.jenis, whatsapp_service.JENIS_FOLLOWUP),
-            status=normalized,
-            message=message,
-            operator=operator,
-            record=item.service_record,
-            catatan=catatan,
-            now=moment,
-        )
-        item.followup_terakhir = moment
-        if (
-            normalized == whatsapp_service.STATUS_OPENED
-            and item.jenis == JENIS_PIUTANG
-        ):
-            record = item.service_record
-            if (
-                record is not None
-                and (record.status or "NORMAL") == "NORMAL"
-                and (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
-                and _sisa(record) > 0
-            ):
-                record.diingatkan_pada = moment
-        if item.status in {STATUS_BARU, STATUS_SUDAH}:
-            previous = item.status
-            item.status = STATUS_SUDAH
-            _add_event(
-                db,
-                item,
-                previous,
-                STATUS_SUDAH,
-                "Follow up " + normalized.lower() + (f": {catatan}" if catatan else ""),
-                operator.label,
-                moment,
+        if item.tunda_sampai is not None and moment < item.tunda_sampai:
+            raise ConflictError(
+                "Follow up ditunda sampai "
+                f"{item.tunda_sampai.strftime('%d/%m/%Y %H:%M')}."
             )
+        piutang_record = None
+        if item.jenis == JENIS_PIUTANG and item.service_record is not None:
+            piutang_record = item.service_record
+            ready, reason = whatsapp_service.piutang_reminder_state(
+                piutang_record, ops, moment
+            )
+            if not ready:
+                raise ConflictError(reason)
+        from services import contact_gate_service
+
+        blocked = contact_gate_service.policy_reason(db, item, moment, ops)
+        if blocked:
+            raise ConflictError(blocked)
+
+        group = (
+            _merge_group(db, item, day, moment, ops)
+            if normalized == whatsapp_service.STATUS_OPENED
+            else [item]
+        )
+        if len(group) > 1:
+            if item.jenis == JENIS_PIUTANG:
+                records = _piutang_group_records(db, item, ops, moment)
+                info = settings_service.get_bengkel_info(db)
+                message = whatsapp_service.receivable_wa_text_multi(records, info)
+            else:
+                message = _group_message(db, group, day)
+            if (pesan or "").strip():
+                message = pesan.strip()
+        else:
+            message = (pesan or "").strip() or _message(db, item, day)
+
+        log = None
+        link = ""
+        for member in group:
+            member_record = member.service_record
+            log, link = whatsapp_service.append_attempt(
+                db,
+                member.customer,
+                jenis=WA_JENIS.get(
+                    member.jenis, whatsapp_service.JENIS_FOLLOWUP
+                ),
+                status=normalized,
+                message=message,
+                operator=operator,
+                record=member_record,
+                followup_item_id=member.id,
+                catatan=catatan,
+                now=moment,
+            )
+            member.followup_terakhir = moment
+            if (
+                normalized == whatsapp_service.STATUS_OPENED
+                and member.jenis in {JENIS_PROSPEK, JENIS_SERVIS, JENIS_GARANSI}
+            ):
+                member.stage = int(member.stage or 0) + 1
+                member.no_response_count = int(member.no_response_count or 0) + 1
+            if (
+                normalized == whatsapp_service.STATUS_OPENED
+                and member.jenis == JENIS_PIUTANG
+            ):
+                record = member_record
+                if (
+                    record is not None
+                    and (record.status or "NORMAL") == "NORMAL"
+                    and (record.status_bayar or "LUNAS") == "BELUM_LUNAS"
+                    and _sisa(record) > 0
+                ):
+                    whatsapp_service.apply_piutang_reminder(record, ops, moment)
+            if member.status in {STATUS_BARU, STATUS_SUDAH}:
+                previous = member.status
+                member.status = STATUS_SUDAH
+                _add_event(
+                    db,
+                    member,
+                    previous,
+                    STATUS_SUDAH,
+                    "Follow up "
+                    + normalized.lower()
+                    + (f": {catatan}" if catatan else ""),
+                    operator.label,
+                    moment,
+                )
+            if (
+                normalized == whatsapp_service.STATUS_OPENED
+                and member.jenis in {JENIS_PROSPEK, JENIS_SERVIS, JENIS_GARANSI}
+                and member.no_response_count
+                >= int(ops.get("maks_tidak_merespons", 3))
+                and member.status
+                not in {STATUS_AKAN_DATANG, STATUS_SELESAI, STATUS_JANJI}
+            ):
+                _archive_item(
+                    db,
+                    member,
+                    "Tidak merespons 3 kali.",
+                    SYSTEM_OPERATOR,
+                    moment,
+                )
         db.flush()
 
     db.refresh(item)
@@ -922,17 +1436,16 @@ def follow_up(
 
 def mark_piutang_followed(
     db: Session,
-    customer_id: int,
+    record_id: int,
     moment: datetime,
     operator_label: str,
     reason: str,
 ) -> Optional[FollowupItem]:
-    """Samakan item piutang dengan pengingat yang dikirim dari jalur lain."""
+    """Samakan item piutang nota dengan pengingat yang dikirim dari jalur lain."""
     item = db.scalar(
         select(FollowupItem)
         .where(
-            FollowupItem.jenis == JENIS_PIUTANG,
-            FollowupItem.customer_id == customer_id,
+            FollowupItem.item_key == "piutang:record:" + str(record_id),
             FollowupItem.status != STATUS_ARSIP,
         )
         .order_by(FollowupItem.id.desc())
@@ -958,6 +1471,7 @@ def change_status(
     janji_bayar: Optional[date] = None,
     tanggal_service: Optional[date] = None,
     now: Optional[datetime] = None,
+    tunda_hari: Optional[int] = None,
 ) -> FollowupItem:
     moment = now or datetime.now()
     target = (status or "").strip().upper()
@@ -971,14 +1485,15 @@ def change_status(
         if item.jenis in JADWAL_JENIS:
             if target not in {
                 STATUS_AKAN_DATANG,
+                STATUS_KENDALA,
                 STATUS_TIDAK_DATANG,
                 STATUS_SELESAI,
                 STATUS_ARSIP,
             }:
                 raise BusinessValidationError(
                     "Status servis berkala dan garansi hanya akan datang "
-                    "service, datang, tidak akan datang service, atau dihapus "
-                    "dari daftar."
+                    "service, belum bisa, datang, tidak akan datang service, "
+                    "atau dihapus dari daftar."
                 )
             if target == STATUS_AKAN_DATANG and tanggal_service is None:
                 raise BusinessValidationError("Tanggal service wajib diisi.")
@@ -1005,6 +1520,14 @@ def change_status(
                 and tanggal_service is not None
             ):
                 raise BusinessValidationError("Status item sudah sama.")
+        if target == STATUS_SUDAH_BAYAR:
+            if item.jenis != JENIS_PIUTANG:
+                raise BusinessValidationError("Sudah bayar hanya untuk piutang.")
+            record = item.service_record
+            if record is None or _sisa(record) > 0:
+                raise BusinessValidationError(
+                    "Sisa pembayaran belum lunas. Selesaikan pelunasan lebih dulu."
+                )
         if item.jenis == JENIS_PIUTANG and target in {STATUS_SELESAI, STATUS_ARSIP}:
             raise BusinessValidationError(
                 "Piutang hanya keluar dari daftar lewat pelunasan penuh atau void."
@@ -1025,6 +1548,17 @@ def change_status(
             item.janji_bayar = janji_bayar
         else:
             item.janji_bayar = None
+        if target == STATUS_KENDALA:
+            ops = settings_service.get_ops_settings(db)
+            hari = int(tunda_hari or ops.get("belum_bisa_hari", 14))
+            item.tunda_sampai = moment + timedelta(days=hari)
+        else:
+            item.tunda_sampai = None
+        if target in {STATUS_AKAN_DATANG, STATUS_SELESAI, STATUS_JANJI}:
+            item.no_response_count = 0
+        if target == STATUS_SUDAH_BAYAR:
+            item.alasan_arsip = "Sudah bayar."
+            item.archived_at = moment
         if target == STATUS_ARSIP:
             item.alasan_arsip = (alasan or "").strip()
             item.archived_at = moment
@@ -1037,16 +1571,22 @@ def change_status(
 
 def _last_sent_message(db: Session, item: FollowupItem) -> str:
     jenis = WA_JENIS.get(item.jenis, whatsapp_service.JENIS_FOLLOWUP)
-    log = db.scalar(
-        select(WhatsAppLog)
-        .where(
-            WhatsAppLog.customer_id == item.customer_id,
-            WhatsAppLog.jenis == jenis,
-            WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
-            WhatsAppLog.created_at >= item.created_at,
+    cycle_start = item.cycle_started_at or item.created_at
+    statement = select(WhatsAppLog).where(
+        WhatsAppLog.customer_id == item.customer_id,
+        WhatsAppLog.jenis == jenis,
+        WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
+    )
+    if item.service_record_id is not None:
+        statement = statement.where(
+            WhatsAppLog.service_record_id == item.service_record_id
         )
-        .order_by(WhatsAppLog.created_at.desc(), WhatsAppLog.id.desc())
-        .limit(1)
+    if cycle_start is not None:
+        statement = statement.where(WhatsAppLog.created_at >= cycle_start)
+    log = db.scalar(
+        statement.order_by(
+            WhatsAppLog.created_at.desc(), WhatsAppLog.id.desc()
+        ).limit(1)
     )
     return (log.pesan or "").strip() if log is not None else ""
 
@@ -1069,10 +1609,10 @@ def detail(
             .order_by(FollowupEvent.created_at.asc(), FollowupEvent.id.asc())
         ).all()
     )
+    item_data = _serialize(item, sources.get(item.item_key), ops, day, moment)
+    item_data = _apply_policy(db, item_data, item, moment, ops)
     return {
-        "item": _serialize(
-            item, sources.get((item.jenis, item.customer_id)), ops, day, moment
-        ),
+        "item": item_data,
         "events": event_rows,
         "pesan": _last_sent_message(db, item) or _message(db, item, day),
     }

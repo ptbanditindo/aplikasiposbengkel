@@ -45,7 +45,7 @@ def test_jendela_jam_followup_default_dan_overnight():
     )
 
     ops = {"followup_jam_mulai": "08:00", "followup_jam_selesai": "20:00"}
-    assert followup_window_label(ops) == "08.00–20.00"
+    assert followup_window_label(ops) == "08.00-20.00"
     assert within_followup_window(ops, datetime(2026, 1, 1, 8, 0)) is True
     assert within_followup_window(ops, datetime(2026, 1, 1, 19, 59)) is True
     assert within_followup_window(ops, datetime(2026, 1, 1, 20, 0)) is False
