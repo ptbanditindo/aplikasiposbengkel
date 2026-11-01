@@ -108,6 +108,11 @@ OPS_INT_KEYS = {
     "garansi_akan_habis_hari": (1, 90, 7),
     "servis_berkala_awal_hari": (1, 90, 14),
 }
+OPS_TIME_KEYS = {
+    "followup_jam_mulai": "08:00",
+    "followup_jam_selesai": "20:00",
+}
+OPS_TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 def get_ops_settings(db: Session) -> Dict[str, Any]:
@@ -125,7 +130,53 @@ def get_ops_settings(db: Session) -> Dict[str, Any]:
             result[key] = int(raw) if raw != "" else default
         except (TypeError, ValueError):
             result[key] = default
+    for key, default in OPS_TIME_KEYS.items():
+        raw = stored.get(key, "")
+        result[key] = raw if OPS_TIME_PATTERN.match(raw or "") else default
     return result
+
+
+def _time_minutes(value: str, fallback: int) -> int:
+    if not OPS_TIME_PATTERN.match(value or ""):
+        return fallback
+    hour, minute = value.split(":")
+    return int(hour) * 60 + int(minute)
+
+
+def followup_window(ops: Dict[str, Any]) -> tuple[int, int]:
+    return (
+        _time_minutes(ops.get("followup_jam_mulai", "08:00"), 8 * 60),
+        _time_minutes(ops.get("followup_jam_selesai", "20:00"), 20 * 60),
+    )
+
+
+def followup_window_label(ops: Dict[str, Any]) -> str:
+    start, end = followup_window(ops)
+
+    def fmt(minutes: int) -> str:
+        return f"{minutes // 60:02d}.{minutes % 60:02d}"
+
+    return f"{fmt(start)}–{fmt(end)}"
+
+
+def within_followup_window(
+    ops: Dict[str, Any], moment: Optional[datetime] = None
+) -> bool:
+    start, end = followup_window(ops)
+    if start == end:
+        return True
+    current = moment or datetime.now()
+    minutes = current.hour * 60 + current.minute
+    if start < end:
+        return start <= minutes < end
+    return minutes >= start or minutes < end
+
+
+def followup_window_message(ops: Dict[str, Any]) -> str:
+    return (
+        "Follow up hanya bisa dilakukan antara pukul "
+        f"{followup_window_label(ops)}."
+    )
 
 
 def update_ops_settings(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -142,6 +193,21 @@ def update_ops_settings(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
                 f"Nilai {key} harus antara {low} dan {high}."
             )
         cleaned[f"{OPS_PREFIX}{key}"] = str(value)
+    for key, default in OPS_TIME_KEYS.items():
+        raw = payload.get(key, current[key])
+        value = str(raw if raw is not None else default).strip()
+        if not OPS_TIME_PATTERN.match(value):
+            raise BusinessValidationError(
+                f"Nilai {key} harus berformat HH:MM."
+            )
+        cleaned[f"{OPS_PREFIX}{key}"] = value
+    if (
+        cleaned[f"{OPS_PREFIX}followup_jam_mulai"]
+        == cleaned[f"{OPS_PREFIX}followup_jam_selesai"]
+    ):
+        raise BusinessValidationError(
+            "Jam mulai dan jam selesai follow up tidak boleh sama."
+        )
     for key, value in cleaned.items():
         set_setting(db, key, value)
     db.commit()

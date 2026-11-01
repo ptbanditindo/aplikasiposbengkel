@@ -16,7 +16,7 @@ from database.models import (
     VehicleOrUnit,
 )
 from database.session import begin_immediate
-from services import audit_service
+from services import audit_service, settings_service
 from services.auth_service import Operator
 from services.errors import (
     BusinessValidationError,
@@ -291,6 +291,8 @@ def receivables(
     db: Session, today: Optional[date] = None, customer_id: Optional[int] = None
 ) -> Dict[str, Any]:
     day = today or date.today()
+    ops = settings_service.get_ops_settings(db)
+    window_open = settings_service.within_followup_window(ops)
     groups: Dict[int, Dict[str, Any]] = {}
     for record in _unpaid_records(db, day, customer_id):
         customer = record.unit.customer
@@ -334,7 +336,9 @@ def receivables(
                 "jatuh_tempo": record.jatuh_tempo,
                 "diingatkan_pada": record.diingatkan_pada,
                 "sudah_diingatkan": sudah_diingatkan,
-                "bisa_diingatkan": bool(tempo_tiba and not sudah_diingatkan),
+                "bisa_diingatkan": bool(
+                    tempo_tiba and not sudah_diingatkan and window_open
+                ),
                 "umur_hari": age,
                 "umur_bucket": _age_bucket(age),
                 "overdue": overdue,

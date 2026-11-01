@@ -269,6 +269,9 @@ def remind_receivable(
                 "Pengingat nota ini sudah dikirim. Ubah jatuh tempo untuk "
                 "mengingatkan lagi."
             )
+        ops = settings_service.get_ops_settings(db)
+        if not settings_service.within_followup_window(ops, moment):
+            raise ConflictError(settings_service.followup_window_message(ops))
         if record.jatuh_tempo is not None and moment.date() < record.jatuh_tempo:
             raise BusinessValidationError(
                 "Pengingat bisa dikirim mulai "
@@ -344,6 +347,9 @@ def remind_customer_receivables(
                 "Pengingat pelanggan ini sudah dikirim. Ubah jatuh tempo per "
                 "nota untuk mengingatkan lagi."
             )
+        ops = settings_service.get_ops_settings(db)
+        if not settings_service.within_followup_window(ops, moment):
+            raise ConflictError(settings_service.followup_window_message(ops))
         today = moment.date()
         eligible = [
             record

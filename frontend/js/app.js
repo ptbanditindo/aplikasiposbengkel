@@ -136,6 +136,33 @@
     return toISODate(new Date());
   }
 
+  function followupWindow() {
+    const ops = (state.config && state.config.ops) || {};
+    const start = ops.followup_jam_mulai || '08:00';
+    const end = ops.followup_jam_selesai || '20:00';
+    return {
+      start,
+      end,
+      label: start.replace(':', '.') + '–' + end.replace(':', '.'),
+    };
+  }
+
+  function isFollowupWindowOpen(now) {
+    const windowInfo = followupWindow();
+    const toMinutes = (value) => {
+      const parts = String(value || '').split(':');
+      return intValue(parts[0], 0) * 60 + intValue(parts[1], 0);
+    };
+    const start = toMinutes(windowInfo.start);
+    const end = toMinutes(windowInfo.end);
+    if (start === end) return true;
+    const current = now || new Date();
+    const minutes = current.getHours() * 60 + current.getMinutes();
+    return start < end
+      ? minutes >= start && minutes < end
+      : minutes >= start || minutes < end;
+  }
+
   function fmtDate(dateString) {
     if (!dateString) return '-';
     const value = String(dateString).slice(0, 10);
@@ -4653,11 +4680,18 @@
       item.status !== 'TIDAK_DATANG';
     const akanDatangView = view === 'AKAN_DATANG';
     const jadwal = FOLLOWUP_JADWAL_JENIS.indexOf(item.jenis) >= 0;
+    const remindTitle = isFollowupWindowOpen()
+      ? 'Follow up belum bisa dilakukan sekarang'
+      : 'Follow up hanya bisa dilakukan antara pukul ' +
+        followupWindow().label +
+        '.';
     const remindButton = item.bisa_followup
       ? '<button type="button" class="btn btn-primary btn-xs" data-action="followup-wa" data-id="' +
         item.id +
         '">Ingatkan</button>'
-      : '<button type="button" class="btn btn-outline btn-xs" disabled title="Follow up belum bisa dilakukan sekarang">Ingatkan</button>';
+      : '<button type="button" class="btn btn-outline btn-xs" disabled title="' +
+        esc(remindTitle) +
+        '">Ingatkan</button>';
     const chatButton = waLink(item.nomor_hp)
       ? '<button type="button" class="btn btn-outline btn-xs" data-action="followup-chat" data-id="' +
         item.id +
@@ -5503,10 +5537,23 @@
         .filter((record) => !record.sudah_diingatkan && record.jatuh_tempo)
         .map((record) => record.jatuh_tempo)
         .sort();
+      const dueReached = records.some(
+        (record) =>
+          !record.sudah_diingatkan &&
+          (!record.jatuh_tempo || record.jatuh_tempo <= todayISO())
+      );
+      const title =
+        !isFollowupWindowOpen() && dueReached
+          ? 'Pengingat hanya bisa dikirim antara pukul ' +
+            followupWindow().label +
+            '.'
+          : pending.length
+            ? 'Pengingat bisa dikirim mulai ' + fmtDate(pending[0]) + '.'
+            : 'Pengingat belum bisa dikirim.';
       return (
-        '<button type="button" class="btn btn-outline btn-xs" disabled title="Pengingat bisa dikirim mulai ' +
-        esc(fmtDate(pending[0])) +
-        '.">Ingatkan</button>'
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="' +
+        esc(title) +
+        '">Ingatkan</button>'
       );
     }
     return (
@@ -5525,10 +5572,18 @@
       );
     }
     if (record.bisa_diingatkan === false) {
+      const dueReached =
+        !record.jatuh_tempo || record.jatuh_tempo <= todayISO();
+      const title =
+        !isFollowupWindowOpen() && dueReached
+          ? 'Pengingat hanya bisa dikirim antara pukul ' +
+            followupWindow().label +
+            '.'
+          : 'Pengingat bisa dikirim mulai ' + fmtDate(record.jatuh_tempo) + '.';
       return (
-        '<button type="button" class="btn btn-outline btn-xs" disabled title="Pengingat bisa dikirim mulai ' +
-        esc(fmtDate(record.jatuh_tempo)) +
-        '.">Ingatkan</button>'
+        '<button type="button" class="btn btn-outline btn-xs" disabled title="' +
+        esc(title) +
+        '">Ingatkan</button>'
       );
     }
     return (
@@ -6817,6 +6872,10 @@
       const input = $('#' + field.id);
       if (input) input.value = String(intValue(ops[field.key], field.low));
     });
+    const mulai = $('#opsFollowupMulai');
+    const selesai = $('#opsFollowupSelesai');
+    if (mulai) mulai.value = ops.followup_jam_mulai || '08:00';
+    if (selesai) selesai.value = ops.followup_jam_selesai || '20:00';
   }
 
   async function handleOpsSubmit(event) {
@@ -6836,6 +6895,22 @@
       }
       payload[field.key] = value;
     }
+    const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    const mulaiEl = $('#opsFollowupMulai');
+    const selesaiEl = $('#opsFollowupSelesai');
+    const mulai = mulaiEl ? mulaiEl.value : '';
+    const selesai = selesaiEl ? selesaiEl.value : '';
+    if (!timePattern.test(mulai) || !timePattern.test(selesai)) {
+      toast('Isi jam mulai dan jam selesai follow up.', 'warning');
+      if (mulaiEl) mulaiEl.focus();
+      return;
+    }
+    if (mulai === selesai) {
+      toast('Jam mulai dan jam selesai tidak boleh sama.', 'warning');
+      return;
+    }
+    payload.followup_jam_mulai = mulai;
+    payload.followup_jam_selesai = selesai;
     const button = $('#opsSave');
     setBusy(button, true, 'Menyimpan...');
     try {

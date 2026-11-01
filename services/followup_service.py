@@ -517,6 +517,7 @@ def _serialize(
         item.status not in {STATUS_ARSIP, STATUS_SELESAI, STATUS_TIDAK_DATANG}
         and valid_number
         and not on_cooldown
+        and settings_service.within_followup_window(ops, moment)
     )
     status_label = STATUS_LABELS.get(item.status, item.status)
     if item.jenis == JENIS_PROSPEK and item.status == STATUS_BARU:
@@ -848,6 +849,8 @@ def follow_up(
             raise ConflictError("Item sudah diarsipkan.")
         if item.status in {STATUS_SELESAI, STATUS_TIDAK_DATANG}:
             raise ConflictError("Item sudah ditutup.")
+        if not settings_service.within_followup_window(ops, moment):
+            raise ConflictError(settings_service.followup_window_message(ops))
         cooldown = int(ops.get("cooldown_hari", 7))
         if cooldown > 0 and item.followup_terakhir is not None:
             until = item.followup_terakhir + timedelta(days=cooldown)

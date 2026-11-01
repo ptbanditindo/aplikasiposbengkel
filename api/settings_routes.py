@@ -34,7 +34,9 @@ def get_ops(db: Session = Depends(get_db)):
 )
 def update_ops(payload: OpsSettingsIn, db: Session = Depends(get_db)):
     return OpsSettingsOut(
-        **settings_service.update_ops_settings(db, payload.model_dump())
+        **settings_service.update_ops_settings(
+            db, payload.model_dump(exclude_unset=True)
+        )
     )
 
 

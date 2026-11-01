@@ -664,3 +664,8 @@ HTTP diganti dengan kalimat umum di atas.
     dan rekening, Pengingat dan follow-up, Printer, Backup, Telegram, dan
     Keamanan yang tampil. Isi formulir dibuka saat judul diklik; tombol aksi
     di kepala kartu (mis. Tambah printer) tetap bisa diklik tanpa melipat.
+31. Pengingat dan follow-up punya isian Jam mulai dan Jam selesai follow up.
+    Di luar rentang itu tombol Ingatkan (follow-up) dan Ingatkan piutang
+    nonaktif dengan keterangan jam, dan backend menolak aksi tersebut.
+    Update pengaturan yang hanya mengirim sebagian field tidak lagi menimpa
+    field lain ke nilai default.

@@ -42,6 +42,74 @@ def _items(client, **params):
     return response.json()["items"]
 
 
+def _window_outside_now():
+    now = datetime.now()
+    return f"{(now.hour + 2) % 24:02d}:00", f"{(now.hour + 3) % 24:02d}:00"
+
+
+def _set_followup_window(client, start, end):
+    response = client.put(
+        "/api/settings/ops",
+        json={"followup_jam_mulai": start, "followup_jam_selesai": end},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_followup_ditolak_di_luar_jam(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Luar Jam")
+    unit = create_unit(customer["id"], nopol="B 7019 JAM")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(db_session, record_id, days_ago=7)
+    item = _items(client, jenis="prospek")[0]
+
+    start, end = _window_outside_now()
+    _set_followup_window(client, start, end)
+    blocked = client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    assert blocked.status_code == 409
+    assert "pukul" in blocked.json()["detail"].lower()
+
+    _set_followup_window(client, "00:00", "23:59")
+    allowed = client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    )
+    assert allowed.status_code == 200, allowed.text
+
+
+def test_pengingat_piutang_ditolak_di_luar_jam(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    customer = create_customer(nama="Pelanggan Piutang Jam")
+    unit = create_unit(customer["id"], nopol="B 7020 PJM")
+    record_id = _record_id(
+        make_transaction(
+            unit["id"],
+            jobs=[{"deskripsi": "Servis Radiator", "jumlah": 1, "harga": "150000"}],
+            jenis_bayar="KREDIT",
+            dp="50000",
+            bayar="50000",
+        )
+    )
+    record = db_session.get(ServiceRecord, record_id)
+    record.jatuh_tempo = date.today() - timedelta(days=1)
+    db_session.commit()
+
+    start, end = _window_outside_now()
+    _set_followup_window(client, start, end)
+    blocked = client.post(f"/api/customers/{customer['id']}/remind")
+    assert blocked.status_code == 409
+    assert "pukul" in blocked.json()["detail"].lower()
+
+    _set_followup_window(client, "00:00", "23:59")
+    allowed = client.post(f"/api/customers/{customer['id']}/remind")
+    assert allowed.status_code == 201, allowed.text
+
+
 def test_add_months_mengikuti_kalender():
     assert add_months(date(2025, 1, 31), 1) == date(2025, 2, 28)
     assert add_months(date(2024, 1, 31), 1) == date(2024, 2, 29)

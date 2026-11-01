@@ -814,6 +814,12 @@ class OpsSettingsIn(CompatBase):
     cooldown_hari: int = Field(default=7, ge=0, le=90)
     garansi_akan_habis_hari: int = Field(default=7, ge=1, le=90)
     servis_berkala_awal_hari: int = Field(default=14, ge=1, le=90)
+    followup_jam_mulai: str = Field(
+        default="08:00", **_pattern(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    )
+    followup_jam_selesai: str = Field(
+        default="20:00", **_pattern(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    )
 
 
 class OpsSettingsOut(OpsSettingsIn):

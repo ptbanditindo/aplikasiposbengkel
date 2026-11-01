@@ -65,6 +65,9 @@ build step) di `http://127.0.0.1:8000`.
   kendala**, dan **Akan datang service** (tanggal wajib); prospek berjadwal
   tetap di daftar Prospek dan tanggalnya bisa diubah. Tombol Status baru
   aktif setelah pelanggan diingatkan lewat Ingatkan/WA.
+  Pengaturan menyediakan **jam mulai** dan **jam selesai follow up**; di luar
+  rentang itu tombol Ingatkan follow-up dan pengingat piutang tidak bisa
+  dipakai, dan backend menolak permintaannya.
   Di kartu Berkendala, pintasan **Status** hanya berisi **Sudah datang**,
   **Tidak datang**, dan **Reschedule** (wajib tanggal); reschedule
   mengembalikan prospek ke daftar Prospek dengan tanggal kunjungan baru.

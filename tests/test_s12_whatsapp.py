@@ -1,6 +1,7 @@
 """Tahap 12: pesan WhatsApp, izin pelanggan, template, dan log upaya."""
 from __future__ import annotations
 
+from datetime import datetime
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -37,6 +38,25 @@ def test_config_menyertakan_pengaturan_ops_default(client):
     assert "wa_template" not in ops
 
 
+def test_jendela_jam_followup_default_dan_overnight():
+    from services.settings_service import (
+        followup_window_label,
+        within_followup_window,
+    )
+
+    ops = {"followup_jam_mulai": "08:00", "followup_jam_selesai": "20:00"}
+    assert followup_window_label(ops) == "08.00–20.00"
+    assert within_followup_window(ops, datetime(2026, 1, 1, 8, 0)) is True
+    assert within_followup_window(ops, datetime(2026, 1, 1, 19, 59)) is True
+    assert within_followup_window(ops, datetime(2026, 1, 1, 20, 0)) is False
+    assert within_followup_window(ops, datetime(2026, 1, 1, 7, 59)) is False
+
+    overnight = {"followup_jam_mulai": "20:00", "followup_jam_selesai": "06:00"}
+    assert within_followup_window(overnight, datetime(2026, 1, 1, 23, 0)) is True
+    assert within_followup_window(overnight, datetime(2026, 1, 1, 5, 59)) is True
+    assert within_followup_window(overnight, datetime(2026, 1, 1, 12, 0)) is False
+
+
 def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
     payload = {
         "tempo_hari": 14,
@@ -55,6 +75,22 @@ def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
 
     invalid = client.put("/api/settings/ops", json={**payload, "tempo_hari": 0})
     assert invalid.status_code == 422, invalid.text
+
+    invalid_time = client.put(
+        "/api/settings/ops",
+        json={**payload, "followup_jam_mulai": "25:00"},
+    )
+    assert invalid_time.status_code == 422, invalid_time.text
+
+    same_time = client.put(
+        "/api/settings/ops",
+        json={
+            **payload,
+            "followup_jam_mulai": "09:00",
+            "followup_jam_selesai": "09:00",
+        },
+    )
+    assert same_time.status_code == 400, same_time.text
 
 
 def test_struk_memuat_teks_wa_lengkap_dan_nomor_ternormalisasi(

@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261146">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261147">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -821,7 +821,18 @@
               <span>Tampilkan servis berkala H- (hari)</span>
               <input type="number" class="input" id="opsServisHari" min="1" max="90" step="1" inputmode="numeric">
             </label>
+            <label class="field">
+              <span>Jam mulai follow up</span>
+              <input type="time" class="input" id="opsFollowupMulai">
+            </label>
+            <label class="field">
+              <span>Jam selesai follow up</span>
+              <input type="time" class="input" id="opsFollowupSelesai">
+            </label>
           </div>
+          <p class="tiny muted">
+            Di luar jam ini tombol Ingatkan dan pengingat piutang tidak bisa dipakai.
+          </p>
 
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="opsSave">Simpan pengaturan follow-up</button>
@@ -1616,15 +1627,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261146"></script>
-  <script src="/static/js/api-client.js?v=20261146"></script>
-  <script src="/static/js/printer-manager.js?v=20261146"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261146"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261146"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261146"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261146"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261146"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261146"></script>
-  <script src="/static/js/app.js?v=20261146"></script>
+  <script src="/static/js/native-bridge.js?v=20261147"></script>
+  <script src="/static/js/api-client.js?v=20261147"></script>
+  <script src="/static/js/printer-manager.js?v=20261147"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261147"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261147"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261147"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261147"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261147"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261147"></script>
+  <script src="/static/js/app.js?v=20261147"></script>
 </body>
 </html>

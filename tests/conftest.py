@@ -46,6 +46,7 @@ from api.app import app  # noqa: E402
 from database.base import Base  # noqa: E402
 from database.seed import seed_defaults  # noqa: E402
 from database.session import SessionLocal, engine  # noqa: E402
+from services import settings_service  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8000"
 TEST_PIN = "2468"
@@ -73,6 +74,10 @@ def reset_database(client):
         TEST_PRINTER_CONFIG.unlink()
     with SessionLocal() as db:
         seed_defaults(db)
+        settings_service.update_ops_settings(
+            db,
+            {"followup_jam_mulai": "00:00", "followup_jam_selesai": "23:59"},
+        )
     response = client.post("/api/auth/setup", json={"pin": TEST_PIN})
     assert response.status_code == 201, response.text
     yield
