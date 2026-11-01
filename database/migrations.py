@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 26
 
 
 def get_user_version(conn) -> int:
@@ -766,6 +766,173 @@ def _migrate_021_followup_tunda(cursor: Cursor) -> None:
     )
 
 
+def _migrate_022_stock_minimum(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "stock_items",
+        "stok_minimum",
+        "stok_minimum INTEGER",
+    )
+
+
+def _migrate_023_suppliers(cursor: Cursor) -> None:
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS suppliers ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "nama VARCHAR(255) NOT NULL, "
+        "nomor_hp VARCHAR(64) NOT NULL DEFAULT '', "
+        "alamat TEXT, catatan TEXT, "
+        "aktif BOOLEAN NOT NULL DEFAULT 1, "
+        "created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_suppliers_nama ON suppliers (nama)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_suppliers_aktif ON suppliers (aktif)"
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS supplier_items ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE, "
+        "stock_item_id INTEGER NOT NULL REFERENCES stock_items(id) ON DELETE CASCADE)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_supplier_items_supplier_id "
+        "ON supplier_items (supplier_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_supplier_items_stock_item_id "
+        "ON supplier_items (stock_item_id)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_supplier_items_pair "
+        "ON supplier_items (supplier_id, stock_item_id)"
+    )
+    _add_column(
+        cursor,
+        "wa_message_logs",
+        "supplier_id",
+        "supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL",
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_wa_message_logs_supplier_id "
+        "ON wa_message_logs (supplier_id)"
+    )
+
+
+def _migrate_024_employees(cursor: Cursor) -> None:
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS employees ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "nama VARCHAR(255) NOT NULL, "
+        "peran VARCHAR(16) NOT NULL DEFAULT 'MEKANIK', "
+        "aktif BOOLEAN NOT NULL DEFAULT 1, "
+        "nomor_hp VARCHAR(64) NOT NULL DEFAULT '', "
+        "catatan TEXT, "
+        "komisi_mode VARCHAR(16) NOT NULL DEFAULT 'PERSEN', "
+        "komisi_basis VARCHAR(16) NOT NULL DEFAULT 'KEDUANYA', "
+        "komisi_nilai NUMERIC(14, 2) NOT NULL DEFAULT 0, "
+        "created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_employees_nama ON employees (nama)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_employees_aktif ON employees (aktif)"
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "cashier_employee_id",
+        "cashier_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL",
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_records_cashier_employee_id "
+        "ON service_records (cashier_employee_id)"
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS service_record_mechanics ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER NOT NULL REFERENCES service_records(id) ON DELETE CASCADE, "
+        "employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE, "
+        "urutan INTEGER NOT NULL DEFAULT 0)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_record_mechanics_record_id "
+        "ON service_record_mechanics (service_record_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_record_mechanics_employee_id "
+        "ON service_record_mechanics (employee_id)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_service_record_mechanics_pair "
+        "ON service_record_mechanics (service_record_id, employee_id)"
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS service_record_commissions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "service_record_id INTEGER NOT NULL REFERENCES service_records(id) ON DELETE CASCADE, "
+        "employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE, "
+        "nominal NUMERIC(14, 2) NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_record_commissions_record_id "
+        "ON service_record_commissions (service_record_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_service_record_commissions_employee_id "
+        "ON service_record_commissions (employee_id)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_service_record_commissions_pair "
+        "ON service_record_commissions (service_record_id, employee_id)"
+    )
+
+
+def _migrate_025_employee_salary(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "employees",
+        "jenis_imbalan",
+        "jenis_imbalan VARCHAR(16) NOT NULL DEFAULT 'KOMISI'",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "gaji_bulanan",
+        "gaji_bulanan NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+
+
+def _migrate_026_salary_payments(cursor: Cursor) -> None:
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS salary_payments ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL, "
+        "nama_karyawan VARCHAR(255) NOT NULL, "
+        "periode VARCHAR(7) NOT NULL, "
+        "tanggal DATE NOT NULL, "
+        "nominal NUMERIC(14, 2) NOT NULL, "
+        "metode VARCHAR(16) NOT NULL DEFAULT 'CASH', "
+        "catatan TEXT, "
+        "created_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_salary_payments_employee_id "
+        "ON salary_payments (employee_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_salary_payments_periode "
+        "ON salary_payments (periode)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_salary_payments_tanggal "
+        "ON salary_payments (tanggal)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -788,6 +955,11 @@ MIGRATIONS: List[Migration] = [
     (19, _migrate_019_pengerjaan_events),
     (20, _migrate_020_item_identity),
     (21, _migrate_021_followup_tunda),
+    (22, _migrate_022_stock_minimum),
+    (23, _migrate_023_suppliers),
+    (24, _migrate_024_employees),
+    (25, _migrate_025_employee_salary),
+    (26, _migrate_026_salary_payments),
 ]
 
 

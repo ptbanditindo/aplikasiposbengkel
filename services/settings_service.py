@@ -80,6 +80,38 @@ def set_setting(db: Session, key: str, value: str) -> None:
         row.value = value
 
 
+def display_receipt_settings(db: Session) -> Dict[str, bool]:
+    show = get_receipt_settings(db)
+    if not get_ops_settings(db).get("karyawan_aktif", True):
+        show["kasir"] = False
+        show["mekanik"] = False
+    return show
+
+
+def get_receipt_settings(db: Session) -> Dict[str, bool]:
+    stored = {
+        row.key[len(RECEIPT_PREFIX):]: row.value
+        for row in db.scalars(
+            select(AppSetting).where(AppSetting.key.like(f"{RECEIPT_PREFIX}%"))
+        ).all()
+    }
+    result: Dict[str, bool] = {}
+    for field in RECEIPT_FIELDS:
+        raw = str(stored.get(field, "1")).strip().lower()
+        result[field] = raw not in {"0", "false", "off", "no"}
+    return result
+
+
+def update_receipt_settings(
+    db: Session, payload: Dict[str, Any]
+) -> Dict[str, bool]:
+    for field in RECEIPT_FIELDS:
+        if field in payload and payload[field] is not None:
+            set_setting(db, f"{RECEIPT_PREFIX}{field}", "1" if payload[field] else "0")
+    db.commit()
+    return get_receipt_settings(db)
+
+
 def get_setting(db: Session, key: str, default: str = "") -> str:
     row = db.get(AppSetting, key)
     return row.value if row is not None else default
@@ -100,6 +132,14 @@ def update_bengkel_info(db: Session, payload: Dict[str, Any]) -> Dict[str, str]:
     return get_bengkel_info(db)
 
 
+RECEIPT_PREFIX = "receipt."
+RECEIPT_FIELDS = (
+    "tagline", "alamat", "kontak", "no_nota", "tanggal", "kasir", "mekanik",
+    "pelanggan", "hp", "unit", "keluhan", "catatan", "jasa", "part",
+    "total_jasa", "total_part", "diskon", "grand_total", "metode", "bayar",
+    "kembalian", "status_bayar", "garansi", "rekening", "footer",
+)
+
 OPS_PREFIX = "ops."
 OPS_INT_KEYS = {
     "tempo_hari": (1, 365, 7),
@@ -119,10 +159,15 @@ OPS_INT_KEYS = {
     "maks_pesan_bulan": (1, 20, 2),
     "jeda_prospek_servis_hari": (1, 90, 7),
     "maks_tidak_merespons": (1, 10, 3),
+    "stok_minimum_default": (0, 1000000, 3),
 }
 OPS_TIME_KEYS = {
     "followup_jam_mulai": "08:00",
     "followup_jam_selesai": "20:00",
+}
+OPS_BOOL_KEYS = {
+    "karyawan_aktif": True,
+    "supplier_aktif": True,
 }
 OPS_TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
@@ -145,6 +190,9 @@ def get_ops_settings(db: Session) -> Dict[str, Any]:
     for key, default in OPS_TIME_KEYS.items():
         raw = stored.get(key, "")
         result[key] = raw if OPS_TIME_PATTERN.match(raw or "") else default
+    for key, default in OPS_BOOL_KEYS.items():
+        raw = str(stored.get(key, "1" if default else "0")).strip().lower()
+        result[key] = raw not in {"0", "false", "off", "no"}
     return result
 
 
@@ -213,6 +261,17 @@ def update_ops_settings(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
                 f"Nilai {key} harus berformat HH:MM."
             )
         cleaned[f"{OPS_PREFIX}{key}"] = value
+    for key, default in OPS_BOOL_KEYS.items():
+        raw = payload.get(key, current[key])
+        if isinstance(raw, bool):
+            value = raw
+        elif str(raw).strip().lower() in {"1", "true", "on", "yes"}:
+            value = True
+        elif str(raw).strip().lower() in {"0", "false", "off", "no"}:
+            value = False
+        else:
+            value = default
+        cleaned[f"{OPS_PREFIX}{key}"] = "1" if value else "0"
     if (
         cleaned[f"{OPS_PREFIX}followup_jam_mulai"]
         == cleaned[f"{OPS_PREFIX}followup_jam_selesai"]

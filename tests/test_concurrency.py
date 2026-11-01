@@ -49,8 +49,7 @@ def test_t01_dua_puluh_transaksi_paralel_sukses_dan_nota_unik(
     assert len(notas) == PARALLEL
     assert len(set(notas)) == PARALLEL, notas
 
-    prefix = f"INV-{date.today():%Y%m%d}-"
-    assert sorted(notas) == [f"{prefix}{number:04d}" for number in range(1, PARALLEL + 1)]
+    assert sorted(notas, key=int) == [str(number) for number in range(1, PARALLEL + 1)]
 
 
 def _part_payload(unit_id: int, stock_id: int, qty: int) -> dict:
@@ -138,14 +137,12 @@ def test_t01_counter_dimulai_dari_nota_tertinggi_yang_sudah_ada(
 ):
     customer = create_customer(nama="Pelanggan Counter", nomor_hp="081200000021")
     unit = create_unit(customer["id"], nopol="B 2021 CTR")
-    prefix = f"INV-{date.today():%Y%m%d}-"
-
     first = make_transaction(unit["id"]).json()["record"]["no_nota"]
-    assert first == f"{prefix}0001"
+    assert first == "1"
 
-    # Simulasikan database lama: counter belum ada saat nota 0001 dibuat.
+    # Counter hilang: nomor berikutnya tetap melanjutkan dari nomor tertinggi.
     db_session.execute(text("DELETE FROM nota_counters"))
     db_session.commit()
 
     second = make_transaction(unit["id"]).json()["record"]["no_nota"]
-    assert second == f"{prefix}0002"
+    assert second == "2"

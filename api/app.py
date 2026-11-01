@@ -14,6 +14,7 @@ from api import (
     audit_routes,
     auth_routes,
     customer_routes,
+    employee_routes,
     followup_routes,
     payment_routes,
     pos_routes,
@@ -21,6 +22,7 @@ from api import (
     report_routes,
     settings_routes,
     stock_routes,
+    supplier_routes,
     whatsapp_routes,
 )
 from api.deps import require_auth
@@ -30,6 +32,7 @@ from api.schemas import (
     ConfigOut,
     OpsSettingsOut,
     PrinterInfoOut,
+    ReceiptSettingsOut,
     TelegramInfoOut,
 )
 from api.security import UNSAFE_METHODS, allowed_origins, host_header_allowed
@@ -196,11 +199,13 @@ def create_app() -> FastAPI:
     api_prefix = "/api"
     app.include_router(auth_routes.router, prefix=api_prefix)
     app.include_router(customer_routes.router, prefix=api_prefix)
+    app.include_router(employee_routes.router, prefix=api_prefix)
     app.include_router(pos_routes.router, prefix=api_prefix)
     app.include_router(payment_routes.router, prefix=api_prefix)
     app.include_router(whatsapp_routes.router, prefix=api_prefix)
     app.include_router(followup_routes.router, prefix=api_prefix)
     app.include_router(stock_routes.router, prefix=api_prefix)
+    app.include_router(supplier_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
     app.include_router(printer_routes.router, prefix=api_prefix)
@@ -237,6 +242,7 @@ def create_app() -> FastAPI:
             metode_bayar=["CASH", "TRANSFER"],
             keluhan_presets=KELUHAN_PRESETS,
             ops=OpsSettingsOut(**settings_service.get_ops_settings(db)),
+            receipt=ReceiptSettingsOut(**settings_service.get_receipt_settings(db)),
         )
 
     if FRONTEND_DIR.exists():

@@ -154,6 +154,164 @@ class CustomerOverviewOut(CustomerOut):
     units: List[UnitOut]
 
 
+# --- KARYAWAN ---
+class EmployeeCreate(CompatBase):
+    nama: str = Field(..., min_length=2, max_length=255)
+    peran: str = Field(default="MEKANIK", **_pattern("^(MEKANIK|KASIR|KEDUANYA)$"))
+    jenis_imbalan: str = Field(default="KOMISI", **_pattern("^(KOMISI|GAJI|KOMISI_GAJI)$"))
+    gaji_bulanan: Decimal = Field(default=Decimal("0.00"), ge=0)
+    aktif: bool = True
+    nomor_hp: str = Field(default="", max_length=64)
+    catatan: Optional[str] = Field(default=None, max_length=500)
+    komisi_mode: str = Field(default="PERSEN", **_pattern("^(PERSEN|NOMINAL)$"))
+    komisi_basis: str = Field(default="KEDUANYA", **_pattern("^(BARANG|JASA|KEDUANYA)$"))
+    komisi_nilai: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+
+class EmployeeUpdate(CompatBase):
+    nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    peran: Optional[str] = Field(default=None, **_pattern("^(MEKANIK|KASIR|KEDUANYA)$"))
+    jenis_imbalan: Optional[str] = Field(default=None, **_pattern("^(KOMISI|GAJI|KOMISI_GAJI)$"))
+    gaji_bulanan: Optional[Decimal] = Field(default=None, ge=0)
+    aktif: Optional[bool] = None
+    nomor_hp: Optional[str] = Field(default=None, max_length=64)
+    catatan: Optional[str] = Field(default=None, max_length=500)
+    komisi_mode: Optional[str] = Field(default=None, **_pattern("^(PERSEN|NOMINAL)$"))
+    komisi_basis: Optional[str] = Field(default=None, **_pattern("^(BARANG|JASA|KEDUANYA)$"))
+    komisi_nilai: Optional[Decimal] = Field(default=None, ge=0)
+
+
+class EmployeeOut(CompatBase):
+    id: int
+    nama: str
+    peran: str
+    jenis_imbalan: str = "KOMISI"
+    gaji_bulanan: Money = ZERO_MONEY
+    aktif: bool = True
+    nomor_hp: str = ""
+    catatan: Optional[str] = None
+    komisi_mode: str = "PERSEN"
+    komisi_basis: str = "KEDUANYA"
+    komisi_nilai: Money = ZERO_MONEY
+
+
+class EmployeeHistoryOut(CompatBase):
+    record_id: int
+    no_nota: str
+    waktu_service: datetime
+    customer_nama: str
+    unit_deskripsi: str
+    total_servis: Money
+    komisi: Money
+
+
+class EmployeePerformanceOut(CompatBase):
+    employee: EmployeeOut
+    start: Optional[date] = None
+    end: Optional[date] = None
+    jumlah_nota: int = 0
+    jumlah_jasa: int = 0
+    jumlah_part: int = 0
+    total_nilai: Money = ZERO_MONEY
+    pelanggan_unik: int = 0
+    komisi_total: Money = ZERO_MONEY
+    riwayat: List[EmployeeHistoryOut] = Field(default_factory=list)
+
+
+class EmployeeCommissionIn(StrictBase):
+    nominal: Decimal = Field(..., ge=0)
+
+
+class SalaryPaymentCreate(CompatBase):
+    employee_id: int = Field(..., gt=0)
+    periode: str = Field(..., min_length=7, max_length=7)
+    tanggal: Optional[date] = None
+    nominal: Decimal = Field(..., gt=0)
+    metode: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
+    catatan: Optional[str] = Field(default=None, max_length=500)
+
+
+class SalaryPaymentUpdate(CompatBase):
+    employee_id: Optional[int] = Field(default=None, gt=0)
+    periode: Optional[str] = Field(default=None, min_length=7, max_length=7)
+    tanggal: Optional[date] = None
+    nominal: Optional[Decimal] = Field(default=None, gt=0)
+    metode: Optional[str] = Field(default=None, **_pattern("^(CASH|TRANSFER)$"))
+    catatan: Optional[str] = Field(default=None, max_length=500)
+
+
+class SalaryPaymentOut(CompatBase):
+    id: int
+    employee_id: Optional[int] = None
+    nama_karyawan: str
+    periode: str
+    tanggal: date
+    nominal: Money
+    metode: str
+    catatan: Optional[str] = None
+    created_at: datetime
+
+
+# --- SUPPLIER ---
+class SupplierStockItemOut(CompatBase):
+    id: int
+    kode: Optional[str] = None
+    nama: str
+    jumlah: int = 0
+    stok_minimum: Optional[int] = None
+    minimum_efektif: int = 0
+    status: str = ""
+
+
+class SupplierOut(CompatBase):
+    id: int
+    nama: str
+    nomor_hp: str = ""
+    alamat: Optional[str] = None
+    catatan: Optional[str] = None
+    aktif: bool = True
+    items: List[SupplierStockItemOut] = Field(default_factory=list)
+
+
+class SupplierCreate(CompatBase):
+    nama: str = Field(..., min_length=2, max_length=255)
+    nomor_hp: str = Field(default="", max_length=64)
+    alamat: Optional[str] = Field(default=None, max_length=500)
+    catatan: Optional[str] = Field(default=None, max_length=500)
+    aktif: bool = True
+    stock_item_ids: List[int] = Field(default_factory=list)
+
+
+class SupplierUpdate(CompatBase):
+    nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    nomor_hp: Optional[str] = Field(default=None, max_length=64)
+    alamat: Optional[str] = Field(default=None, max_length=500)
+    catatan: Optional[str] = Field(default=None, max_length=500)
+    aktif: Optional[bool] = None
+    stock_item_ids: Optional[List[int]] = None
+
+
+class SupplierFollowupGroupOut(CompatBase):
+    supplier_id: int
+    nama: str
+    nomor_hp: str = ""
+    items: List[SupplierStockItemOut] = Field(default_factory=list)
+
+
+class SupplierWhatsAppIn(StrictBase):
+    stock_item_ids: List[int] = Field(default_factory=list)
+    status: str = Field(default="DIBUKA", **_pattern("^(DIBUKA|DIBATALKAN|TIDAK_TERSEDIA)$"))
+    pesan: Optional[str] = Field(default=None, max_length=4000)
+
+
+class SupplierWhatsAppOut(CompatBase):
+    status: str
+    nomor_masked: str
+    link: str = ""
+    wa_text: str = ""
+    log: WhatsAppLogOut
+
+
 # --- STOCK & JASA ---
 class StockItemCreate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
@@ -162,6 +320,8 @@ class StockItemCreate(CompatBase):
     harga_jual: Decimal = Field(default=Decimal("0.00"), ge=0)
     jumlah: int = Field(default=0, ge=0)
     interval_servis_bulan: int = Field(default=0, ge=0, le=120)
+    stok_minimum: Optional[int] = Field(default=None, ge=0, le=1000000)
+    supplier_ids: Optional[List[int]] = None
 
 
 class StockItemUpdate(CompatBase):
@@ -171,6 +331,8 @@ class StockItemUpdate(CompatBase):
     harga_jual: Optional[Decimal] = Field(default=None, ge=0)
     jumlah: Optional[int] = Field(default=None, ge=0)
     interval_servis_bulan: Optional[int] = Field(default=None, ge=0, le=120)
+    stok_minimum: Optional[int] = Field(default=None, ge=0, le=1000000)
+    supplier_ids: Optional[List[int]] = None
     alasan: Optional[str] = Field(default=None, max_length=255)
 
 
@@ -182,6 +344,7 @@ class StockItemOut(ORMModel):
     harga_jual: Money
     jumlah: int
     interval_servis_bulan: int = 0
+    stok_minimum: Optional[int] = None
 
 
 class HargaJasaCreate(CompatBase):
@@ -234,6 +397,8 @@ class CreateServiceTransactionRequest(CompatBase):
     rencana_bayar: Decimal = Field(default=Decimal("0.00"), ge=0)
     jatuh_tempo: Optional[date] = None
     unit_ditinggal: bool = False
+    cashier_employee_id: Optional[int] = None
+    mechanic_ids: List[int] = Field(default_factory=list)
     bergaransi: bool = True
     garansi_bulan: int = Field(default=1, ge=1, le=120)
     garansi_sampai: Optional[date] = None
@@ -466,10 +631,17 @@ class WhatsAppLogOut(ORMModel):
     service_record_id: Optional[int] = None
     followup_item_id: Optional[int] = None
     customer_id: Optional[int] = None
+    supplier_id: Optional[int] = None
     nomor_masked: str
     status: str
     operator: str
     created_at: datetime
+
+
+if hasattr(SupplierWhatsAppOut, "model_rebuild"):
+    SupplierWhatsAppOut.model_rebuild()
+elif hasattr(SupplierWhatsAppOut, "update_forward_refs"):
+    SupplierWhatsAppOut.update_forward_refs()
 
 
 class WhatsAppAttemptOut(CompatBase):
@@ -534,6 +706,13 @@ class FollowupItemOut(CompatBase):
     cooldown_sampai: Optional[datetime] = None
     bisa_followup: bool = True
     rincian: List[FollowupRincianOut] = Field(default_factory=list)
+
+
+class FollowupResultOut(CompatBase):
+    balik_lagi: int = 0
+    masih_bagus: int = 0
+    bermasalah: int = 0
+    menolak: int = 0
 
 
 class FollowupListOut(CompatBase):
@@ -674,6 +853,8 @@ class ReceiptOut(ORMModel):
     customer_nama: str
     customer_hp: str
     unit_deskripsi: str
+    cashier_nama: str = "Tidak dicatat"
+    mekanik_nama: str = "Tidak dicatat"
     keluhan_awal: str
     catatan_pengerjaan: Optional[str] = None
     biaya_jasa: Money
@@ -752,6 +933,10 @@ class DailySummaryOut(CompatBase):
     total_part: Money
     total_diskon: Money
     laba_kotor: Money
+    komisi_total: Money = ZERO_MONEY
+    laba_bersih_setelah_komisi: Money = ZERO_MONEY
+    gaji_dibayar: Money = ZERO_MONEY
+    laba_bersih_setelah_komisi_dan_gaji: Money = ZERO_MONEY
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
     transaksi_modal_estimasi: int = 0
@@ -765,6 +950,8 @@ class DailySummaryOut(CompatBase):
     piutang_count: int = 0
     piutang_customers: int = 0
     piutang_total: Money = ZERO_MONEY
+    stok_menipis: int = 0
+    stok_habis: int = 0
     garansi_akan_habis: int = 0
     servis_berkala_due: int = 0
     followup_hari_ini: int = 0
@@ -793,6 +980,10 @@ class PeriodReportOut(CompatBase):
     total_part: Money
     total_diskon: Money
     laba_kotor: Money
+    komisi_total: Money = ZERO_MONEY
+    laba_bersih_setelah_komisi: Money = ZERO_MONEY
+    gaji_dibayar: Money = ZERO_MONEY
+    laba_bersih_setelah_komisi_dan_gaji: Money = ZERO_MONEY
     garansi_aktif: int
     transaksi_tanpa_modal: int = 0
     transaksi_modal_estimasi: int = 0
@@ -806,6 +997,8 @@ class PeriodReportOut(CompatBase):
     piutang_count: int = 0
     piutang_customers: int = 0
     piutang_total: Money = ZERO_MONEY
+    stok_menipis: int = 0
+    stok_habis: int = 0
     garansi_akan_habis: int = 0
     servis_berkala_due: int = 0
     followup_hari_ini: int = 0
@@ -885,6 +1078,62 @@ class BackupStatusOut(CompatBase):
     stale_days: int = 2
 
 
+class ReceiptSettingsOut(CompatBase):
+    tagline: bool = True
+    alamat: bool = True
+    kontak: bool = True
+    no_nota: bool = True
+    tanggal: bool = True
+    kasir: bool = True
+    mekanik: bool = True
+    pelanggan: bool = True
+    hp: bool = True
+    unit: bool = True
+    keluhan: bool = True
+    catatan: bool = True
+    jasa: bool = True
+    part: bool = True
+    total_jasa: bool = True
+    total_part: bool = True
+    diskon: bool = True
+    grand_total: bool = True
+    metode: bool = True
+    bayar: bool = True
+    kembalian: bool = True
+    status_bayar: bool = True
+    garansi: bool = True
+    rekening: bool = True
+    footer: bool = True
+
+
+class ReceiptSettingsIn(CompatBase):
+    tagline: Optional[bool] = None
+    alamat: Optional[bool] = None
+    kontak: Optional[bool] = None
+    no_nota: Optional[bool] = None
+    tanggal: Optional[bool] = None
+    kasir: Optional[bool] = None
+    mekanik: Optional[bool] = None
+    pelanggan: Optional[bool] = None
+    hp: Optional[bool] = None
+    unit: Optional[bool] = None
+    keluhan: Optional[bool] = None
+    catatan: Optional[bool] = None
+    jasa: Optional[bool] = None
+    part: Optional[bool] = None
+    total_jasa: Optional[bool] = None
+    total_part: Optional[bool] = None
+    diskon: Optional[bool] = None
+    grand_total: Optional[bool] = None
+    metode: Optional[bool] = None
+    bayar: Optional[bool] = None
+    kembalian: Optional[bool] = None
+    status_bayar: Optional[bool] = None
+    garansi: Optional[bool] = None
+    rekening: Optional[bool] = None
+    footer: Optional[bool] = None
+
+
 class OpsSettingsIn(CompatBase):
     tempo_hari: int = Field(default=7, ge=1, le=365)
     prospek_hari: int = Field(default=7, ge=1, le=365)
@@ -903,6 +1152,9 @@ class OpsSettingsIn(CompatBase):
     maks_pesan_bulan: int = Field(default=2, ge=1, le=20)
     jeda_prospek_servis_hari: int = Field(default=7, ge=1, le=90)
     maks_tidak_merespons: int = Field(default=3, ge=1, le=10)
+    stok_minimum_default: int = Field(default=3, ge=0, le=1000000)
+    karyawan_aktif: bool = True
+    supplier_aktif: bool = True
     followup_jam_mulai: str = Field(
         default="08:00", **_pattern(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     )
@@ -977,6 +1229,7 @@ class ConfigOut(CompatBase):
     metode_bayar: List[str]
     keluhan_presets: List[str]
     ops: OpsSettingsOut = Field(default_factory=OpsSettingsOut)
+    receipt: ReceiptSettingsOut = Field(default_factory=ReceiptSettingsOut)
 
 
 class PinRequest(CompatBase):

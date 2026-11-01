@@ -10,6 +10,8 @@ from api.schemas import (
     BengkelInfoOut,
     OpsSettingsIn,
     OpsSettingsOut,
+    ReceiptSettingsIn,
+    ReceiptSettingsOut,
     ScheduledBackupOut,
     TelegramInfoOut,
     TelegramSettingsIn,
@@ -35,6 +37,20 @@ def get_ops(db: Session = Depends(get_db)):
 def update_ops(payload: OpsSettingsIn, db: Session = Depends(get_db)):
     return OpsSettingsOut(
         **settings_service.update_ops_settings(
+            db, payload.model_dump(exclude_unset=True)
+        )
+    )
+
+
+@router.get("/settings/receipt", response_model=ReceiptSettingsOut)
+def get_receipt(db: Session = Depends(get_db)):
+    return ReceiptSettingsOut(**settings_service.get_receipt_settings(db))
+
+
+@router.put("/settings/receipt", response_model=ReceiptSettingsOut)
+def update_receipt(payload: ReceiptSettingsIn, db: Session = Depends(get_db)):
+    return ReceiptSettingsOut(
+        **settings_service.update_receipt_settings(
             db, payload.model_dump(exclude_unset=True)
         )
     )

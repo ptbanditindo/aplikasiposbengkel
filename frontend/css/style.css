@@ -3739,3 +3739,25 @@ a.btn { text-decoration: none; }
   font-size: 11px;
   font-weight: 500;
 }
+
+/* Kartu ringkasan lebar untuk total hutang */
+.stat-card--wide {
+  grid-column: span 2;
+}
+
+/* Daftar centang karyawan */
+.checkbox-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 170px;
+  overflow: auto;
+}
+
+.checkbox-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  font-size: 13px;
+}

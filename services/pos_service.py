@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database.models import (
+    Employee,
     HargaJasa,
     PengerjaanNota,
     PengerjaanNotaEvent,
@@ -22,6 +23,7 @@ from database.models import (
     ServicePart,
     ServicePayment,
     ServiceRecord,
+    ServiceRecordMechanic,
     StockItem,
     StockMovement,
     VehicleOrUnit,
@@ -30,6 +32,7 @@ from database.session import begin_immediate
 from repositories import service_record_repository as record_repo
 from services import (
     customer_service,
+    employee_service,
     pricing_service,
     warranty_service,
 )
@@ -285,9 +288,15 @@ def _create_transaction_locked(
                 max_length=1000,
             )
 
+        cashier, mechanics = employee_service.validate_assignment(
+            db,
+            getattr(payload, "cashier_employee_id", None),
+            getattr(payload, "mechanic_ids", None) or [],
+        )
         record = ServiceRecord(
             unit_id=unit.id,
-            no_nota=record_repo.allocate_nota(db, now.date()),
+            cashier_employee_id=cashier.id if cashier is not None else None,
+            no_nota=record_repo.allocate_numeric_nota(db),
             request_id=request_id,
             waktu_service=now,
             keluhan_awal=keluhan,
@@ -311,6 +320,17 @@ def _create_transaction_locked(
             status_klaim="Belum claim",
         )
         db.add(record)
+        db.flush()
+        if cashier is not None:
+            record.cashier_employee = cashier
+        for urutan, mechanic in enumerate(mechanics):
+            link = ServiceRecordMechanic(
+                service_record_id=record.id,
+                employee_id=mechanic.id,
+                urutan=urutan,
+            )
+            db.add(link)
+            record.mechanics.append(link)
         db.flush()
 
         operator_label = operator.label if operator is not None else "Kasir"

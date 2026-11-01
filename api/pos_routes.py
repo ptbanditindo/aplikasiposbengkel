@@ -49,6 +49,7 @@ def create_transaction(
         build_receipt_payload(
             result.record,
             settings_service.get_bengkel_info(db),
+            show=settings_service.display_receipt_settings(db),
         )
     )
     summary = ServiceRecordOut.model_validate(record_summary(result.record))
@@ -159,6 +160,7 @@ def get_receipt(record_id: int, db: Session = Depends(get_db)):
         build_receipt_payload(
             record,
             settings_service.get_bengkel_info(db),
+            show=settings_service.display_receipt_settings(db),
         )
     )
 

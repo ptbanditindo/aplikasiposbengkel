@@ -110,31 +110,54 @@ def _append_label_strips(b: ReceiptBuilder, labels: List[Dict[str, Any]]) -> Non
     b.divider("=")
 
 
+def _show_defaults() -> Dict[str, bool]:
+    return {field: True for field in settings_service.RECEIPT_FIELDS}
+
+
 def _build(
     record: ServiceRecord,
     width: int,
     bengkel: Dict[str, str],
     payment=None,
     include_labels: bool = True,
+    show: Optional[Dict[str, bool]] = None,
 ) -> ReceiptBuilder:
     unit = record.unit
     customer = unit.customer
+    flags = _show_defaults()
+    if show:
+        flags.update({key: bool(value) for key, value in show.items() if key in flags})
 
     b = ReceiptBuilder(width)
     b.divider("=")
     b.center(bengkel["nama"], bold=True, double=True)
-    if bengkel["tagline"]:
+    if flags["tagline"] and bengkel["tagline"]:
         b.center(bengkel["tagline"])
-    if bengkel["alamat"]:
+    if flags["alamat"] and bengkel["alamat"]:
         b.center(bengkel["alamat"])
     contact = bengkel["wa"] or bengkel["telepon"]
-    if contact and contact != "-":
+    if flags["kontak"] and contact and contact != "-":
         b.center(f"Telp/WA: {contact}")
     b.divider("=")
 
-    b.kv("No. Nota", record.no_nota)
-    b.kv("Tanggal", record.waktu_service.strftime("%d/%m/%Y %H:%M"))
-    b.kv("Kasir", "Kasir")
+    if flags["no_nota"]:
+        b.kv("No. Nota", record.no_nota)
+    if flags["tanggal"]:
+        b.kv("Tanggal", record.waktu_service.strftime("%d/%m/%Y %H:%M"))
+    cashier_name = (
+        record.cashier_employee.nama
+        if getattr(record, "cashier_employee", None) is not None
+        else "Tidak dicatat"
+    )
+    mechanics = [
+        row.employee.nama
+        for row in getattr(record, "mechanics", []) or []
+        if getattr(row, "employee", None) is not None
+    ]
+    if flags["kasir"]:
+        b.kv("Kasir", cashier_name)
+    if flags["mekanik"]:
+        b.kv("Mekanik", ", ".join(mechanics) or "Tidak dicatat")
     if payment is not None:
         b.center("*** STRUK PELUNASAN ***", bold=True)
     if _is_void(record):
@@ -148,19 +171,23 @@ def _build(
             b.field("Oleh", record.voided_by)
     b.divider("-")
 
-    b.field("Pelanggan", customer.nama)
-    b.field("No. HP", customer.nomor_hp)
-    b.field("Unit", describe_unit(unit))
-    b.field("Keluhan", record.keluhan_awal or "-")
-    if record.catatan_pengerjaan:
+    if flags["pelanggan"]:
+        b.field("Pelanggan", customer.nama)
+    if flags["hp"]:
+        b.field("No. HP", customer.nomor_hp)
+    if flags["unit"]:
+        b.field("Unit", describe_unit(unit))
+    if flags["keluhan"]:
+        b.field("Keluhan", record.keluhan_awal or "-")
+    if flags["catatan"] and record.catatan_pengerjaan:
         b.field("Catatan", record.catatan_pengerjaan)
     b.divider("-")
 
-    if record.jobs:
+    if flags["jasa"] and record.jobs:
         b.add("JASA:", bold=True)
         for job in record.jobs:
             b.item(job.deskripsi, job.jumlah, job.harga, job.subtotal)
-    if record.parts:
+    if flags["part"] and record.parts:
         b.add("PART:", bold=True)
         for part in record.parts:
             b.item(part.nama_part, part.jumlah, part.harga_satuan, part.subtotal)
@@ -168,32 +195,38 @@ def _build(
         b.add("(tidak ada rincian pengerjaan)")
 
     b.divider("-")
-    b.kv("Total Jasa", format_rupiah(record.biaya_jasa))
-    b.kv("Total Part", format_rupiah(record.total_part))
-    if record.diskon and record.diskon > 0:
+    if flags["total_jasa"]:
+        b.kv("Total Jasa", format_rupiah(record.biaya_jasa))
+    if flags["total_part"]:
+        b.kv("Total Part", format_rupiah(record.total_part))
+    if flags["diskon"] and record.diskon and record.diskon > 0:
         b.kv("Diskon", "-" + format_rupiah(record.diskon))
-    b.kv("Grand Total", format_rupiah(record.total_servis), bold=True, double=True)
+    if flags["grand_total"]:
+        b.kv("Grand Total", format_rupiah(record.total_servis), bold=True, double=True)
     total_retur = record.total_retur or Decimal("0.00")
     if total_retur > 0 or _is_void(record):
         b.kv("Retur", "-" + format_rupiah(total_retur))
         b.kv("Total Neto", format_rupiah(_total_neto(record)), bold=True)
 
-    if record.metode_bayar == "TRANSFER":
-        b.kv("Metode Bayar", "TRANSFER BANK")
-    else:
-        b.kv("Metode Bayar", "CASH / TUNAI")
-    b.kv("Bayar", format_rupiah(record.bayar))
-    b.kv("Kembali", format_rupiah(record.kembalian))
+    if flags["metode"]:
+        if record.metode_bayar == "TRANSFER":
+            b.kv("Metode Bayar", "TRANSFER BANK")
+        else:
+            b.kv("Metode Bayar", "CASH / TUNAI")
+    if flags["bayar"]:
+        b.kv("Bayar", format_rupiah(record.bayar))
+    if flags["kembalian"]:
+        b.kv("Kembali", format_rupiah(record.kembalian))
 
     sisa = _sisa_bayar(record)
-    if sisa > 0:
+    if flags["status_bayar"] and sisa > 0:
         b.divider("-")
         b.kv("Status Bayar", "BELUM LUNAS", bold=True)
         b.kv("Uang Muka / Dibayar", format_rupiah(record.total_dibayar or 0))
         b.kv("Sisa", format_rupiah(sisa), bold=True)
         if record.jatuh_tempo:
             b.kv("Jatuh Tempo", record.jatuh_tempo.strftime("%d/%m/%Y"))
-    else:
+    elif flags["status_bayar"]:
         b.kv("Status Bayar", "LUNAS")
 
     payments = list(getattr(record, "payments", []) or [])
@@ -211,31 +244,34 @@ def _build(
             b.kv("Waktu Bayar", payment.waktu.strftime("%d/%m/%Y %H:%M"))
             b.kv("Metode", "TRANSFER BANK" if payment.metode == "TRANSFER" else "CASH / TUNAI")
 
-    b.divider("-")
-    b.add("GARANSI SERVIS:", bold=True)
-    if _is_void(record):
-        b.kv("Status", "DIBATALKAN")
-    elif record.bergaransi and record.garansi_sampai:
-        b.kv("Status", "BERGARANSI")
-        b.kv(
-            "Sampai",
-            record.garansi_sampai.strftime("%d/%m/%Y") + _duration_label(record),
-        )
-        if record.catatan_garansi:
-            b.field("Catatan", record.catatan_garansi)
-    else:
-        b.kv("Status", "TANPA GARANSI")
+    if flags["garansi"]:
+        b.divider("-")
+        b.add("GARANSI SERVIS:", bold=True)
+        if _is_void(record):
+            b.kv("Status", "DIBATALKAN")
+        elif record.bergaransi and record.garansi_sampai:
+            b.kv("Status", "BERGARANSI")
+            b.kv(
+                "Sampai",
+                record.garansi_sampai.strftime("%d/%m/%Y") + _duration_label(record),
+            )
+            if record.catatan_garansi:
+                b.field("Catatan", record.catatan_garansi)
+        else:
+            b.kv("Status", "TANPA GARANSI")
 
-    b.divider("-")
-    b.add("REKENING BENGKEL (TRANSFER):", bold=True)
-    b.add(f"{bengkel['bank_nama']}: {bengkel['no_rekening']}")
-    b.add(f"a/n {bengkel['atas_nama']}")
+    if flags["rekening"]:
+        b.divider("-")
+        b.add("REKENING BENGKEL (TRANSFER):", bold=True)
+        b.add(f"{bengkel['bank_nama']}: {bengkel['no_rekening']}")
+        b.add(f"a/n {bengkel['atas_nama']}")
 
-    b.divider("-")
-    b.center("Simpan struk ini sebagai")
-    b.center("kartu bukti garansi!")
-    b.center("")
-    b.center("Terima kasih!")
+    if flags["footer"]:
+        b.divider("-")
+        b.center("Simpan struk ini sebagai")
+        b.center("kartu bukti garansi!")
+        b.center("")
+        b.center("Terima kasih!")
     b.divider("=")
     if include_labels:
         labels = _labels(record)
@@ -244,9 +280,13 @@ def _build(
     return b
 
 
-def receipt_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
+def receipt_wa_text(
+    record: ServiceRecord,
+    bengkel: Dict[str, str],
+    show: Optional[Dict[str, bool]] = None,
+) -> str:
     """Teks nota lengkap untuk WhatsApp, tanpa strip label potong."""
-    builder = _build(record, 32, bengkel, include_labels=False)
+    builder = _build(record, 32, bengkel, include_labels=False, show=show)
     return "\n".join(line.rstrip() for line in builder.lines()).strip()
 
 
@@ -254,14 +294,17 @@ def build_receipt_payload(
     record: ServiceRecord,
     bengkel: Dict[str, str] | None = None,
     payment=None,
+    show: Optional[Dict[str, bool]] = None,
 ) -> Dict[str, Any]:
     """Data lengkap struk (58mm & 80mm) untuk reprint / cetak Bluetooth."""
     unit = record.unit
     customer = unit.customer
     info = bengkel or settings_service.default_bengkel_info()
 
-    builder_58 = _build(record, 32, info, payment)
-    builder_80 = _build(record, 48, info, payment)
+    if show is None:
+        show = _show_defaults()
+    builder_58 = _build(record, 32, info, payment, show=show)
+    builder_80 = _build(record, 48, info, payment, show=show)
     labels = _labels(record)
     sisa = _sisa_bayar(record)
     payments = [
@@ -311,6 +354,19 @@ def build_receipt_payload(
         "customer_nama": customer.nama,
         "customer_hp": customer.nomor_hp,
         "unit_deskripsi": describe_unit(unit),
+        "cashier_nama": (
+            record.cashier_employee.nama
+            if getattr(record, "cashier_employee", None) is not None
+            else "Tidak dicatat"
+        ),
+        "mekanik_nama": (
+            ", ".join(
+                row.employee.nama
+                for row in getattr(record, "mechanics", []) or []
+                if getattr(row, "employee", None) is not None
+            )
+            or "Tidak dicatat"
+        ),
         "keluhan_awal": record.keluhan_awal,
         "catatan_pengerjaan": record.catatan_pengerjaan,
         "biaya_jasa": record.biaya_jasa,
@@ -345,7 +401,7 @@ def build_receipt_payload(
         "jobs": jobs,
         "parts": parts,
         "payments": payments,
-        "wa_text": receipt_wa_text(record, info),
+        "wa_text": receipt_wa_text(record, info, show=show),
         "completion_wa_text": whatsapp_service.completion_wa_text(record, info),
         "customer_wa": normalize_whatsapp(customer.nomor_hp),
         "bengkel_nama": info["nama"],

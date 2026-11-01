@@ -96,7 +96,7 @@ Rust. Karena itu APK memakai pin pure-Python berikut di
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
 Versi desktop di `requirements.txt` memakai pydantic v2 dan FastAPI terbaru
-yang diverifikasi. Seluruh **322 test** lulus di kedua jalur (v2 dan v1 +
+yang diverifikasi. Seluruh **338 test** lulus di kedua jalur (v2 dan v1 +
 FastAPI 0.115).
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
@@ -134,20 +134,21 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.100.792 byte
-- SHA-256: `e7050ce16218ab5cd3b42200f1d83d72be6e206dbbdcc480c49fdeef6b43133b`
-- Paket: `com.bengkelpos.radiator`, versionName `2.2.7`, versionCode `10`,
+- Ukuran: 45.431.716 byte
+- SHA-256: `38922b4f1d763d422b9b75597650a717ecd5e122f0bc24e2eebc07e520bc0300`
+- Paket: `com.bengkelpos.radiator`, versionName `2.3.2`, versionCode `14`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 277.337 byte, SHA-256
-  `8ef232823ad0fac939afdf32170d360089030f258c95e6941e9f57750cd46e2c`.
+- Asset `assets/bengkel_backend.zip`: 302.754 byte, SHA-256
+  `8c5e1bba74b89c851348baac821e81df6de9ecc20c16ea3a758620235cc7db23`.
   ZIP ini memuat logika follow-up Tahap 1-5: penanda pengerjaan, status
   pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
   servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,
   prioritas, penggabungan pesan, varian template, dan sembilan kartu Follow up.
-  Build ini juga memperbaiki alur pilih unit di kasir: form unit baru
-  disembunyikan bila unit lama dipilih, dan rincian jasa/sparepart langsung
-  tampil.
-- Pytest dua stack lulus 322 test. Unit test Kotlin debug lulus 154 test.
+  Build ini juga memuat total hutang, stok menipis/habis, batas minimum per
+  item, supplier/reseller dengan pemilih barang, hasil follow up, nomor nota
+  angka, karyawan dengan komisi/gaji, pengaturan struk, estimasi laba bersih
+  setelah komisi, serta sakelar fitur karyawan/supplier.
+- Pytest dua stack lulus 338 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 

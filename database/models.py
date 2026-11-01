@@ -54,6 +54,52 @@ class Customer(Base):
     )
 
 
+class Supplier(Base):
+    """Supplier/reseller barang sparepart."""
+
+    __tablename__ = "suppliers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nama: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    nomor_hp: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    alamat: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    aktif: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    items: Mapped[List["SupplierItem"]] = relationship(
+        back_populates="supplier", cascade="all, delete-orphan"
+    )
+
+
+class SupplierItem(Base):
+    """Barang stok yang disuplai oleh seorang supplier."""
+
+    __tablename__ = "supplier_items"
+    __table_args__ = (
+        Index(
+            "ux_supplier_items_pair",
+            "supplier_id",
+            "stock_item_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stock_item_id: Mapped[int] = mapped_column(
+        ForeignKey("stock_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    supplier: Mapped["Supplier"] = relationship(back_populates="items")
+    stock_item: Mapped["StockItem"] = relationship()
+
+
 class VehicleOrUnit(Base):
     __tablename__ = "vehicle_or_units"
 
@@ -100,6 +146,8 @@ class StockItem(Base):
     interval_servis_bulan: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
+    # NULL = ikut batas bawaan Pengaturan; 0 = nonaktif; >0 = batas item.
+    stok_minimum: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
@@ -131,6 +179,67 @@ class NotaCounter(Base):
 
     tanggal: Mapped[str] = mapped_column(String(8), primary_key=True)
     terakhir: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Employee(Base):
+    """Karyawan operasional: mekanik, kasir, atau keduanya."""
+
+    __tablename__ = "employees"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nama: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    peran: Mapped[str] = mapped_column(
+        String(16), default="MEKANIK", nullable=False, index=True
+    )  # MEKANIK | KASIR | KEDUANYA
+    # KOMISI | GAJI | KOMISI_GAJI
+    jenis_imbalan: Mapped[str] = mapped_column(
+        String(16), default="KOMISI", nullable=False
+    )
+    gaji_bulanan: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    aktif: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    nomor_hp: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    komisi_mode: Mapped[str] = mapped_column(
+        String(16), default="PERSEN", nullable=False
+    )  # PERSEN | NOMINAL
+    komisi_basis: Mapped[str] = mapped_column(
+        String(16), default="KEDUANYA", nullable=False
+    )  # BARANG | JASA | KEDUANYA
+    komisi_nilai: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class SalaryPayment(Base):
+    """Pembayaran gaji aktual per karyawan dan periode.
+
+    Nama karyawan disimpan sebagai snapshot agar riwayat tetap terbaca
+    setelah karyawan dihapus.
+    """
+
+    __tablename__ = "salary_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    employee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    nama_karyawan: Mapped[str] = mapped_column(String(255), nullable=False)
+    periode: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    tanggal: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    metode: Mapped[str] = mapped_column(
+        String(16), default="CASH", nullable=False
+    )  # CASH | TRANSFER
+    catatan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    employee: Mapped[Optional["Employee"]] = relationship()
 
 
 class ServiceRecord(Base):
@@ -228,6 +337,19 @@ class ServiceRecord(Base):
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
 
+    cashier_employee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cashier_employee: Mapped[Optional["Employee"]] = relationship(
+        foreign_keys=[cashier_employee_id]
+    )
+    mechanics: Mapped[List["ServiceRecordMechanic"]] = relationship(
+        back_populates="service_record", cascade="all, delete-orphan"
+    )
+    commissions: Mapped[List["ServiceRecordCommission"]] = relationship(
+        back_populates="service_record", cascade="all, delete-orphan"
+    )
+
     unit: Mapped["VehicleOrUnit"] = relationship(back_populates="service_records")
     jobs: Mapped[List["ServiceJob"]] = relationship(
         back_populates="service_record", cascade="all, delete-orphan"
@@ -250,6 +372,58 @@ class ServiceRecord(Base):
         cascade="all, delete-orphan",
         order_by="WhatsAppLog.created_at, WhatsAppLog.id",
     )
+
+
+class ServiceRecordMechanic(Base):
+    """Mekanik yang mengerjakan satu nota."""
+
+    __tablename__ = "service_record_mechanics"
+    __table_args__ = (
+        Index(
+            "ux_service_record_mechanics_pair",
+            "service_record_id",
+            "employee_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[int] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    urutan: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    service_record: Mapped["ServiceRecord"] = relationship(back_populates="mechanics")
+    employee: Mapped["Employee"] = relationship()
+
+
+class ServiceRecordCommission(Base):
+    """Nominal komisi manual per nota dan karyawan."""
+
+    __tablename__ = "service_record_commissions"
+    __table_args__ = (
+        Index(
+            "ux_service_record_commissions_pair",
+            "service_record_id",
+            "employee_id",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service_record_id: Mapped[int] = mapped_column(
+        ForeignKey("service_records.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    nominal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+
+    service_record: Mapped["ServiceRecord"] = relationship(back_populates="commissions")
+    employee: Mapped["Employee"] = relationship()
 
 
 class ServicePayment(Base):
@@ -375,6 +549,9 @@ class WhatsAppLog(Base):
     customer_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    supplier_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     nomor_masked: Mapped[str] = mapped_column(String(32), nullable=False)
     # struk | followup | garansi | piutang | pengerjaan
     jenis: Mapped[str] = mapped_column(
@@ -391,6 +568,7 @@ class WhatsAppLog(Base):
     service_record: Mapped[Optional["ServiceRecord"]] = relationship(
         back_populates="whatsapp_logs"
     )
+    supplier: Mapped[Optional["Supplier"]] = relationship()
 
 
 class FollowupItem(Base):

@@ -63,6 +63,7 @@ def create_payment(
             record,
             settings_service.get_bengkel_info(db),
             payment=payment,
+            show=settings_service.display_receipt_settings(db),
         )
     )
     return PaymentResultOut(

@@ -221,6 +221,14 @@
     jobs: [],
     parts: [],
     stock: [],
+    stockFilter: 'all',
+    suppliers: [],
+    supplierGroups: [],
+    supplierItemSelection: [],
+    employees: [],
+    salaryPayments: [],
+    employeePerfId: null,
+    followupTab: 'customer',
     jasa: [],
     history: [],
     customerDirectory: [],
@@ -496,6 +504,11 @@
 
     if (view === 'dashboard') loadDashboard();
     if (view === 'followup') loadFollowupPage();
+    if (view === 'suppliers') loadSuppliers();
+    if (view === 'employees') {
+      loadEmployees();
+      loadSalaryPayments();
+    }
     if (view === 'history') loadHistory($('#historySearch').value.trim());
     if (view === 'stock') renderStock();
     if (view === 'jasa') renderJasa();
@@ -506,6 +519,7 @@
     if (view === 'settings') {
       fillSettingsForm();
       fillOpsForm();
+      fillReceiptForm();
       fillTelegramForm();
       initPrinterSettings();
     }
@@ -520,6 +534,7 @@
     const config = state.config;
     if (!config) return;
 
+    syncFeatureToggles();
     document.title = config.bengkel.nama + ' - Kasir Bengkel';
     $('#bengkelNama').textContent = config.bengkel.nama;
     $('#bengkelTagline').textContent = config.bengkel.tagline;
@@ -1692,6 +1707,10 @@
     $('#kreditUangMukaAktif').checked = false;
     $('#kreditUangMukaInput').value = '';
     $('#unitDitinggalAktif').checked = false;
+    if ($('#posCashier')) $('#posCashier').value = '';
+    $$('#posMechanics input').forEach((input) => {
+      input.checked = false;
+    });
     $('#metodeCash').checked = true;
     $('#metodeTransfer').checked = false;
     state.jenisBayar = 'LUNAS';
@@ -1750,6 +1769,14 @@
         ? $('#rencanaTanggalInput').value || null
         : null,
       unit_ditinggal: $('#unitDitinggalAktif').checked,
+      cashier_employee_id:
+        state.config && state.config.ops && state.config.ops.karyawan_aktif === false
+          ? null
+          : intValue($('#posCashier').value, 0) || null,
+      mechanic_ids:
+        state.config && state.config.ops && state.config.ops.karyawan_aktif === false
+          ? []
+          : $$('#posMechanics input:checked').map((input) => Number(input.value)),
       bergaransi: $('#garansiAktif').checked,
       garansi_bulan: garansiBulanValue(),
       catatan_garansi: $('#garansiCatatan').value.trim() || null,
@@ -3769,6 +3796,14 @@
       $('#statCash').textContent = fmtRp(daily.total_cash);
       $('#statTransfer').textContent = fmtRp(daily.total_transfer);
       $('#statWarranty').textContent = daily.garansi_aktif;
+      $('#statTotalDebt').textContent = fmtRp(daily.piutang_total || 0);
+      $('#statTotalDebtSub').textContent =
+        intValue(daily.piutang_count, 0) +
+        ' nota · ' +
+        intValue(daily.piutang_customers, 0) +
+        ' pelanggan';
+      $('#statLowStock').textContent = intValue(daily.stok_menipis, 0);
+      $('#statStockOut').textContent = intValue(daily.stok_habis, 0);
 
       renderRecent(records.slice(0, 6));
     } catch (err) {
@@ -4934,6 +4969,30 @@
   }
 
   async function loadFollowupPage() {
+    const supplierAktif =
+      !state.config || !state.config.ops || state.config.ops.supplier_aktif !== false;
+    if (state.followupTab === 'reseller' && !supplierAktif) {
+      state.followupTab = 'customer';
+    }
+    const reseller = state.followupTab === 'reseller';
+    const statsGrid = $('#followupStatsGrid');
+    const resultGrid = $('#followupResultGrid');
+    const resellerStats = $('#followupResellerStats');
+    const resellerSection = $('#followupResellerSection');
+    if (statsGrid) statsGrid.classList.toggle('hidden', reseller);
+    if (resultGrid && reseller) resultGrid.classList.add('hidden');
+    if (resellerStats) resellerStats.classList.toggle('hidden', !reseller);
+    if (resellerSection) resellerSection.classList.toggle('hidden', !reseller);
+    $$('#followupTabSwitch [data-followup-tab]').forEach((button) => {
+      button.classList.toggle(
+        'active',
+        button.dataset.followupTab === state.followupTab
+      );
+    });
+    if (reseller) {
+      await loadFollowupReseller();
+      return;
+    }
     try {
       const daily = await API.daily(todayISO());
       const set = (id, value) => {
@@ -4956,8 +5015,41 @@
       set('followupStatAkanGaransi', daily.akan_datang_garansi || 0);
       set('followupStatAkanServis', daily.akan_datang_servis || 0);
       set('followupStatAkanProspek', daily.akan_datang_prospek || 0);
+      await loadFollowupResults();
     } catch (err) {
       toast('Follow up gagal dimuat. Coba muat ulang.', 'error', 6000);
+    }
+  }
+
+  async function loadFollowupResults() {
+    const grid = $('#followupResultGrid');
+    if (!grid) return;
+    try {
+      const data = await API.followupResults();
+      const cards = [
+        ['Balik lagi', data.balik_lagi],
+        ['Masih bagus', data.masih_bagus],
+        ['Bermasalah', data.bermasalah],
+        ['Menolak', data.menolak],
+      ].filter((row) => intValue(row[1], 0) > 0);
+      if (!cards.length) {
+        grid.innerHTML = '';
+        grid.classList.add('hidden');
+        return;
+      }
+      grid.innerHTML = cards
+        .map(
+          (row) =>
+            '<article class="stat-card"><span class="stat-label">' +
+            esc(row[0]) +
+            '</span><strong>' +
+            intValue(row[1], 0) +
+            '</strong></article>'
+        )
+        .join('');
+      grid.classList.remove('hidden');
+    } catch (err) {
+      grid.classList.add('hidden');
     }
   }
 
@@ -6417,6 +6509,65 @@
       openReceivables(null);
       return;
     }
+    if (action === 'edit-employee') {
+      const employee = state.employees.find((row) => row.id === id);
+      if (employee) openEmployeeModal(employee);
+      return;
+    }
+    if (action === 'delete-employee') {
+      await deleteEmployee(id);
+      return;
+    }
+    if (action === 'employee-perf') {
+      await openEmployeePerformance(id);
+      return;
+    }
+    if (action === 'edit-salary') {
+      const payment = state.salaryPayments.find((row) => row.id === id);
+      if (payment) openSalaryModal(payment);
+      return;
+    }
+    if (action === 'delete-salary') {
+      await deleteSalaryPayment(id);
+      return;
+    }
+    if (action === 'employee-perf-load') {
+      await loadEmployeePerformance();
+      return;
+    }
+    if (action === 'employee-commission-save') {
+      await saveEmployeeCommission(id, Number(data.recordId));
+      return;
+    }
+    if (action === 'edit-supplier') {
+      const supplier = state.suppliers.find((row) => row.id === id);
+      if (supplier) openSupplierModal(supplier);
+      return;
+    }
+    if (action === 'delete-supplier') {
+      await deleteSupplier(id);
+      return;
+    }
+    if (action === 'supplier-chat') {
+      await chatSupplier(id);
+      return;
+    }
+    if (action === 'supplier-item-remove') {
+      removeSupplierItem(id);
+      return;
+    }
+    if (action === 'open-low-stock') {
+      state.stockFilter = 'low';
+      navigate('stock');
+      loadStock();
+      return;
+    }
+    if (action === 'open-stock-out') {
+      state.stockFilter = 'out';
+      navigate('stock');
+      loadStock();
+      return;
+    }
     if (action === 'open-pengerjaan') {
       openPengerjaanList();
       return;
@@ -6611,6 +6762,7 @@
       state.stock = results[0];
       state.jasa = results[1];
       populatePickers();
+      populateEmployeeOptions();
       renderStock();
       renderJasa();
     } catch (err) {
@@ -6618,21 +6770,110 @@
     }
   }
 
+  function supplierNamesForStock(stockId) {
+    if (state.config && state.config.ops && state.config.ops.supplier_aktif === false) {
+      return '-';
+    }
+    return (
+      state.suppliers
+        .filter((supplier) =>
+          (supplier.items || []).some((item) => item.id === stockId)
+        )
+        .map((supplier) => supplier.nama)
+        .join(', ') || '-'
+    );
+  }
+
+  function populateStockSuppliers(item) {
+    const container = $('#stockSupplierList');
+    if (!container) return;
+    const selected = new Set(
+      state.suppliers
+        .filter((supplier) =>
+          item && (supplier.items || []).some((row) => row.id === item.id)
+        )
+        .map((supplier) => supplier.id)
+    );
+    container.innerHTML =
+      state.suppliers
+        .filter((supplier) => supplier.aktif)
+        .map(
+          (supplier) =>
+            '<label><input type="checkbox" value="' +
+            supplier.id +
+            '"' +
+            (selected.has(supplier.id) ? ' checked' : '') +
+            '> ' +
+            esc(supplier.nama) +
+            '</label>'
+        )
+        .join('') ||
+      '<span class="tiny muted">Belum ada supplier.</span>';
+  }
+
+  function stockMinimumDefault() {
+    return intValue(state.config && state.config.ops && state.config.ops.stok_minimum_default, 3);
+  }
+
+  function effectiveStockMinimum(item) {
+    if (item.stok_minimum === null || item.stok_minimum === undefined) {
+      return stockMinimumDefault();
+    }
+    return intValue(item.stok_minimum, 0);
+  }
+
+  function isLowStockItem(item) {
+    const minimum = effectiveStockMinimum(item);
+    const qty = intValue(item.jumlah, 0);
+    return minimum > 0 && qty > 0 && qty <= minimum;
+  }
+
+  function isOutOfStockItem(item) {
+    return intValue(item.jumlah, 0) <= 0;
+  }
+
+  function syncStockFilter() {
+    $$('#stockFilterSwitch [data-stock-filter]').forEach((button) => {
+      button.classList.toggle(
+        'active',
+        button.dataset.stockFilter === state.stockFilter
+      );
+    });
+  }
+
   function renderStock() {
     const stockBody = $('#stockBody');
     if (!stockBody) return;
 
-    const lowStock = state.stock.filter((item) => item.jumlah <= 3).length;
+    const lowItems = state.stock.filter(isLowStockItem);
+    const outItems = state.stock.filter(isOutOfStockItem);
+    const visible =
+      state.stockFilter === 'low'
+        ? lowItems
+        : state.stockFilter === 'out'
+          ? outItems
+          : state.stock;
     $('#stockSummary').textContent =
       state.stock.length +
       ' item · ' +
-      lowStock +
-      ' stok menipis (3 atau kurang)';
+      lowItems.length +
+      ' menipis · ' +
+      outItems.length +
+      ' habis';
+    syncStockFilter();
 
-    stockBody.innerHTML = state.stock
+    stockBody.innerHTML = visible
       .map((item) => {
-        const critical = item.jumlah <= 3;
-        const badgeClass = item.jumlah === 0 ? 'red' : critical ? 'amber' : 'gray';
+        const out = isOutOfStockItem(item);
+        const low = isLowStockItem(item);
+        const badgeClass = out ? 'red' : low ? 'amber' : 'gray';
+        const minimum = effectiveStockMinimum(item);
+        const minimumText =
+          item.stok_minimum === null || item.stok_minimum === undefined
+            ? 'Bawaan ' + minimum
+            : minimum > 0
+              ? String(minimum)
+              : 'Nonaktif';
         return (
           '<tr>' +
           '<td><span class="cell-sub">' +
@@ -6641,6 +6882,9 @@
           '<td><span class="cell-primary">' +
           esc(item.nama) +
           '</span></td>' +
+          '<td class="cell-sub">' +
+          esc(supplierNamesForStock(item.id)) +
+          '</td>' +
           '<td class="text-right money">' +
           fmtRp(item.harga_modal) +
           '</td>' +
@@ -6651,6 +6895,9 @@
           badgeClass +
           '">' +
           item.jumlah +
+          '</span></td>' +
+          '<td class="text-center"><span class="cell-sub">' +
+          esc(minimumText) +
           '</span></td>' +
           '<td>' +
           (clampInterval(item.interval_servis_bulan) > 0
@@ -6672,7 +6919,16 @@
       })
       .join('');
 
-    $('#stockEmpty').classList.toggle('hidden', state.stock.length > 0);
+    const empty = $('#stockEmpty');
+    if (empty) {
+      empty.textContent =
+        state.stockFilter === 'low'
+          ? 'Tidak ada stok menipis.'
+          : state.stockFilter === 'out'
+            ? 'Tidak ada stok habis.'
+            : 'Belum ada data sparepart.';
+      empty.classList.toggle('hidden', visible.length > 0);
+    }
   }
 
   function renderJasa() {
@@ -6731,6 +6987,14 @@
     $('#stockIntervalInput').value = item
       ? clampInterval(item.interval_servis_bulan)
       : '0';
+    $('#stockMinimum').value =
+      item && item.stok_minimum !== null && item.stok_minimum !== undefined
+        ? item.stok_minimum
+        : '';
+    populateStockSuppliers(item);
+    if (!state.suppliers.length) {
+      loadSuppliers().then(() => populateStockSuppliers(item));
+    }
     openModal('#stockModal');
     setTimeout(() => $('#stockNama').focus(), 60);
   }
@@ -6738,6 +7002,7 @@
   async function handleStockSubmit(event) {
     event.preventDefault();
     const id = intValue($('#stockId').value, 0);
+    const minimumRaw = $('#stockMinimum').value.trim();
     const payload = {
       kode: $('#stockKode').value.trim() || null,
       nama: $('#stockNama').value.trim(),
@@ -6745,6 +7010,14 @@
       harga_jual: String(parseMoney($('#stockJualHarga').value)),
       jumlah: Math.max(0, intValue($('#stockJumlah').value, 0)),
       interval_servis_bulan: clampInterval($('#stockIntervalInput').value),
+      stok_minimum:
+        minimumRaw === '' ? null : Math.max(0, intValue(minimumRaw, 0)),
+      supplier_ids:
+        state.config && state.config.ops && state.config.ops.supplier_aktif === false
+          ? undefined
+          : $$('#stockSupplierList input:checked').map((input) =>
+              Number(input.value)
+            ),
     };
 
     try {
@@ -6753,6 +7026,7 @@
       closeModal('#stockModal');
       toast('Data sparepart tersimpan.', 'success');
       await loadStock();
+      await loadSuppliers();
     } catch (err) {
       toast(err.message, 'error', 6000);
     }
@@ -6962,6 +7236,9 @@
       $('#reportTransfer').textContent = fmtRp(data.total_transfer);
       $('#reportProfit').textContent = fmtRp(data.laba_kotor);
       $('#reportProfitJasa').textContent = fmtRp(data.total_jasa);
+      $('#reportNetProfit').textContent = fmtRp(
+        data.laba_bersih_setelah_komisi_dan_gaji
+      );
       $('#reportDateLabel').textContent =
         periodLabel +
         ' · ' +
@@ -6982,6 +7259,16 @@
         '<span class="meta-chip">Garansi aktif <strong>' +
         data.garansi_aktif +
         '</strong></span>' +
+        (intValue(data.komisi_total, 0) > 0
+          ? '<span class="meta-chip">Komisi karyawan <strong>' +
+            fmtRp(data.komisi_total) +
+            '</strong></span>'
+          : '') +
+        (intValue(data.gaji_dibayar, 0) > 0
+          ? '<span class="meta-chip">Gaji dibayar <strong>' +
+            fmtRp(data.gaji_dibayar) +
+            '</strong></span>'
+          : '') +
         (intValue(data.jumlah_retur, 0) > 0
           ? '<span class="meta-chip">Retur <strong>' +
             fmtRp(data.total_retur) +
@@ -7197,6 +7484,760 @@
     }
   }
 
+  /* ------------------------------ Karyawan -------------------------------- */
+  async function loadEmployees() {
+    try {
+      state.employees = await API.employees(false);
+      renderEmployees();
+      populateEmployeeOptions();
+    } catch (err) {
+      toast('Data karyawan gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderEmployees() {
+    const body = $('#employeeBody');
+    if (!body) return;
+    const summary = $('#employeeSummary');
+    if (summary) summary.textContent = state.employees.length + ' karyawan';
+    if (!state.employees.length) {
+      body.innerHTML = '';
+      $('#employeeEmpty').classList.remove('hidden');
+      return;
+    }
+    $('#employeeEmpty').classList.add('hidden');
+    const peranLabel = { MEKANIK: 'Mekanik', KASIR: 'Kasir', KEDUANYA: 'Mekanik dan kasir' };
+    body.innerHTML = state.employees
+      .map((employee) => {
+        const gaji =
+          employee.jenis_imbalan === 'KOMISI'
+            ? '-'
+            : fmtRp(employee.gaji_bulanan || 0);
+        const komisi =
+          employee.jenis_imbalan === 'GAJI'
+            ? '-'
+            : employee.komisi_mode === 'PERSEN'
+              ? Number(employee.komisi_nilai || 0) + '%'
+              : fmtRp(employee.komisi_nilai || 0) + ' / nota';
+        return (
+          '<tr>' +
+          '<td><span class="cell-primary">' + esc(employee.nama) + '</span></td>' +
+          '<td>' + esc(peranLabel[employee.peran] || employee.peran) + '</td>' +
+          '<td>' + esc(employee.nomor_hp || '-') + '</td>' +
+          '<td>' + esc(gaji) + '</td>' +
+          '<td>' + esc(komisi) + '</td>' +
+          '<td><span class="badge ' + (employee.aktif ? 'green' : 'gray') + '">' +
+          (employee.aktif ? 'Aktif' : 'Nonaktif') + '</span></td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="employee-perf" data-id="' +
+          employee.id + '">Performa</button>' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="edit-employee" data-id="' +
+          employee.id + '">Edit</button>' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-employee" data-id="' +
+          employee.id + '">Hapus</button>' +
+          '</td></tr>'
+        );
+      })
+      .join('');
+  }
+
+  function populateEmployeeOptions() {
+    const cashier = $('#posCashier');
+    if (cashier) {
+      const selected = cashier.value;
+      cashier.innerHTML =
+        '<option value="">Tanpa kasir</option>' +
+        state.employees
+          .filter((employee) => employee.aktif && ['KASIR', 'KEDUANYA'].includes(employee.peran))
+          .map(
+            (employee) =>
+              '<option value="' + employee.id + '">' + esc(employee.nama) + '</option>'
+          )
+          .join('');
+      if (selected) cashier.value = selected;
+    }
+    const mechanics = $('#posMechanics');
+    if (mechanics) {
+      const checked = new Set(
+        $$('#posMechanics input:checked').map((input) => Number(input.value))
+      );
+      mechanics.innerHTML = state.employees
+        .filter((employee) => employee.aktif && ['MEKANIK', 'KEDUANYA'].includes(employee.peran))
+        .map(
+          (employee) =>
+            '<label><input type="checkbox" value="' +
+            employee.id +
+            '"' +
+            (checked.has(employee.id) ? ' checked' : '') +
+            '> ' +
+            esc(employee.nama) +
+            '</label>'
+        )
+        .join('') || '<span class="tiny muted">Belum ada mekanik.</span>';
+    }
+  }
+
+  function syncEmployeeImbalanFields() {
+    const jenis = $('#employeeJenisImbalan')
+      ? $('#employeeJenisImbalan').value
+      : 'KOMISI';
+    const gajiField = $('#employeeGajiField');
+    const komisiFields = $('#employeeKomisiFields');
+    if (gajiField) gajiField.classList.toggle('hidden', jenis === 'KOMISI');
+    if (komisiFields) komisiFields.classList.toggle('hidden', jenis === 'GAJI');
+  }
+
+  function openEmployeeModal(employee) {
+    const current = employee || null;
+    $('#employeeModalTitle').textContent = current ? 'Edit karyawan' : 'Tambah karyawan';
+    $('#employeeId').value = current ? current.id : '';
+    $('#employeeNama').value = current ? current.nama : '';
+    $('#employeePeran').value = current ? current.peran : 'MEKANIK';
+    $('#employeeAktif').value = current && !current.aktif ? '0' : '1';
+    $('#employeeHp').value = current ? current.nomor_hp || '' : '';
+    $('#employeeCatatan').value = current ? current.catatan || '' : '';
+    $('#employeeJenisImbalan').value = current
+      ? current.jenis_imbalan || 'KOMISI'
+      : 'KOMISI';
+    $('#employeeGajiBulanan').value = current
+      ? Number(current.gaji_bulanan || 0)
+      : 0;
+    $('#employeeKomisiMode').value = current ? current.komisi_mode : 'PERSEN';
+    $('#employeeKomisiBasis').value = current ? current.komisi_basis : 'KEDUANYA';
+    $('#employeeKomisiNilai').value = current
+      ? Number(current.komisi_nilai || 0)
+      : 0;
+    syncEmployeeImbalanFields();
+    openModal('#employeeModal');
+    setTimeout(() => $('#employeeNama').focus(), 60);
+  }
+
+  async function handleEmployeeSubmit(event) {
+    event.preventDefault();
+    const id = intValue($('#employeeId').value, 0);
+    const payload = {
+      nama: $('#employeeNama').value.trim(),
+      peran: $('#employeePeran').value,
+      aktif: $('#employeeAktif').value === '1',
+      nomor_hp: $('#employeeHp').value.trim(),
+      catatan: $('#employeeCatatan').value.trim() || null,
+      jenis_imbalan: $('#employeeJenisImbalan').value,
+      gaji_bulanan: String(Number($('#employeeGajiBulanan').value || 0)),
+      komisi_mode: $('#employeeKomisiMode').value,
+      komisi_basis: $('#employeeKomisiBasis').value,
+      komisi_nilai: String(Number($('#employeeKomisiNilai').value || 0)),
+    };
+    try {
+      if (id) await API.updateEmployee(id, payload);
+      else await API.createEmployee(payload);
+      closeModal('#employeeModal');
+      toast('Data karyawan tersimpan.', 'success');
+      await loadEmployees();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function deleteEmployee(id) {
+    const employee = state.employees.find((row) => row.id === id);
+    if (!employee) return;
+    if (!window.confirm('Hapus karyawan "' + employee.nama + '"?')) return;
+    try {
+      await API.deleteEmployee(id);
+      toast('Karyawan dihapus.', 'success');
+      await loadEmployees();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function loadSalaryPayments() {
+    try {
+      state.salaryPayments = await API.salaryPayments();
+      renderSalaryPayments();
+    } catch (err) {
+      toast('Data pembayaran gaji gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderSalaryPayments() {
+    const body = $('#salaryBody');
+    if (!body) return;
+    const summary = $('#salarySummary');
+    const total = state.salaryPayments.reduce(
+      (sum, row) => sum + Number(row.nominal || 0),
+      0
+    );
+    if (summary) {
+      summary.textContent = state.salaryPayments.length
+        ? state.salaryPayments.length +
+          ' pembayaran · total ' +
+          fmtRp(total) +
+          '. Laporan memotong nominal pada tanggal pembayaran.'
+        : 'Catat gaji yang benar-benar dibayar. Laporan memotong nominal pada tanggal pembayaran.';
+    }
+    const empty = $('#salaryEmpty');
+    if (!state.salaryPayments.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    body.innerHTML = state.salaryPayments
+      .map(
+        (payment) =>
+          '<tr>' +
+          '<td>' + esc(fmtDate(payment.tanggal)) + '</td>' +
+          '<td><span class="cell-primary">' + esc(payment.nama_karyawan) +
+          '</span>' +
+          (payment.employee_id ? '' : '<span class="cell-sub">Karyawan sudah dihapus</span>') +
+          '</td>' +
+          '<td>' + esc(payment.periode || '-') + '</td>' +
+          '<td>' + esc(payment.metode === 'TRANSFER' ? 'Transfer' : 'Tunai') + '</td>' +
+          '<td class="text-right">' + fmtRp(payment.nominal) + '</td>' +
+          '<td>' + esc(payment.catatan || '-') + '</td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="edit-salary" data-id="' +
+          payment.id + '">Edit</button>' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-salary" data-id="' +
+          payment.id + '">Hapus</button>' +
+          '</td></tr>'
+      )
+      .join('');
+  }
+
+  function salaryEmployeeOptions(selectedId, deletedName) {
+    const options = state.employees.map(
+      (employee) =>
+        '<option value="' + employee.id + '"' +
+        (employee.id === selectedId ? ' selected' : '') + '>' +
+        esc(employee.nama) +
+        (employee.aktif ? '' : ' (nonaktif)') +
+        '</option>'
+    );
+    if (selectedId && !state.employees.some((row) => row.id === selectedId)) {
+      options.unshift(
+        '<option value="" selected>' + esc(deletedName || 'Karyawan') +
+        ' (dihapus)</option>'
+      );
+    }
+    return options.join('') || '<option value="">Belum ada karyawan</option>';
+  }
+
+  function syncSalaryNominalFromEmployee() {
+    const select = $('#salaryEmployee');
+    if (!select || $('#salaryId').value) return;
+    const employee = state.employees.find(
+      (row) => row.id === Number(select.value)
+    );
+    if (!employee) return;
+    const nominal = $('#salaryNominal');
+    if (!Number(nominal.value || 0) && Number(employee.gaji_bulanan || 0) > 0) {
+      nominal.value = Number(employee.gaji_bulanan);
+    }
+  }
+
+  function openSalaryModal(payment) {
+    const current = payment || null;
+    if (!state.employees.length) {
+      toast('Tambahkan karyawan lebih dulu.', 'warning');
+      return;
+    }
+    const select = $('#salaryEmployee');
+    $('#salaryModalTitle').textContent = current
+      ? 'Edit pembayaran gaji'
+      : 'Catat pembayaran gaji';
+    $('#salaryId').value = current ? current.id : '';
+    select.innerHTML = salaryEmployeeOptions(
+      current ? current.employee_id : state.employees[0].id,
+      current ? current.nama_karyawan : ''
+    );
+    select.required = !(current && !current.employee_id);
+    $('#salaryPeriode').value = current
+      ? current.periode || ''
+      : todayISO().slice(0, 7);
+    $('#salaryTanggal').value = current
+      ? String(current.tanggal).slice(0, 10)
+      : todayISO();
+    $('#salaryNominal').value = current
+      ? Number(current.nominal || 0)
+      : '';
+    $('#salaryMetode').value = current ? current.metode || 'CASH' : 'CASH';
+    $('#salaryCatatan').value = current ? current.catatan || '' : '';
+    if (!current) syncSalaryNominalFromEmployee();
+    openModal('#salaryModal');
+    setTimeout(() => select.focus(), 60);
+  }
+
+  async function handleSalarySubmit(event) {
+    event.preventDefault();
+    const id = intValue($('#salaryId').value, 0);
+    const employeeId = intValue($('#salaryEmployee').value, 0);
+    const payload = {
+      periode: $('#salaryPeriode').value,
+      tanggal: $('#salaryTanggal').value || null,
+      nominal: String(Number($('#salaryNominal').value || 0)),
+      metode: $('#salaryMetode').value,
+      catatan: $('#salaryCatatan').value.trim() || null,
+    };
+    if (employeeId) payload.employee_id = employeeId;
+    try {
+      if (id) await API.updateSalaryPayment(id, payload);
+      else await API.createSalaryPayment(payload);
+      closeModal('#salaryModal');
+      toast('Pembayaran gaji tersimpan.', 'success');
+      await loadSalaryPayments();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function deleteSalaryPayment(id) {
+    const payment = state.salaryPayments.find((row) => row.id === id);
+    if (!payment) return;
+    if (
+      !window.confirm(
+        'Hapus gaji ' +
+          payment.nama_karyawan +
+          ' periode ' +
+          payment.periode +
+          '? Laporan akan dihitung ulang.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.deleteSalaryPayment(id);
+      toast('Pembayaran gaji dihapus.', 'success');
+      await loadSalaryPayments();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  function employeePerfPeriod() {
+    const start = $('#employeePerfStart') ? $('#employeePerfStart').value : '';
+    const end = $('#employeePerfEnd') ? $('#employeePerfEnd').value : '';
+    return { start: start || undefined, end: end || undefined };
+  }
+
+  async function openEmployeePerformance(id) {
+    state.employeePerfId = id;
+    const employee = state.employees.find((row) => row.id === id);
+    $('#employeePerfTitle').textContent = employee
+      ? 'Performa ' + employee.nama
+      : 'Performa karyawan';
+    $('#employeePerfSubtitle').textContent =
+      'Periode dapat diubah. Komisi dihitung per nota di backend.';
+    $('#employeePerfBody').innerHTML = '<div class="empty-state sm">Memuat performa...</div>';
+    openModal('#employeePerfModal');
+    await loadEmployeePerformance();
+  }
+
+  async function loadEmployeePerformance() {
+    const id = state.employeePerfId;
+    if (!id) return;
+    const body = $('#employeePerfBody');
+    const period = employeePerfPeriod();
+    try {
+      const data = await API.employeePerformance(id, period.start, period.end);
+      renderEmployeePerformance(data);
+    } catch (err) {
+      if (body) body.innerHTML = '<div class="empty-state sm">Performa gagal dimuat.</div>';
+    }
+  }
+
+  function renderEmployeePerformance(data) {
+    const body = $('#employeePerfBody');
+    if (!body) return;
+    const employee = data.employee || {};
+    const period = data.start || data.end
+      ? (data.start || '-') + ' sampai ' + (data.end || '-')
+      : 'Semua waktu';
+    const history = (data.riwayat || [])
+      .map(
+        (row) =>
+          '<tr><td>' + esc(fmtDate(row.waktu_service)) + '</td>' +
+          '<td>' + esc(row.no_nota) + '</td>' +
+          '<td>' + esc(row.customer_nama) + '</td>' +
+          '<td>' + esc(row.unit_deskripsi) + '</td>' +
+          '<td class="text-right">' + fmtRp(row.total_servis) + '</td>' +
+          '<td class="text-right">' + fmtRp(row.komisi) + '</td>' +
+          '<td><div class="inline-action"><input type="number" class="input input-xs" id="empCommission-' +
+          row.record_id + '" min="0" step="0.01" value="' +
+          Number(row.komisi || 0) + '"><button type="button" class="btn btn-outline btn-xs" data-action="employee-commission-save" data-id="' +
+          employee.id + '" data-record-id="' + row.record_id + '">Simpan</button></div></td></tr>'
+      )
+      .join('');
+    body.innerHTML =
+      '<div class="form-grid">' +
+      '<label class="field"><span>Mulai</span><input type="date" class="input" id="employeePerfStart" value="' + esc(data.start || '') + '"></label>' +
+      '<label class="field"><span>Selesai</span><input type="date" class="input" id="employeePerfEnd" value="' + esc(data.end || '') + '"></label>' +
+      '</div>' +
+      '<button type="button" class="btn btn-outline btn-sm" data-action="employee-perf-load">Muat periode</button>' +
+      '<p class="tiny muted">' + esc(period) + '</p>' +
+      '<div class="stats-grid stats-grid--secondary">' +
+      '<article class="stat-card"><span class="stat-label">Nota</span><strong>' + intValue(data.jumlah_nota, 0) + '</strong></article>' +
+      '<article class="stat-card"><span class="stat-label">Jasa</span><strong>' + intValue(data.jumlah_jasa, 0) + '</strong></article>' +
+      '<article class="stat-card"><span class="stat-label">Sparepart</span><strong>' + intValue(data.jumlah_part, 0) + '</strong></article>' +
+      '<article class="stat-card"><span class="stat-label">Nilai servis</span><strong>' + fmtRp(data.total_nilai) + '</strong></article>' +
+      '<article class="stat-card"><span class="stat-label">Pelanggan</span><strong>' + intValue(data.pelanggan_unik, 0) + '</strong></article>' +
+      '<article class="stat-card"><span class="stat-label">Komisi</span><strong>' + fmtRp(data.komisi_total) + '</strong></article>' +
+      '</div>' +
+      '<div class="table-wrap"><table class="table"><thead><tr><th>Tanggal</th><th>Nota</th><th>Pelanggan</th><th>Unit</th><th class="text-right">Nilai</th><th class="text-right">Komisi</th><th>Komisi manual</th></tr></thead><tbody>' +
+      (history || '<tr><td colspan="7" class="empty-state sm">Belum ada pengerjaan.</td></tr>') +
+      '</tbody></table></div>';
+    const imbalanText =
+      employee.jenis_imbalan === 'GAJI'
+        ? 'Gaji ' + fmtRp(employee.gaji_bulanan || 0) + ' per bulan'
+        : employee.jenis_imbalan === 'KOMISI_GAJI'
+          ? 'Gaji ' + fmtRp(employee.gaji_bulanan || 0) + ' + komisi'
+          : employee.komisi_mode === 'PERSEN'
+            ? Number(employee.komisi_nilai || 0) + '% dari ' + (employee.komisi_basis || 'KEDUANYA')
+            : fmtRp(employee.komisi_nilai || 0) + ' per nota';
+    $('#employeePerfSubtitle').textContent =
+      (employee.nama || 'Karyawan') + ' · ' + imbalanText;
+  }
+
+  async function saveEmployeeCommission(id, recordId) {
+    const input = $('#empCommission-' + recordId);
+    if (!input) return;
+    try {
+      await API.setEmployeeCommission(id, recordId, Number(input.value || 0));
+      toast('Komisi manual disimpan.', 'success');
+      await loadEmployeePerformance();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  /* ------------------------------ Supplier -------------------------------- */
+  async function loadSuppliers() {
+    try {
+      state.suppliers = await API.suppliers('');
+      if (!state.stock.length) await loadStock();
+      renderSuppliers();
+    } catch (err) {
+      toast('Data supplier gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderSuppliers() {
+    const body = $('#supplierBody');
+    if (!body) return;
+    const summary = $('#supplierSummary');
+    if (summary) summary.textContent = state.suppliers.length + ' supplier';
+    if (!state.suppliers.length) {
+      body.innerHTML = '';
+      $('#supplierEmpty').classList.remove('hidden');
+      return;
+    }
+    $('#supplierEmpty').classList.add('hidden');
+    body.innerHTML = state.suppliers
+      .map((supplier) => {
+        const items = (supplier.items || [])
+          .map((item) => item.nama)
+          .join(', ') || '-';
+        return (
+          '<tr>' +
+          '<td><span class="cell-primary">' +
+          esc(supplier.nama) +
+          '</span></td>' +
+          '<td>' +
+          esc(supplier.nomor_hp || '-') +
+          '</td>' +
+          '<td class="cell-sub">' +
+          esc(items) +
+          '</td>' +
+          '<td><span class="badge ' +
+          (supplier.aktif ? 'green' : 'gray') +
+          '">' +
+          (supplier.aktif ? 'Aktif' : 'Nonaktif') +
+          '</span></td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn btn-outline btn-xs" data-action="edit-supplier" data-id="' +
+          supplier.id +
+          '">Edit</button>' +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-supplier" data-id="' +
+          supplier.id +
+          '">Hapus</button>' +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+  }
+
+  function populateSupplierItemPicker() {
+    const select = $('#supplierItemPicker');
+    if (!select) return;
+    select.innerHTML =
+      '<option value="">Pilih barang</option>' +
+      state.stock
+        .map(
+          (item) =>
+            '<option value="' +
+            item.id +
+            '">' +
+            esc(item.nama) +
+            ' (stok ' +
+            item.jumlah +
+            ')</option>'
+        )
+        .join('');
+  }
+
+  function renderSupplierSelectedItems() {
+    const body = $('#supplierItemsBody');
+    if (!body) return;
+    const rows = state.supplierItemSelection
+      .map((id) => state.stock.find((item) => item.id === id))
+      .filter(Boolean);
+    body.innerHTML = rows
+      .map(
+        (item) =>
+          '<tr><td><span class="cell-primary">' +
+          esc(item.nama) +
+          '</span></td><td class="text-center">' +
+          intValue(item.jumlah, 0) +
+          '</td><td class="row-actions"><button type="button" class="btn btn-ghost btn-xs" data-action="supplier-item-remove" data-id="' +
+          item.id +
+          '">Hapus</button></td></tr>'
+      )
+      .join('');
+    const empty = $('#supplierItemsEmpty');
+    if (empty) empty.classList.toggle('hidden', rows.length > 0);
+  }
+
+  function addSupplierItem() {
+    const select = $('#supplierItemPicker');
+    if (!select) return;
+    const id = intValue(select.value, 0);
+    if (!id) return;
+    if (!state.supplierItemSelection.includes(id)) {
+      state.supplierItemSelection.push(id);
+    }
+    select.value = '';
+    renderSupplierSelectedItems();
+  }
+
+  function removeSupplierItem(id) {
+    state.supplierItemSelection = state.supplierItemSelection.filter(
+      (value) => value !== id
+    );
+    renderSupplierSelectedItems();
+  }
+
+  function openSupplierModal(supplier) {
+    const current = supplier || null;
+    state.supplierItemSelection = current
+      ? (current.items || []).map((item) => item.id)
+      : [];
+    if (!state.stock.length) {
+      loadStock().then(() => {
+        populateSupplierItemPicker();
+        renderSupplierSelectedItems();
+      });
+    } else {
+      populateSupplierItemPicker();
+      renderSupplierSelectedItems();
+    }
+    $('#supplierModalTitle').textContent = current
+      ? 'Edit supplier'
+      : 'Tambah supplier';
+    $('#supplierId').value = current ? current.id : '';
+    $('#supplierNama').value = current ? current.nama : '';
+    $('#supplierHp').value = current ? current.nomor_hp || '' : '';
+    $('#supplierAlamat').value = current ? current.alamat || '' : '';
+    $('#supplierCatatan').value = current ? current.catatan || '' : '';
+    $('#supplierAktif').value = current && !current.aktif ? '0' : '1';
+    openModal('#supplierModal');
+    setTimeout(() => $('#supplierNama').focus(), 60);
+  }
+
+  async function handleSupplierSubmit(event) {
+    event.preventDefault();
+    const id = intValue($('#supplierId').value, 0);
+    const selected = state.supplierItemSelection.slice();
+    const payload = {
+      nama: $('#supplierNama').value.trim(),
+      nomor_hp: $('#supplierHp').value.trim(),
+      alamat: $('#supplierAlamat').value.trim() || null,
+      catatan: $('#supplierCatatan').value.trim() || null,
+      aktif: $('#supplierAktif').value === '1',
+      stock_item_ids: selected,
+    };
+    try {
+      if (id) await API.updateSupplier(id, payload);
+      else await API.createSupplier(payload);
+      closeModal('#supplierModal');
+      toast('Data supplier tersimpan.', 'success');
+      await loadSuppliers();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function deleteSupplier(id) {
+    const supplier = state.suppliers.find((row) => row.id === id);
+    if (!supplier) return;
+    if (
+      !window.confirm(
+        'Hapus supplier "' + supplier.nama + '"? Data barang tidak ikut terhapus.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.deleteSupplier(id);
+      toast('Supplier dihapus.', 'success');
+      await loadSuppliers();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function loadFollowupReseller() {
+    const section = $('#followupResellerSection');
+    if (!section) return;
+    section.innerHTML = '<div class="empty-state sm">Memuat stok menipis...</div>';
+    try {
+      state.supplierGroups = await API.supplierFollowup();
+      renderFollowupReseller();
+    } catch (err) {
+      section.innerHTML =
+        '<div class="empty-state sm">Follow up reseller gagal dimuat. Coba lagi.</div>';
+    }
+  }
+
+  function renderFollowupReseller() {
+    const section = $('#followupResellerSection');
+    if (!section) return;
+    let lowCount = 0;
+    let outCount = 0;
+    state.supplierGroups.forEach((group) => {
+      group.items.forEach((item) => {
+        if (item.status === 'HABIS') outCount += 1;
+        else lowCount += 1;
+      });
+    });
+    const set = (id, value) => {
+      const el = $('#' + id);
+      if (el) el.textContent = value;
+    };
+    set('resellerStatSuppliers', state.supplierGroups.length);
+    set('resellerStatLow', lowCount);
+    set('resellerStatOut', outCount);
+    set('resellerStatItems', lowCount + outCount);
+
+    if (!state.supplierGroups.length) {
+      section.innerHTML =
+        '<div class="empty-state">Tidak ada barang menipis atau habis untuk supplier.</div>';
+      return;
+    }
+    section.innerHTML =
+      '<div class="receivable-list">' +
+      state.supplierGroups
+        .map((group) => {
+          const items = group.items
+            .map(
+              (item) =>
+                '<div class="pengerjaan-row"><div class="pengerjaan-meta">' +
+                '<strong>' +
+                esc(item.nama) +
+                '</strong><span class="cell-sub">Sisa ' +
+                intValue(item.jumlah, 0) +
+                ' · minimum ' +
+                intValue(item.minimum_efektif, 0) +
+                '</span></div><div class="pengerjaan-actions">' +
+                '<span class="badge ' +
+                (item.status === 'HABIS' ? 'red' : 'amber') +
+                '">' +
+                (item.status === 'HABIS' ? 'Habis' : 'Menipis') +
+                '</span></div></div>'
+            )
+            .join('');
+          return (
+            '<div class="receivable-group"><div class="receivable-head"><div class="receivable-title">' +
+            '<strong>' +
+            esc(group.nama) +
+            '</strong><span>' +
+            esc(group.nomor_hp || 'Nomor WhatsApp belum diisi') +
+            '</span></div><div class="receivable-head-right">' +
+            '<span class="cell-sub">' +
+            group.items.length +
+            ' barang perlu dipasok</span>' +
+            '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-chat" data-id="' +
+            group.supplier_id +
+            '"' +
+            (waLink(group.nomor_hp) ? '' : ' disabled title="Nomor WhatsApp supplier belum valid"') +
+            '>Chat</button></div></div>' +
+            items +
+            '</div>'
+          );
+        })
+        .join('') +
+      '</div>';
+  }
+
+  async function chatSupplier(supplierId) {
+    const group = state.supplierGroups.find(
+      (row) => row.supplier_id === supplierId
+    );
+    if (!group) return;
+    if (!waLink(group.nomor_hp)) {
+      toast('Nomor WhatsApp supplier belum valid.', 'warning');
+      return;
+    }
+    try {
+      const result = await API.supplierWhatsapp(supplierId, {
+        stock_item_ids: group.items.map((item) => item.id),
+      });
+      const opened = await openExternalLink(result.link);
+      if (opened) {
+        toast('Chat supplier dibuka di WhatsApp.', 'success');
+      }
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  function syncFeatureToggles() {
+    const ops = (state.config && state.config.ops) || {};
+    const employeeAktif = ops.karyawan_aktif !== false;
+    const supplierAktif = ops.supplier_aktif !== false;
+    const employeeToggle = $('#employeeFeatureToggle');
+    const supplierToggle = $('#supplierFeatureToggle');
+    if (employeeToggle) employeeToggle.checked = employeeAktif;
+    if (supplierToggle) supplierToggle.checked = supplierAktif;
+    $('#posEmployeeFields')?.classList.toggle('hidden', !employeeAktif);
+    $('#stockSupplierField')?.classList.toggle('hidden', !supplierAktif);
+    const resellerTab = $('#followupTabSwitch [data-followup-tab="reseller"]');
+    if (resellerTab) resellerTab.classList.toggle('hidden', !supplierAktif);
+    if (!employeeAktif) {
+      if ($('#posCashier')) $('#posCashier').value = '';
+      $$('#posMechanics input').forEach((input) => {
+        input.checked = false;
+      });
+    }
+  }
+
+  async function updateFeatureToggle(key, enabled) {
+    try {
+      const ops = await API.updateOpsSettings({ [key]: Boolean(enabled) });
+      if (state.config) state.config.ops = ops;
+      syncFeatureToggles();
+      toast(
+        (key === 'karyawan_aktif' ? 'Fitur karyawan' : 'Fitur supplier') +
+          (enabled ? ' diaktifkan.' : ' dinonaktifkan.'),
+        'success'
+      );
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+      syncFeatureToggles();
+    }
+  }
+
   /* ----------------------------- Settings --------------------------------- */
   function fillSettingsForm() {
     const bengkel = state.config && state.config.bengkel;
@@ -7224,8 +8265,74 @@
     }
   }
 
+  const RECEIPT_TOGGLE_FIELDS = [
+    ['tagline', 'Tagline'],
+    ['alamat', 'Alamat'],
+    ['kontak', 'Telepon/WA'],
+    ['no_nota', 'Nomor nota'],
+    ['tanggal', 'Tanggal'],
+    ['kasir', 'Nama kasir'],
+    ['mekanik', 'Nama mekanik'],
+    ['pelanggan', 'Pelanggan'],
+    ['hp', 'Nomor HP pelanggan'],
+    ['unit', 'Unit'],
+    ['keluhan', 'Keluhan'],
+    ['catatan', 'Catatan pengerjaan'],
+    ['jasa', 'Tabel JASA'],
+    ['part', 'Tabel PART'],
+    ['total_jasa', 'Total Jasa'],
+    ['total_part', 'Total Part'],
+    ['diskon', 'Diskon'],
+    ['grand_total', 'Grand Total'],
+    ['metode', 'Metode bayar'],
+    ['bayar', 'Nominal bayar'],
+    ['kembalian', 'Kembalian'],
+    ['status_bayar', 'Status bayar'],
+    ['garansi', 'Garansi servis'],
+    ['rekening', 'Rekening bengkel'],
+    ['footer', 'Footer bukti garansi'],
+  ];
+
+  function fillReceiptForm() {
+    const container = $('#receiptToggles');
+    if (!container) return;
+    const receipt = (state.config && state.config.receipt) || {};
+    container.innerHTML = RECEIPT_TOGGLE_FIELDS.map(
+      ([key, label]) =>
+        '<label class="switch-row"><span>' +
+        esc(label) +
+        '</span><input type="checkbox" id="receiptShow-' +
+        key +
+        '"' +
+        (receipt[key] === false ? '' : ' checked') +
+        '><span class="switch-ui" aria-hidden="true"></span></label>'
+    ).join('');
+  }
+
+  async function handleReceiptSettingsSubmit(event) {
+    event.preventDefault();
+    const payload = {};
+    RECEIPT_TOGGLE_FIELDS.forEach(([key]) => {
+      const input = $('#receiptShow-' + key);
+      if (input) payload[key] = Boolean(input.checked);
+    });
+    const button = $('#receiptSettingsSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const receipt = await API.updateReceiptSettings(payload);
+      if (state.config) state.config.receipt = receipt;
+      fillReceiptForm();
+      toast('Pengaturan struk disimpan.', 'success');
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
   const OPS_INT_FIELDS = [
     { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
+    { id: 'opsStokMinimum', key: 'stok_minimum_default', low: 0, high: 1000000, label: 'Batas minimum stok' },
     { id: 'opsProspek1', key: 'prospek_hari_1', low: 7, high: 180, label: 'Prospek tahap 1' },
     { id: 'opsProspek2', key: 'prospek_hari_2', low: 30, high: 365, label: 'Prospek tahap 2' },
     { id: 'opsProspek3', key: 'prospek_hari_3', low: 60, high: 540, label: 'Prospek tahap 3' },
@@ -7295,6 +8402,7 @@
       const ops = await API.updateOpsSettings(payload);
       if (state.config) state.config.ops = ops;
       fillOpsForm();
+      syncFeatureToggles();
       toast('Pengaturan follow-up disimpan.', 'success');
     } catch (err) {
       toast(err.message, 'error', 7000);
@@ -7816,6 +8924,12 @@
     $$('#unitTypeSwitch button').forEach((button) =>
       button.addEventListener('click', () => setUnitType(button.dataset.type))
     );
+    $$('#stockFilterSwitch [data-stock-filter]').forEach((button) =>
+      button.addEventListener('click', () => {
+        state.stockFilter = button.dataset.stockFilter;
+        renderStock();
+      })
+    );
     $('#btnAddUnit').addEventListener('click', handleAddUnit);
     $('#btnToggleNewUnit').addEventListener('click', () => {
       state.newUnitFormOpen = !state.newUnitFormOpen;
@@ -7883,6 +8997,53 @@
       openCustomerModal(false)
     );
 
+    $('#btnAddEmployee').addEventListener('click', () => openEmployeeModal(null));
+    $('#btnRefreshEmployees').addEventListener('click', loadEmployees);
+    $('#employeeForm').addEventListener('submit', handleEmployeeSubmit);
+    $('#employeeJenisImbalan').addEventListener('change', syncEmployeeImbalanFields);
+    $('#employeeFeatureToggle').addEventListener('change', (event) =>
+      updateFeatureToggle('karyawan_aktif', event.target.checked)
+    );
+    $('#supplierFeatureToggle').addEventListener('change', (event) =>
+      updateFeatureToggle('supplier_aktif', event.target.checked)
+    );
+    $('#employeeModalClose').addEventListener('click', () =>
+      closeModal('#employeeModal')
+    );
+    $('#employeeCancel').addEventListener('click', () =>
+      closeModal('#employeeModal')
+    );
+    $('#btnAddSalary').addEventListener('click', () => openSalaryModal(null));
+    $('#salaryForm').addEventListener('submit', handleSalarySubmit);
+    $('#salaryEmployee').addEventListener('change', syncSalaryNominalFromEmployee);
+    $('#salaryModalClose').addEventListener('click', () =>
+      closeModal('#salaryModal')
+    );
+    $('#salaryCancel').addEventListener('click', () =>
+      closeModal('#salaryModal')
+    );
+    $('#employeePerfClose').addEventListener('click', () =>
+      closeModal('#employeePerfModal')
+    );
+    $('#employeePerfDismiss').addEventListener('click', () =>
+      closeModal('#employeePerfModal')
+    );
+    $('#btnAddSupplier').addEventListener('click', () => openSupplierModal(null));
+    $('#btnRefreshSuppliers').addEventListener('click', loadSuppliers);
+    $('#supplierForm').addEventListener('submit', handleSupplierSubmit);
+    $('#btnAddSupplierItem').addEventListener('click', addSupplierItem);
+    $('#supplierModalClose').addEventListener('click', () =>
+      closeModal('#supplierModal')
+    );
+    $('#supplierCancel').addEventListener('click', () =>
+      closeModal('#supplierModal')
+    );
+    $$('#followupTabSwitch [data-followup-tab]').forEach((button) =>
+      button.addEventListener('click', () => {
+        state.followupTab = button.dataset.followupTab;
+        loadFollowupPage();
+      })
+    );
     $('#btnAddStock').addEventListener('click', () => openStockModal(null));
     $('#btnAddJasa').addEventListener('click', () => openJasaModal(null));
 
@@ -8002,6 +9163,7 @@
     $('#settingsForm').addEventListener('submit', handleSettingsSubmit);
     $('#settingsReset').addEventListener('click', fillSettingsForm);
     $('#opsForm').addEventListener('submit', handleOpsSubmit);
+    $('#receiptSettingsForm').addEventListener('submit', handleReceiptSettingsSubmit);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
     $('#backupFolderChoose').addEventListener('click', chooseBackupFolder);
@@ -8156,12 +9318,17 @@
         API.getConfig(),
         API.stock(),
         API.jasa(),
+        API.employees(false),
+        API.suppliers(''),
       ]);
       state.config = results[0];
       state.stock = results[1];
       state.jasa = results[2];
+      state.employees = results[3] || [];
+      state.suppliers = results[4] || [];
       applyConfig();
       populatePickers();
+      populateEmployeeOptions();
       renderStock();
       renderJasa();
       await loadPrinterSettings(false);

@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261156">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261159">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -104,6 +104,14 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 19v-1a5 5 0 0 1 10 0v1"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M14 18v-.5a4 4 0 0 1 7 0V18"></path></svg>
           Pelanggan
         </button>
+        <button type="button" class="nav-tab" data-view="employees">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"></circle><path d="M5 20v-1a7 7 0 0 1 14 0v1M4 4h4M6 2v4"></path></svg>
+          Karyawan
+        </button>
+        <button type="button" class="nav-tab" data-view="suppliers">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17V7h11v10M16 10h3l2 3v4h-5"></path><circle cx="7" cy="19" r="1.5"></circle><circle cx="18" cy="19" r="1.5"></circle></svg>
+          Supplier
+        </button>
         <button type="button" class="nav-tab" data-view="followup">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 3h16z"></path><path d="M10 22h4"></path></svg>
           Follow up
@@ -176,6 +184,21 @@
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="dashboard-notas" data-filter="warranty">
             <span class="stat-label">Garansi aktif</span>
             <strong id="statWarranty">0</strong>
+          </article>
+          <article class="stat-card stat-card--wide is-clickable" role="button" tabindex="0" title="Buka daftar piutang" data-action="open-receivables">
+            <span class="stat-label">Total hutang</span>
+            <strong id="statTotalDebt">Rp 0</strong>
+            <span class="stat-sub" id="statTotalDebtSub">0 nota · 0 pelanggan</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok menipis" data-action="open-low-stock">
+            <span class="stat-label">Stok menipis</span>
+            <strong id="statLowStock">0</strong>
+            <span class="stat-sub">Perlu dibeli</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok habis" data-action="open-stock-out">
+            <span class="stat-label">Stok habis</span>
+            <strong id="statStockOut">0</strong>
+            <span class="stat-sub">Tidak tersedia</span>
           </article>
         </div>
 
@@ -468,6 +491,18 @@
                 <strong id="dpSisaValue">Rp 0</strong>
               </div>
 
+              <div class="field" id="posEmployeeFields">
+                <span>Karyawan</span>
+                <label class="field">
+                  <span>Kasir</span>
+                  <select class="input" id="posCashier">
+                    <option value="">Tanpa kasir</option>
+                  </select>
+                </label>
+                <span class="tiny muted">Mekanik yang mengerjakan (boleh kosong)</span>
+                <div class="checkbox-list" id="posMechanics"></div>
+              </div>
+
               <div class="field">
                 <label class="switch-row">
                   <span>Unit ditinggal</span>
@@ -559,6 +594,11 @@
             <p class="muted">Harga master menjadi patokan awal.</p>
           </div>
           <div class="page-actions">
+            <div class="segmented sm" id="stockFilterSwitch" aria-label="Filter stok">
+              <button type="button" data-stock-filter="all" class="active">Semua</button>
+              <button type="button" data-stock-filter="low">Menipis</button>
+              <button type="button" data-stock-filter="out">Habis</button>
+            </div>
             <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
           </div>
         </div>
@@ -573,7 +613,7 @@
           <div class="table-wrap">
             <table class="table table-stock">
               <thead>
-                <tr><th>Kode</th><th>Nama</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th class="col-interval">Servis berkala</th><th></th></tr>
+                <tr><th>Kode</th><th>Nama</th><th>Supplier</th><th class="text-right">Modal</th><th class="text-right">Jual</th><th class="text-center">Stok</th><th class="text-center">Min.</th><th class="col-interval">Servis berkala</th><th></th></tr>
               </thead>
               <tbody id="stockBody"></tbody>
             </table>
@@ -618,7 +658,7 @@
         <div class="page-head">
           <div>
             <h1>Laporan kas</h1>
-            <p class="muted">Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa.</p>
+            <p class="muted">Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi dan gaji.</p>
           </div>
         </div>
 
@@ -656,6 +696,10 @@
           <article class="stat-card">
             <span class="stat-label">Estimasi laba bersih jasa</span>
             <strong id="reportProfitJasa">Rp 0</strong>
+          </article>
+          <article class="stat-card" title="Margin sparepart + jasa - komisi karyawan - gaji yang dibayar pada periode.">
+            <span class="stat-label">Estimasi laba bersih setelah komisi &amp; gaji</span>
+            <strong id="reportNetProfit">Rp 0</strong>
           </article>
         </div>
 
@@ -810,6 +854,11 @@
               <input type="number" class="input" id="opsTempoHari" min="1" max="365" step="1" inputmode="numeric">
             </label>
             <label class="field">
+              <span>Batas minimum stok bawaan</span>
+              <input type="number" class="input" id="opsStokMinimum" min="0" max="1000000" step="1" inputmode="numeric">
+              <small class="tiny muted">Dipakai untuk barang yang batas minimumnya dikosongkan. 0 berarti peringatan stok menipis nonaktif.</small>
+            </label>
+            <label class="field">
               <span>Prospek tahap 1 (hari)</span>
               <input type="number" class="input" id="opsProspek1" min="7" max="180" step="1" inputmode="numeric">
             </label>
@@ -884,6 +933,20 @@
 
           <div class="form-actions">
             <button type="submit" class="btn btn-primary" id="opsSave">Simpan pengaturan follow-up</button>
+          </div>
+        </form>
+
+        <form class="card settings-collapsible" id="receiptSettingsForm">
+          <div class="card-head">
+            <div>
+              <h2>Struk</h2>
+              <p class="muted">Pilih bagian yang tampil di struk cetak dan WhatsApp.</p>
+            </div>
+          </div>
+          <div class="form-grid" id="receiptToggles"></div>
+          <p class="tiny muted">Nama bengkel selalu ditampilkan dan tidak dapat dimatikan.</p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="receiptSettingsSave">Simpan pengaturan struk</button>
           </div>
         </form>
 
@@ -1078,6 +1141,89 @@
         </section>
       </section>
 
+      <section class="view hidden" id="view-employees">
+        <div class="page-head">
+          <div>
+            <h1>Karyawan</h1>
+            <p class="muted">Mekanik, kasir, performa, dan komisi.</p>
+          </div>
+          <div class="page-actions">
+            <label class="switch-row feature-switch"><span>Fitur karyawan</span><input type="checkbox" id="employeeFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
+            <button type="button" class="btn btn-ghost" id="btnRefreshEmployees">Muat ulang</button>
+            <button type="button" class="btn btn-primary" id="btnAddEmployee">+ Karyawan</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Daftar karyawan</h2>
+              <p class="muted" id="employeeSummary">-</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Nama</th><th>Peran</th><th>WhatsApp</th><th>Gaji bulanan</th><th>Komisi</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="employeeBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="employeeEmpty">Belum ada karyawan.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Pembayaran gaji</h2>
+              <p class="muted" id="salarySummary">Catat gaji yang benar-benar dibayar. Laporan memotong nominal pada tanggal pembayaran.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="btnAddSalary">+ Catat gaji</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Tanggal</th><th>Karyawan</th><th>Periode</th><th>Metode</th><th class="text-right">Nominal</th><th>Catatan</th><th></th></tr>
+              </thead>
+              <tbody id="salaryBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="salaryEmpty">Belum ada pembayaran gaji.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view hidden" id="view-suppliers">
+        <div class="page-head">
+          <div>
+            <h1>Supplier</h1>
+            <p class="muted">Daftar supplier dan barang yang disuplai.</p>
+          </div>
+          <div class="page-actions">
+            <label class="switch-row feature-switch"><span>Fitur supplier</span><input type="checkbox" id="supplierFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
+            <button type="button" class="btn btn-ghost" id="btnRefreshSuppliers">Muat ulang</button>
+            <button type="button" class="btn btn-primary" id="btnAddSupplier">+ Supplier</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Daftar supplier</h2>
+              <p class="muted" id="supplierSummary">-</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Nama</th><th>WhatsApp</th><th>Barang disuplai</th><th>Status</th><th></th></tr>
+              </thead>
+              <tbody id="supplierBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="supplierEmpty">Belum ada supplier.</div>
+          </div>
+        </div>
+      </section>
+
       <section class="view hidden" id="view-followup">
         <div class="page-head">
           <div>
@@ -1089,7 +1235,12 @@
           </div>
         </div>
 
-        <div class="stats-grid stats-grid--secondary stats-grid--followup">
+        <div class="segmented" id="followupTabSwitch" aria-label="Jenis follow up">
+          <button type="button" data-followup-tab="customer" class="active">Follow up Pelanggan</button>
+          <button type="button" data-followup-tab="reseller">Follow up Reseller</button>
+        </div>
+
+        <div class="stats-grid stats-grid--secondary stats-grid--followup" id="followupStatsGrid">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
             <span class="stat-label">Piutang</span>
             <strong id="followupStatReceivable">Rp 0</strong>
@@ -1136,12 +1287,36 @@
             <span class="stat-sub">Sudah dijadwalkan</span>
           </article>
         </div>
+        <div class="stats-grid stats-grid--secondary hidden" id="followupResultGrid"></div>
+        <div class="stats-grid stats-grid--secondary stats-grid--followup hidden" id="followupResellerStats">
+          <article class="stat-card">
+            <span class="stat-label">Supplier perlu dihubungi</span>
+            <strong id="resellerStatSuppliers">0</strong>
+            <span class="stat-sub">Punya barang menipis/habis</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Barang menipis</span>
+            <strong id="resellerStatLow">0</strong>
+            <span class="stat-sub">Di bawah batas minimum</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Barang habis</span>
+            <strong id="resellerStatOut">0</strong>
+            <span class="stat-sub">Stok nol</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Total barang</span>
+            <strong id="resellerStatItems">0</strong>
+            <span class="stat-sub">Perlu dipasok</span>
+          </article>
+        </div>
+        <div id="followupResellerSection" class="hidden"></div>
       </section>
 
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.2.7</span>
+        <span>BengkelPOS Radiator v2.3.3</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -1429,6 +1604,217 @@
     </div>
   </div>
 
+  <!-- ============================ EMPLOYEE MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="employeeModal" role="dialog" aria-modal="true" aria-labelledby="employeeModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="employeeModalTitle">Tambah karyawan</h3>
+          <p class="muted">Data karyawan operasional, bukan akun login.</p>
+        </div>
+        <button type="button" class="icon-btn" id="employeeModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="employeeForm">
+        <input type="hidden" id="employeeId">
+        <label class="field">
+          <span>Nama <em>*</em></span>
+          <input type="text" class="input" id="employeeNama" required minlength="2" maxlength="255">
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Peran</span>
+            <select class="input" id="employeePeran">
+              <option value="MEKANIK">Mekanik</option>
+              <option value="KASIR">Kasir</option>
+              <option value="KEDUANYA">Mekanik dan kasir</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select class="input" id="employeeAktif">
+              <option value="1">Aktif</option>
+              <option value="0">Nonaktif</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-grid">
+          <label class="field">
+            <span>Jenis imbalan</span>
+            <select class="input" id="employeeJenisImbalan">
+              <option value="KOMISI">Komisi</option>
+              <option value="GAJI">Gaji bulanan</option>
+              <option value="KOMISI_GAJI">Gaji dan komisi</option>
+            </select>
+          </label>
+          <label class="field" id="employeeGajiField">
+            <span>Gaji bulanan (Rp)</span>
+            <input type="number" class="input" id="employeeGajiBulanan" min="0" step="0.01" value="0">
+          </label>
+        </div>
+        <div class="form-grid">
+          <label class="field">
+            <span>Nomor WhatsApp</span>
+            <input type="text" class="input" id="employeeHp" maxlength="64">
+          </label>
+          <label class="field">
+            <span>Catatan</span>
+            <input type="text" class="input" id="employeeCatatan" maxlength="500">
+          </label>
+        </div>
+        <div class="form-grid" id="employeeKomisiFields">
+          <label class="field">
+            <span>Mode komisi</span>
+            <select class="input" id="employeeKomisiMode">
+              <option value="PERSEN">Persentase</option>
+              <option value="NOMINAL">Nominal per nota</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Basis komisi</span>
+            <select class="input" id="employeeKomisiBasis">
+              <option value="KEDUANYA">Jasa dan barang</option>
+              <option value="JASA">Jasa saja</option>
+              <option value="BARANG">Barang saja</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Nilai komisi (persen atau rupiah per nota)</span>
+          <input type="number" class="input" id="employeeKomisiNilai" min="0" step="0.01" value="0">
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="employeeCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan karyawan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="salaryModal" role="dialog" aria-modal="true" aria-labelledby="salaryModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="salaryModalTitle">Catat pembayaran gaji</h3>
+          <p class="muted">Gaji yang dicatat di sini mengurangi laba bersih pada tanggal pembayaran.</p>
+        </div>
+        <button type="button" class="icon-btn" id="salaryModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="salaryForm">
+        <input type="hidden" id="salaryId">
+        <label class="field">
+          <span>Karyawan <em>*</em></span>
+          <select class="input" id="salaryEmployee" required></select>
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Periode gaji <em>*</em></span>
+            <input type="month" class="input" id="salaryPeriode" required>
+          </label>
+          <label class="field">
+            <span>Tanggal bayar <em>*</em></span>
+            <input type="date" class="input" id="salaryTanggal" required>
+          </label>
+        </div>
+        <div class="form-grid">
+          <label class="field">
+            <span>Nominal (Rp) <em>*</em></span>
+            <input type="number" class="input" id="salaryNominal" min="0.01" step="0.01" required>
+          </label>
+          <label class="field">
+            <span>Metode</span>
+            <select class="input" id="salaryMetode">
+              <option value="CASH">Tunai</option>
+              <option value="TRANSFER">Transfer</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Catatan</span>
+          <input type="text" class="input" id="salaryCatatan" maxlength="500" placeholder="Opsional">
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="salaryCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan gaji</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="employeePerfModal" role="dialog" aria-modal="true" aria-labelledby="employeePerfTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="employeePerfTitle">Performa karyawan</h3>
+          <p class="muted" id="employeePerfSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="employeePerfClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="employeePerfBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="employeePerfDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ SUPPLIER MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="supplierModal" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="supplierModalTitle">Tambah supplier</h3>
+          <p class="muted">Simpan nama dan barang yang disuplai.</p>
+        </div>
+        <button type="button" class="icon-btn" id="supplierModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <form id="supplierForm">
+        <input type="hidden" id="supplierId">
+        <label class="field">
+          <span>Nama supplier <em>*</em></span>
+          <input type="text" class="input" id="supplierNama" required minlength="2" maxlength="255" placeholder="Contoh: Toko Radiator Jaya">
+        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Nomor WhatsApp</span>
+            <input type="text" class="input" id="supplierHp" maxlength="64" placeholder="08xxxxxxxxxx">
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select class="input" id="supplierAktif">
+              <option value="1">Aktif</option>
+              <option value="0">Nonaktif</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Alamat</span>
+          <input type="text" class="input" id="supplierAlamat" maxlength="500" placeholder="Opsional">
+        </label>
+        <label class="field">
+          <span>Catatan</span>
+          <input type="text" class="input" id="supplierCatatan" maxlength="500" placeholder="Opsional">
+        </label>
+        <div class="field">
+          <span>Barang yang disuplai</span>
+          <div class="search-row">
+            <select class="input" id="supplierItemPicker"></select>
+            <button type="button" class="btn btn-outline" id="btnAddSupplierItem">+ Tambah barang</button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Barang</th><th class="text-center">Stok</th><th></th></tr></thead>
+              <tbody id="supplierItemsBody"></tbody>
+            </table>
+            <div class="empty-state sm hidden" id="supplierItemsEmpty">Belum ada barang dipilih.</div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="supplierCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan supplier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ============================ STOCK MODAL ============================ -->
   <div class="modal-backdrop hidden" id="stockModal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
     <div class="modal">
@@ -1465,11 +1851,23 @@
             <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0">
           </label>
         </div>
-        <label class="field">
-          <span>Servis berkala</span>
-          <input type="number" class="input" id="stockIntervalInput" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="0">
-          <small class="tiny muted">Interval bulan untuk pengingat servis. 0 berarti nonaktif.</small>
-        </label>
+        <div class="form-grid">
+          <label class="field">
+            <span>Servis berkala</span>
+            <input type="number" class="input" id="stockIntervalInput" min="0" max="120" step="1" inputmode="numeric" value="0" placeholder="0">
+            <small class="tiny muted">Interval bulan untuk pengingat servis. 0 berarti nonaktif.</small>
+          </label>
+          <label class="field">
+            <span>Batas minimum stok</span>
+            <input type="number" class="input" id="stockMinimum" min="0" max="1000000" step="1" inputmode="numeric" placeholder="Ikut pengaturan">
+            <small class="tiny muted">Kosongkan untuk ikut pengaturan. Isi 0 untuk menonaktifkan peringatan item ini.</small>
+          </label>
+        </div>
+        <div class="field" id="stockSupplierField">
+          <span>Supplier barang ini</span>
+          <div class="checkbox-list" id="stockSupplierList"></div>
+          <small class="tiny muted">Pilih supplier yang menyuplai barang ini. Dipakai saat stok menipis.</small>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="stockCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan sparepart</button>
@@ -1717,15 +2115,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261156"></script>
-  <script src="/static/js/api-client.js?v=20261156"></script>
-  <script src="/static/js/printer-manager.js?v=20261156"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261156"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261156"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261156"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261156"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261156"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261156"></script>
-  <script src="/static/js/app.js?v=20261156"></script>
+  <script src="/static/js/native-bridge.js?v=20261159"></script>
+  <script src="/static/js/api-client.js?v=20261159"></script>
+  <script src="/static/js/printer-manager.js?v=20261159"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261159"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261159"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261159"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261159"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261159"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261159"></script>
+  <script src="/static/js/app.js?v=20261159"></script>
 </body>
 </html>

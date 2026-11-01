@@ -256,8 +256,8 @@ def test_ingatkan_hanya_nota_jatuh_tempo_dan_mengunci_nota_itu(
     sent = client.post(f"/api/customers/{customer['id']}/remind")
     assert sent.status_code == 201, sent.text
     body = sent.json()
-    assert first_record["no_nota"] in body["wa_text"]
-    assert second_record["no_nota"] not in body["wa_text"]
+    assert "nota " + first_record["no_nota"] in body["wa_text"]
+    assert "nota " + second_record["no_nota"] not in body["wa_text"]
     assert "Total sisa" in body["wa_text"]
     assert body["link"].startswith("https://wa.me/6281200000222?text=")
 

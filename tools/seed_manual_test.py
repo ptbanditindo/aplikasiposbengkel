@@ -27,6 +27,7 @@ if "dummy" not in os.environ["DATABASE_URL"]:
 from database.models import (  # noqa: E402
     AppSetting,
     Customer,
+    Employee,
     FollowupEvent,
     FollowupItem,
     HargaJasa,
@@ -35,10 +36,14 @@ from database.models import (  # noqa: E402
     ServicePart,
     ServicePayment,
     ServiceRecord,
+    ServiceRecordMechanic,
+    SalaryPayment,
     ServiceReturn,
     ServiceReturnItem,
     StockItem,
     StockMovement,
+    Supplier,
+    SupplierItem,
     VehicleOrUnit,
 )
 from database.session import SessionLocal, init_db  # noqa: E402
@@ -97,6 +102,14 @@ parts_master = {
 
 stock_out = {nama: 0 for nama in parts_master}
 stock_return = {nama: 0 for nama in parts_master}
+stock_minimums = {
+    "Oli Mesin 10W-40": 10,
+    "Coolant Radiator": 8,
+    "Tangki Radiator Avanza": 8,
+    "Tutup Radiator": 5,
+    "Selang Radiator": 5,
+    "Kipas Radiator": 10,
+}
 
 with SessionLocal() as db:
     jasa = {}
@@ -116,6 +129,7 @@ with SessionLocal() as db:
             harga_jual=jual,
             jumlah=0,
             interval_servis_bulan=interval,
+            stok_minimum=stock_minimums.get(nama),
         )
         db.add(row)
         stok[nama] = row
@@ -146,6 +160,7 @@ with SessionLocal() as db:
         "ops.maks_tidak_merespons": "3",
         "ops.piutang_jeda_hari": "14",
         "ops.piutang_maks_pengingat": "3",
+        "ops.stok_minimum_default": "3",
     }.items():
         db.add(AppSetting(key=key, value=value))
 
@@ -733,6 +748,102 @@ with SessionLocal() as db:
         if sisa < 0:
             raise SystemExit(f"Stok {nama} menjadi negatif ({sisa}).")
         stok[nama].jumlah = sisa
+
+    # Supplier dan relasi barang untuk Follow up Reseller.
+    supplier_jaya = Supplier(
+        nama="Toko Radiator Jaya",
+        nomor_hp="081200000101",
+        alamat="Jl. Otomotif No. 21, Bandung",
+        catatan="Supplier radiator dan coolant.",
+    )
+    supplier_sentra = Supplier(
+        nama="Sentra Sparepart",
+        nomor_hp="081200000102",
+        alamat="Jl. Industri No. 8, Cimahi",
+        catatan="Supplier sparepart pendingin.",
+    )
+    db.add_all([supplier_jaya, supplier_sentra])
+    db.flush()
+    for supplier, names in (
+        (
+            supplier_jaya,
+            ["Oli Mesin 10W-40", "Coolant Radiator", "Tutup Radiator", "Selang Radiator"],
+        ),
+        (supplier_sentra, ["Tangki Radiator Avanza", "Kipas Radiator"]),
+    ):
+        for nama in names:
+            item = stok.get(nama)
+            if item is not None:
+                db.add(
+                    SupplierItem(
+                        supplier_id=supplier.id,
+                        stock_item_id=item.id,
+                    )
+                )
+
+    # Karyawan demo untuk penugasan, performa, dan komisi.
+    andi = Employee(
+        nama="Andi",
+        peran="MEKANIK",
+        nomor_hp="081200000201",
+        komisi_mode="PERSEN",
+        komisi_basis="JASA",
+        komisi_nilai=Decimal("10.00"),
+    )
+    bayu = Employee(
+        nama="Bayu",
+        peran="MEKANIK",
+        nomor_hp="081200000202",
+        komisi_mode="PERSEN",
+        komisi_basis="KEDUANYA",
+        komisi_nilai=Decimal("5.00"),
+    )
+    sari = Employee(
+        nama="Sari",
+        peran="KASIR",
+        nomor_hp="081200000203",
+        jenis_imbalan="GAJI",
+        gaji_bulanan=Decimal("3000000.00"),
+        komisi_mode="NOMINAL",
+        komisi_basis="KEDUANYA",
+        komisi_nilai=Decimal("0.00"),
+    )
+    db.add_all([andi, bayu, sari])
+    db.flush()
+    db.add(
+        SalaryPayment(
+            employee_id=sari.id,
+            nama_karyawan=sari.nama,
+            periode=today.strftime("%Y-%m"),
+            tanggal=today,
+            nominal=Decimal("3000000.00"),
+            metode="TRANSFER",
+            catatan="Gaji demo bulan ini",
+        )
+    )
+    sample_records = (
+        db.query(ServiceRecord)
+        .order_by(ServiceRecord.id.asc())
+        .limit(6)
+        .all()
+    )
+    for index, record_row in enumerate(sample_records):
+        record_row.cashier_employee_id = sari.id
+        db.add(
+            ServiceRecordMechanic(
+                service_record_id=record_row.id,
+                employee_id=andi.id,
+                urutan=0,
+            )
+        )
+        if index % 2 == 0:
+            db.add(
+                ServiceRecordMechanic(
+                    service_record_id=record_row.id,
+                    employee_id=bayu.id,
+                    urutan=1,
+                )
+            )
 
     db.commit()
 

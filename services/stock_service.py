@@ -4,14 +4,13 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.models import HargaJasa, StockItem, StockMovement
+from database.models import HargaJasa, StockItem, StockMovement, Supplier, SupplierItem
 from repositories import stock_repository as repo
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
-
-LOW_STOCK_THRESHOLD = 3
 
 _STOCK_UPDATE_LABELS = {
     "nama": "Nama",
@@ -47,7 +46,8 @@ def _validate_stock_fields(
     harga_jual: Decimal,
     jumlah: int,
     interval_servis_bulan: int = 0,
-) -> tuple[str, Decimal, Decimal, int, int]:
+    stok_minimum: Optional[int] = None,
+) -> tuple[str, Decimal, Decimal, int, int, Optional[int]]:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
         raise BusinessValidationError("Nama sparepart minimal 2 karakter.")
@@ -59,7 +59,8 @@ def _validate_stock_fields(
     if qty < 0:
         raise BusinessValidationError("Jumlah stok tidak boleh negatif.")
     interval = _clean_interval(interval_servis_bulan)
-    return clean_nama, modal, jual, qty, interval
+    minimum = _clean_minimum(stok_minimum)
+    return clean_nama, modal, jual, qty, interval, minimum
 
 
 def create_stock(
@@ -70,9 +71,11 @@ def create_stock(
     jumlah: int = 0,
     kode: Optional[str] = None,
     interval_servis_bulan: int = 0,
+    stok_minimum: Optional[int] = None,
+    supplier_ids: Optional[List[int]] = None,
 ) -> StockItem:
-    clean_nama, modal, jual, qty, interval = _validate_stock_fields(
-        nama, harga_modal, harga_jual, jumlah, interval_servis_bulan
+    clean_nama, modal, jual, qty, interval, minimum = _validate_stock_fields(
+        nama, harga_modal, harga_jual, jumlah, interval_servis_bulan, stok_minimum
     )
     clean_kode = clean_text(kode, max_length=64, allow_newlines=False) or None
     if clean_kode and repo.get_stock_by_kode(db, clean_kode):
@@ -85,9 +88,12 @@ def create_stock(
         harga_jual=jual,
         jumlah=qty,
         interval_servis_bulan=interval,
+        stok_minimum=minimum,
     )
     db.add(item)
     db.flush()
+    if supplier_ids is not None:
+        _set_suppliers(db, item.id, supplier_ids)
     if qty > 0:
         db.add(
             StockMovement(
@@ -112,6 +118,7 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
     alasan = clean_text(
         values.pop("alasan", None), max_length=255, allow_newlines=False
     ) or "Koreksi stok manual"
+    supplier_ids = values.pop("supplier_ids", None)
     old_qty = item.jumlah
 
     _reject_null_fields(values, _STOCK_UPDATE_LABELS)
@@ -124,18 +131,22 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
                 raise ConflictError(f"Kode sparepart '{new_kode}' sudah terdaftar.")
         item.kode = new_kode
 
-    clean_nama, modal, jual, qty, interval = _validate_stock_fields(
+    clean_nama, modal, jual, qty, interval, minimum = _validate_stock_fields(
         values.get("nama", item.nama),
         values.get("harga_modal", item.harga_modal),
         values.get("harga_jual", item.harga_jual),
         values.get("jumlah", item.jumlah),
         values.get("interval_servis_bulan", item.interval_servis_bulan),
+        values.get("stok_minimum", item.stok_minimum),
     )
     item.nama = clean_nama
     item.harga_modal = modal
     item.harga_jual = jual
     item.jumlah = qty
     item.interval_servis_bulan = interval
+    item.stok_minimum = minimum
+    if supplier_ids is not None:
+        _set_suppliers(db, item.id, supplier_ids)
 
     # S-06: koreksi manual tidak boleh menghapus jejak audit.
     if qty != old_qty:
@@ -189,6 +200,98 @@ def list_movements(
         service_record_id=service_record_id,
         limit=limit,
     )
+
+
+def _set_suppliers(
+    db: Session, stock_item_id: int, supplier_ids: List[int]
+) -> None:
+    unique_ids = sorted({int(value) for value in supplier_ids if int(value) > 0})
+    if unique_ids:
+        found = set(
+            db.scalars(select(Supplier.id).where(Supplier.id.in_(unique_ids))).all()
+        )
+        missing = [value for value in unique_ids if value not in found]
+        if missing:
+            raise BusinessValidationError("Ada supplier yang tidak ditemukan.")
+    db.query(SupplierItem).filter(
+        SupplierItem.stock_item_id == stock_item_id
+    ).delete(synchronize_session=False)
+    for supplier_id in unique_ids:
+        db.add(
+            SupplierItem(
+                supplier_id=supplier_id,
+                stock_item_id=stock_item_id,
+            )
+        )
+    db.flush()
+
+
+def _clean_minimum(value) -> Optional[int]:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        minimum = int(value)
+    except (TypeError, ValueError):
+        raise BusinessValidationError("Batas minimum stok harus berupa angka.")
+    if minimum < 0 or minimum > 1000000:
+        raise BusinessValidationError(
+            "Batas minimum stok harus antara 0 dan 1.000.000."
+        )
+    return minimum
+
+
+def _minimum_default(db: Session) -> int:
+    from services import settings_service
+
+    ops = settings_service.get_ops_settings(db)
+    return int(ops.get("stok_minimum_default", 3) or 0)
+
+
+def effective_minimum(item: StockItem, default: int) -> int:
+    if item.stok_minimum is None:
+        return default
+    return int(item.stok_minimum)
+
+
+def is_low_stock(item: StockItem, default: int = 0) -> bool:
+    minimum = effective_minimum(item, default)
+    qty = int(item.jumlah or 0)
+    return minimum > 0 and 0 < qty <= minimum
+
+
+def is_out_of_stock(item: StockItem) -> bool:
+    return int(item.jumlah or 0) <= 0
+
+
+def low_stock(db: Session) -> List[StockItem]:
+    default = _minimum_default(db)
+    items = [
+        item
+        for item in repo.list_stock(db)
+        if is_low_stock(item, default)
+    ]
+    items.sort(
+        key=lambda item: (
+            int(item.jumlah or 0) - effective_minimum(item, default),
+            (item.nama or "").lower(),
+            item.id,
+        )
+    )
+    return items
+
+
+def low_stock_count(db: Session) -> int:
+    return len(low_stock(db))
+
+
+def stock_out(db: Session) -> List[StockItem]:
+    items = [item for item in repo.list_stock(db) if is_out_of_stock(item)]
+    items.sort(key=lambda item: ((item.nama or "").lower(), item.id))
+    return items
+
+
+def stock_out_count(db: Session) -> int:
+    return len(stock_out(db))
 
 
 def _clean_interval(value) -> int:
@@ -261,6 +364,3 @@ def delete_jasa(db: Session, jasa_id: int) -> None:
     db.commit()
 
 
-def is_low_stock(item: StockItem) -> bool:
-    """Ref: PRD FR-STK-02 - peringatan stok kritis."""
-    return item.jumlah <= LOW_STOCK_THRESHOLD

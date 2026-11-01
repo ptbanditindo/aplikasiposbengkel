@@ -13,7 +13,7 @@ from urllib.parse import quote
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.models import Customer, ServiceRecord, VehicleOrUnit, WhatsAppLog
+from database.models import Customer, ServiceRecord, Supplier, VehicleOrUnit, WhatsAppLog
 from services import audit_service, payment_service, settings_service
 from services.auth_service import Operator
 from services.customer_service import describe_unit
@@ -35,12 +35,14 @@ JENIS_FOLLOWUP = "followup"
 JENIS_GARANSI = "garansi"
 JENIS_PIUTANG = "piutang"
 JENIS_PENGERJAAN = "pengerjaan"
+JENIS_SUPPLIER = "supplier"
 VALID_JENIS = {
     JENIS_STRUK,
     JENIS_FOLLOWUP,
     JENIS_GARANSI,
     JENIS_PIUTANG,
     JENIS_PENGERJAAN,
+    JENIS_SUPPLIER,
 }
 
 def formal_opening(
@@ -198,6 +200,89 @@ def pengerjaan_status_wa_text(
 
 
 
+def supplier_wa_text(
+    supplier: Supplier, items: List[Dict[str, Any]], bengkel: Dict[str, str]
+) -> str:
+    """Pesan formal untuk menanyakan stok ke supplier/reseller."""
+    opening = formal_opening(bengkel, supplier.nama)
+    rows = []
+    for item in items:
+        status = "habis" if item.get("status") == "HABIS" else "menipis"
+        rows.append(
+            "- {nama} ({status}, sisa {jumlah}, minimum {minimum})".format(
+                nama=item.get("nama") or "-",
+                status=status,
+                jumlah=int(item.get("jumlah") or 0),
+                minimum=int(item.get("minimum_efektif") or 0),
+            )
+        )
+    body = (
+        "Kami ingin menanyakan ketersediaan barang berikut untuk stok bengkel:\n"
+        + "\n".join(rows)
+        + "\n\nMohon informasi ketersediaan dan perkiraan waktu pengiriman. "
+        "Terima kasih."
+    )
+    return f"{opening} {body}"
+
+
+def log_supplier_attempt(
+    db: Session,
+    supplier_id: int,
+    items: List[Dict[str, Any]],
+    operator: Operator,
+    status: str = STATUS_OPENED,
+    pesan: Optional[str] = None,
+    now: Optional[datetime] = None,
+):
+    """Catat chat supplier dan kembalikan (log, teks, tautan)."""
+    normalized = (status or "").strip().upper()
+    if normalized not in VALID_STATUSES:
+        raise BusinessValidationError(
+            "Status WhatsApp harus DIBUKA, DIBATALKAN, atau TIDAK_TERSEDIA."
+        )
+    moment = now or datetime.now()
+    with db.begin():
+        supplier = db.get(Supplier, supplier_id)
+        if supplier is None:
+            raise NotFoundError("Supplier tidak ditemukan.")
+        if normalized == STATUS_OPENED:
+            ops = settings_service.get_ops_settings(db)
+            if not settings_service.within_followup_window(ops, moment):
+                raise ConflictError(settings_service.followup_window_message(ops))
+            if not is_valid_whatsapp(supplier.nomor_hp):
+                raise BusinessValidationError("Nomor WhatsApp supplier tidak valid.")
+        info = settings_service.get_bengkel_info(db)
+        message = (pesan or "").strip() or supplier_wa_text(supplier, items, info)
+        link = (
+            build_link(supplier.nomor_hp, message)
+            if normalized == STATUS_OPENED
+            else ""
+        )
+        log = WhatsAppLog(
+            supplier_id=supplier.id,
+            customer_id=None,
+            jenis=JENIS_SUPPLIER,
+            nomor_masked=mask_phone(supplier.nomor_hp),
+            status=normalized,
+            pesan=message,
+            operator=operator.label,
+            created_at=moment,
+        )
+        db.add(log)
+        audit_service.record_event(
+            db,
+            operator,
+            audit_service.ACTION_WHATSAPP,
+            audit_service.REFERENCE_SUPPLIER,
+            reference_id=str(supplier.id),
+            reason=f"WhatsApp supplier {normalized}",
+            now=moment,
+        )
+        db.flush()
+    db.refresh(log)
+    return log, message, link
+
+
 def build_link(nomor: str, message: str) -> str:
     digits = normalize_whatsapp(nomor)
     if not digits:
@@ -307,7 +392,9 @@ def log_attempt(
             # Impor lokal agar tidak melingkar: receipt_service memakai layanan ini.
             from services.receipt_service import receipt_wa_text
 
-            default_message = receipt_wa_text(record, info)
+            default_message = receipt_wa_text(
+                record, info, show=settings_service.display_receipt_settings(db)
+            )
         else:
             default_message = completion_wa_text(record, info)
         message = (pesan or "").strip() or default_message

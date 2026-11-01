@@ -115,13 +115,46 @@ build step) di `http://127.0.0.1:8000`.
   setelah pembayaran tersimpan. Setiap tarif jasa dan sparepart
   punya interval servis (bulan) yang dapat diubah; nilainya disalin ke nota
   saat dikerjakan dan menjadi pengingat servis berikutnya.
+- **Ringkasan operasional** — kartu unit diservis, tunai masuk, transfer masuk,
+  garansi aktif, total hutang seluruh pelanggan, stok menipis, dan stok habis.
+  Total hutang membuka daftar piutang; stok menipis dan stok habis membuka
+  daftar stok yang sudah difilter.
+- **Supplier & Follow up Reseller** — menu Supplier menyimpan nama, WhatsApp,
+  dan barang yang disuplai. Barang boleh punya beberapa supplier dan dapat
+  dipilih saat menambah/mengedit sparepart. Tab Follow up Reseller memakai
+  susunan kartu dan ringkasan angka yang sama dengan Follow up Pelanggan:
+  jumlah supplier, barang menipis, barang habis, dan total barang yang perlu
+  dipasok, lalu kartu per supplier dengan chat WhatsApp manual tanpa pesan
+  otomatis. Fitur supplier dapat dimatikan dari Pengaturan; saat mati, pilihan
+  supplier di form stok dan tab Reseller disembunyikan.
+- **Karyawan & komisi** — menu Karyawan mencatat mekanik dan kasir, penugasan
+  0 sampai banyak mekanik per nota, performa per periode, riwayat pengerjaan,
+  dan estimasi komisi per nota. Karyawan dapat memakai imbalan komisi, gaji
+  bulanan, atau keduanya. Kolom gaji bulanan tampil di daftar karyawan, dan
+  halaman Karyawan menyediakan pencatatan pembayaran gaji aktual per periode
+  beserta riwayat, edit, dan hapus. Komisi dihitung backend dengan basis barang,
+  jasa, atau keduanya; pembagian mekanik dapat rata atau manual. Fitur karyawan
+  dapat dimatikan dari Pengaturan; saat mati, kolom kasir/mekanik di kasir dan
+  baris kasir/mekanik di struk tidak ditampilkan.
+- **Nomor nota angka** — nota baru memakai nomor 1, 2, 3, dan seterusnya tanpa
+  duplikat atau nomor ulang. Nota lama tetap memakai nomor lama.
+- **Pengaturan struk** — setiap bagian struk memiliki tombol on/off sendiri:
+  header, nomor nota, tanggal, kasir, mekanik, pelanggan, unit, jasa, part,
+  total, pembayaran, garansi, rekening, dan footer. Nama bengkel selalu tampil.
+  Pengaturan berlaku untuk cetak dan teks struk WhatsApp.
 - **Stok & tarif jasa** — harga modal/jual, penyesuaian jumlah, interval servis
   berkala per jasa dan per sparepart, snapshot modal saat part dipakai, dan
-  proteksi hapus item yang sudah dipakai transaksi. Daftar stok memakai baris
+  proteksi hapus item yang sudah dipakai transaksi. Setiap item punya batas
+  minimum stok; batas bawaan diatur owner di Pengaturan. Halaman stok dapat
+  difilter Semua, Menipis, dan Habis. Daftar stok memakai baris
   lebih rapat agar lebih banyak item terlihat; tabel jasa, riwayat, dan laporan
   tidak ikut dirapatkan.
 - **Laporan** — kas harian, rekap periode, penjualan sparepart, estimasi laba
-  bersih sparepart dan jasa, rincian per metode bayar, dan laporan semua waktu.
+  bersih sparepart dan jasa, estimasi laba bersih setelah dikurangi komisi
+  dan gaji yang benar-benar dibayar pada periode, rincian per metode bayar,
+  dan laporan semua waktu. Pembayaran gaji memakai tanggal bayar sebagai dasar
+  pemotongan, sehingga gaji yang dibayar di luar periode tidak mengurangi
+  laporan periode tersebut.
 - **Printer universal** — kelola beberapa printer dari Pengaturan: Bluetooth
   (SPP), Wi-Fi/LAN (TCP 9100), USB OTG, cetak lewat layanan Android, dan cetak
   lewat browser. Mendukung kertas 58/80 mm, tes cetak, serta printer utama.
@@ -150,7 +183,8 @@ build step) di `http://127.0.0.1:8000`.
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
   tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build
-  debug terbaru adalah **2.2.7** (versionCode 10).
+  kode terbaru adalah **2.3.3**; APK debug yang sudah dibangun masih **2.3.2**
+  (versionCode 14) sampai verifikasi localhost selesai.
 
 ## Menjalankan versi web/desktop
 
@@ -248,7 +282,8 @@ tidak tersedia di PATH.
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir adalah versi **2.2.7** (versionCode 10).
+terakhir yang dibangun adalah versi **2.3.2** (versionCode 14); kode web sudah
+2.3.3 dan APK 2.3.3 dibangun setelah verifikasi localhost.
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
@@ -288,12 +323,12 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-322 test mencakup transaksi, kredit/pelunasan/piutang, WhatsApp, follow-up dan
-servis berkala (jasa dan sparepart), void/retur, stok, garansi, laporan,
-pengaturan, label barang, printer, backup/restore, Telegram, serta pemeriksaan
-keamanan akses (PIN, sesi, token instalasi, loopback, host/origin). Jalur
-desktop memakai Pydantic v2; kombinasi APK tetap memakai Pydantic 1.10 +
-FastAPI 0.115.
+342 test pada jalur desktop mencakup transaksi, kredit/pelunasan/piutang, WhatsApp,
+follow-up dan servis berkala (jasa dan sparepart), void/retur, stok, garansi,
+laporan, pengaturan, label barang, printer, backup/restore, Telegram, serta
+pemeriksaan keamanan akses (PIN, sesi, token instalasi, loopback, host/origin).
+Jalur desktop memakai Pydantic v2; kombinasi APK tetap memakai Pydantic 1.10 +
+FastAPI 0.115 dan diuji ulang saat build APK.
 
 Unit test Kotlin untuk PIN, backup, printer, dan shell WebView juga tersedia
 (154 test pada build terakhir):

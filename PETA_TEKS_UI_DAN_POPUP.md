@@ -48,10 +48,10 @@ Aturan copy yang dipakai:
 | Merek | BengkelPOS Radiator |
 | Tagline | Kasir dan servis radiator |
 | Grup navigasi | Operasional |
-| Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Follow up, Stok, Jasa, Laporan, Pengaturan |
+| Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Karyawan, Supplier, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum diatur |
 | Catatan sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.2.7 |
+| Versi | BengkelPOS Radiator v2.3.3 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -61,7 +61,7 @@ Aturan copy yang dipakai:
 | Judul | Ringkasan hari ini |
 | Keterangan | Servis dan pembayaran yang tercatat hari ini. |
 | Tombol | Pelanggan baru, Servis baru |
-| Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif |
+| Kartu | Unit diservis, Tunai masuk, Transfer masuk, Garansi aktif, Total hutang, Stok menipis, Stok habis |
 | Tabel | Transaksi terakhir. Nota terbaru yang tercatat di kasir. |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Tombol | Muat ulang, Cetak ulang |
@@ -94,6 +94,9 @@ Aturan copy yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Follow up |
+| Tab | Follow up Pelanggan, Follow up Reseller |
+| Kartu hasil | Balik lagi, Masih bagus, Bermasalah, Menolak (hanya angka yang ada) |
+| Kartu reseller | Supplier perlu dihubungi, Barang menipis, Barang habis, Total barang |
 | Keterangan | Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi. |
 | Tombol | Muat ulang |
 | Kartu piutang | Piutang, N nota, total sisa |
@@ -129,6 +132,36 @@ Aturan copy yang dipakai:
 | Jam terkunci | Follow up hanya bisa dilakukan antara pukul HH.MM-HH.MM. |
 | DNC | Perlu telepon, Pengingat Nx, Ditunda s.d. tanggal |
 | Tombol tutup | Tutup |
+
+### 3.2b Supplier
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Supplier |
+| Keterangan | Daftar supplier dan barang yang disuplai. |
+| Tombol | Muat ulang, + Supplier |
+| Kolom | Nama, WhatsApp, Barang disuplai, Status |
+| Form | Nama supplier, Nomor WhatsApp, Status, Alamat, Catatan, Barang yang disuplai |
+| Pilih barang | Pilih sparepart, + Tambah barang, tabel Barang, Stok, Hapus |
+| Follow up Reseller | Supplier perlu dihubungi, Barang menipis, Barang habis, Total barang, kartu supplier, Chat |
+| Sakelar | Fitur supplier |
+
+### 3.2c Karyawan
+
+| Lokasi | Teks |
+| --- | --- |
+| Judul | Karyawan |
+| Keterangan | Mekanik, kasir, performa, dan komisi. |
+| Tombol | Muat ulang, + Karyawan |
+| Kolom | Nama, Peran, WhatsApp, Gaji bulanan, Komisi, Status |
+| Form | Nama, Peran, Status, Nomor WhatsApp, Catatan, Jenis imbalan, Gaji bulanan, Mode komisi, Basis komisi, Nilai komisi |
+| Jenis imbalan | Komisi, Gaji, Komisi dan gaji |
+| Performa | Periode, Nota, Jasa, Sparepart, Nilai servis, Pelanggan, Komisi, Riwayat, Komisi manual |
+| Pembayaran gaji | Judul Pembayaran gaji, ringkasan N pembayaran dan total, tombol + Catat gaji |
+| Kolom gaji | Tanggal, Karyawan, Periode, Metode, Nominal, Catatan, Edit, Hapus |
+| Form gaji | Karyawan, Periode gaji, Tanggal bayar, Nominal, Metode, Catatan |
+| Kosong gaji | Belum ada pembayaran gaji. |
+| Sakelar | Fitur karyawan |
 
 ### 3.3 Kendaraan selesai
 
@@ -223,7 +256,8 @@ Aturan copy yang dipakai:
 | Judul stok | Stok sparepart |
 | Keterangan stok | Harga master menjadi patokan awal. |
 | Tombol stok | + Sparepart |
-| Kolom stok | Kode, Nama, Modal, Jual, Stok, Servis berkala |
+| Kolom stok | Kode, Nama, Modal, Jual, Stok, Min., Servis berkala |
+| Filter stok | Semua, Menipis, Habis |
 | Kosong stok | Belum ada data sparepart. |
 | Gagal stok | Data stok gagal dimuat. Coba muat ulang. |
 | Judul jasa | Tarif jasa |
@@ -237,10 +271,11 @@ Aturan copy yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Laporan kas |
-| Keterangan | Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa. |
+| Keterangan | Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi dan gaji. |
 | Periode | Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Estimasi laba bersih setelah komisi & gaji |
+| Meta | N transaksi, N unit, Diskon, Garansi aktif, Komisi karyawan, Gaji dibayar, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
 | Tabel | Transaksi pada periode |
 | Kolom | Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Kosong | Tidak ada transaksi pada periode ini. |
@@ -260,7 +295,8 @@ Aturan copy yang dipakai:
 | Tampilan | Warna aplikasi, Terang, Gelap |
 | Identitas | Nama bengkel, Tagline, Alamat, Telepon, WhatsApp, Bank, Nomor rekening, Atas nama |
 | Aksi identitas | Batalkan perubahan, Simpan pengaturan |
-| Pengingat | Tempo piutang, Prospek tahap 1/2/3, Jeda follow-up, Pengingat garansi H-, Arsip garansi, Tampilkan servis berkala H-, Jeda pengingat piutang, Maksimal pengingat piutang, Belum bisa dihubungi lagi, Belum bisa pilihan panjang, Batas tidak merespons, Batas pesan per hari, Batas pesan per bulan, Jeda prospek dan servis, Jam mulai follow up, Jam selesai follow up |
+| Pengingat | Tempo piutang, Batas minimum stok bawaan, Prospek tahap 1/2/3, Jeda follow-up, Pengingat garansi H-, Arsip garansi, Tampilkan servis berkala H-, Jeda pengingat piutang, Maksimal pengingat piutang, Belum bisa dihubungi lagi, Belum bisa pilihan panjang, Batas tidak merespons, Batas pesan per hari, Batas pesan per bulan, Jeda prospek dan servis, Jam mulai follow up, Jam selesai follow up |
+| Sakelar fitur | Fitur karyawan, Fitur supplier |
 | Catatan jam | Di luar jam ini tombol Ingatkan dan pengingat piutang tidak bisa dipakai. |
 | Aksi pengingat | Simpan pengaturan follow-up |
 | Printer | Printer. Belum ada printer tersimpan. + Tambah printer |
@@ -286,7 +322,9 @@ Aturan copy yang dipakai:
 | Detail nota | Detail nota. Tutup. |
 | Preferensi pesan | Pelanggan memberi izin WhatsApp, Berhenti dihubungi (DNC), Simpan preferensi |
 | Detail pelanggan | Detail pelanggan. Tutup, Buat servis. |
-| Tambah sparepart | Tambah sparepart. Kode, Jumlah stok, Nama sparepart, Harga modal, Harga jual patokan, Servis berkala. Batal, Simpan sparepart. |
+| Pembayaran gaji | Catat pembayaran gaji. Karyawan, Periode gaji, Tanggal bayar, Nominal, Metode, Catatan. Batal, Simpan gaji. |
+| Pengaturan struk | Toggle per bagian; nama bengkel selalu tampil. |
+| Tambah sparepart | Tambah sparepart. Kode, Jumlah stok, Nama sparepart, Harga modal, Harga jual patokan, Servis berkala, Batas minimum stok, Supplier. Batal, Simpan sparepart. |
 | Tambah tarif jasa | Tambah tarif jasa. Patokan tarif untuk kasir. Nama jasa, Tarif standar (Rp), Servis berkala, Batal, Simpan jasa. |
 | Pesan WhatsApp | Pesan WhatsApp. Periksa pesan sebelum dibuka di WhatsApp. Nomor tujuan, Isi pesan. Pesan dibuka di WhatsApp. Pengiriman tetap dilakukan oleh kasir. Tutup, Buka WhatsApp. |
 | Daftar follow-up | Daftar follow-up. Pilih item untuk melihat detail. Tidak ada item follow-up. Tutup. |

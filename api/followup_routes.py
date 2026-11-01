@@ -13,6 +13,7 @@ from api.schemas import (
     FollowupDetailOut,
     FollowupItemOut,
     FollowupListOut,
+    FollowupResultOut,
     FollowupStatusIn,
     PengerjaanDetailOut,
     PengerjaanEventOut,
@@ -25,7 +26,13 @@ from api.schemas import (
     WhatsAppLogOut,
 )
 from database.session import get_db
-from services import followup_service, pengerjaan_service, settings_service, whatsapp_service
+from services import (
+    followup_result_service,
+    followup_service,
+    pengerjaan_service,
+    settings_service,
+    whatsapp_service,
+)
 from services.auth_service import Operator
 
 router = APIRouter(tags=["Follow-up"], dependencies=[Depends(require_auth)])
@@ -140,6 +147,17 @@ def mark_pengerjaan_taken(
 ):
     marker = pengerjaan_service.mark_taken(db, marker_id, operator)
     return PengerjaanItemOut.model_validate(pengerjaan_service.serialize_item(marker))
+
+
+@router.get("/followup/results", response_model=FollowupResultOut)
+def followup_results(db: Session = Depends(get_db)):
+    data = followup_result_service.summary(db)["counts"]
+    return FollowupResultOut(
+        balik_lagi=data.get("balik_lagi", 0),
+        masih_bagus=data.get("masih_bagus", 0),
+        bermasalah=data.get("bermasalah", 0),
+        menolak=data.get("menolak", 0),
+    )
 
 
 @router.get("/followup/items/{item_id}", response_model=FollowupDetailOut)

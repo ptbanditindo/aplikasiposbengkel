@@ -52,7 +52,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.2.7 |
+| Versi | BengkelPOS Radiator v2.3.3 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -308,17 +308,17 @@ Aturan yang dipakai:
 | Lokasi | Teks |
 | --- | --- |
 | Judul | Laporan kas |
-| Keterangan | Pemasukan tunai, transfer, serta estimasi laba bersih sparepart dan jasa. |
+| Keterangan | Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi. |
 | Periode | Periode laporan, Hari ini, 7 hari terakhir, 30 hari terakhir, 1 tahun terakhir, Seluruhnya |
 | Tombol | Tampilkan |
-| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa |
+| Kartu | Total omset, Tunai, Transfer, Estimasi laba bersih sparepart, Estimasi laba bersih jasa, Estimasi laba bersih setelah komisi |
 | Tabel transaksi | Transaksi pada periode, Waktu, No. nota, Pelanggan, Unit, Total, Metode |
 | Kosong | Tidak ada transaksi pada periode ini. |
 | Rekap | Rekap harian periode. Hanya hari yang memiliki transaksi. |
 | Kolom rekap | Tanggal, Transaksi, Omset, Tunai, Transfer, Laba bersih sparepart, Laba bersih jasa |
 | Bagian | Stok pernah terjual. Harga mengikuti harga deal. Barang yang sama diurutkan menurut waktu. |
 | Kolom terjual | Barang, Qty, Harga akhir, Subtotal, Waktu, No. nota |
-| Meta | <tanggal> sampai <tanggal>, N transaksi, N unit, Diskon, Garansi aktif, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
+| Meta | <tanggal> sampai <tanggal>, N transaksi, N unit, Diskon, Garansi aktif, Komisi karyawan, Retur, Dibatalkan, Laba belum lengkap, Modal estimasi |
 | Label laba | Laba bersih <nominal>, retur -<nominal>, modal sparepart belum diisi |
 | Gagal muat | Laporan gagal dimuat. Coba lagi. |
 | Catatan tombol backup | Tombol backup di halaman Laporan sudah dihapus. Backup hanya tersedia di Pengaturan. |

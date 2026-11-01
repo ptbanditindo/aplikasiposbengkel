@@ -1020,8 +1020,8 @@ def test_pengingat_gabungan_hanya_nota_jatuh_tempo(
     _log, message, _link = whatsapp_service.remind_customer_receivables(
         db_session, customer["id"], OWNER, now=moment
     )
-    assert due_note in message
-    assert future_note not in message
+    assert "nota " + due_note in message
+    assert "nota " + future_note not in message
 
     db_session.expire_all()
     assert db_session.get(ServiceRecord, due_id).piutang_reminder_ke == 1

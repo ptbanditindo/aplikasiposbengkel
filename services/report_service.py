@@ -5,12 +5,25 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
 
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.orm import Session
 
-from database.models import FollowupItem, ServicePayment, ServiceRecord, VehicleOrUnit
+from database.models import (
+    AppSetting,
+    FollowupItem,
+    SalaryPayment,
+    ServicePayment,
+    ServiceRecord,
+    StockItem,
+    VehicleOrUnit,
+)
 from repositories import service_record_repository as record_repo
-from services import followup_service, pengerjaan_service, warranty_service
+from services import (
+    employee_service,
+    followup_service,
+    pengerjaan_service,
+    warranty_service,
+)
 from services.customer_service import describe_unit
 from services.receipt_service import record_summary
 from services.utils import money
@@ -97,6 +110,11 @@ def _summarize_records(
         else:
             penerimaan_cash += nominal
 
+    komisi_total = employee_service.commission_total(db, normal_records)
+    # Estimasi: margin sparepart + jasa - komisi. Gaji tetap bulanan tidak
+    # diprorata karena laporan bisa mencakup periode sebelum gaji berlaku.
+    laba_bersih_setelah_komisi = laba_kotor + total_jasa - komisi_total
+
     return {
         "jumlah_transaksi": len(normal_records),
         "jumlah_unit_servis": len(units),
@@ -107,6 +125,8 @@ def _summarize_records(
         "total_part": money(total_part),
         "total_diskon": money(total_diskon),
         "laba_kotor": money(laba_kotor),
+        "komisi_total": money(komisi_total),
+        "laba_bersih_setelah_komisi": money(laba_bersih_setelah_komisi),
         "garansi_aktif": int(active_warranty),
         "transaksi_tanpa_modal": transaksi_tanpa_modal,
         "transaksi_modal_estimasi": transaksi_modal_estimasi,
@@ -132,29 +152,42 @@ def _payments_between(
     return list(db.scalars(statement).all())
 
 
-def _ops_snapshot(db: Session) -> Dict[str, Any]:
-    """Kartu operasional dasbor (kondisi saat ini, bukan periode laporan)."""
+def _ops_snapshot(
+    db: Session,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> Dict[str, Any]:
+    """Kartu operasional dasbor dan gaji dibayar pada rentang laporan."""
     sisa = func.max(
         ServiceRecord.total_servis
         - func.coalesce(ServiceRecord.total_retur, 0)
         - func.coalesce(ServiceRecord.total_dibayar, 0),
         0,
     )
-    piutang = db.execute(
-        select(
-            func.count(ServiceRecord.id),
-            func.count(func.distinct(VehicleOrUnit.customer_id)),
-            func.coalesce(func.sum(sisa), 0),
-        )
-        .join(VehicleOrUnit, ServiceRecord.unit_id == VehicleOrUnit.id)
+    minimum_default = func.coalesce(
+        select(func.cast(AppSetting.value, Integer))
+        .where(AppSetting.key == "ops.stok_minimum_default")
+        .scalar_subquery(),
+        3,
+    )
+    effective_minimum = func.coalesce(StockItem.stok_minimum, minimum_default)
+    stok_menipis = (
+        select(func.count(StockItem.id))
         .where(
-            ServiceRecord.status == "NORMAL",
-            ServiceRecord.status_bayar == "BELUM_LUNAS",
-            sisa > 0,
+            effective_minimum > 0,
+            StockItem.jumlah > 0,
+            StockItem.jumlah <= effective_minimum,
         )
-    ).one()
-    garansi_akan_habis = db.scalar(
-        select(func.count(FollowupItem.id)).where(
+        .scalar_subquery()
+    )
+    stok_habis = (
+        select(func.count(StockItem.id))
+        .where(StockItem.jumlah <= 0)
+        .scalar_subquery()
+    )
+    garansi_akan_habis = (
+        select(func.count(FollowupItem.id))
+        .where(
             FollowupItem.jenis == followup_service.JENIS_GARANSI,
             FollowupItem.status.notin_(
                 [
@@ -165,13 +198,50 @@ def _ops_snapshot(db: Session) -> Dict[str, Any]:
                 ]
             ),
         )
+        .scalar_subquery()
     )
+    salary_filters = []
+    if start is not None:
+        salary_filters.append(SalaryPayment.tanggal >= start.date())
+    if end is not None:
+        salary_filters.append(SalaryPayment.tanggal < end.date())
+    gaji_dibayar = (
+        select(func.coalesce(func.sum(SalaryPayment.nominal), 0))
+        .where(*salary_filters)
+        .scalar_subquery()
+    )
+    piutang = db.execute(
+        select(
+            func.count(ServiceRecord.id),
+            func.count(func.distinct(VehicleOrUnit.customer_id)),
+            func.coalesce(func.sum(sisa), 0),
+            stok_menipis,
+            stok_habis,
+            garansi_akan_habis,
+            gaji_dibayar,
+        )
+        .join(VehicleOrUnit, ServiceRecord.unit_id == VehicleOrUnit.id)
+        .where(
+            ServiceRecord.status == "NORMAL",
+            ServiceRecord.status_bayar == "BELUM_LUNAS",
+            sisa > 0,
+        )
+    ).one()
     return {
         "piutang_count": int(piutang[0] or 0),
         "piutang_customers": int(piutang[1] or 0),
         "piutang_total": money(piutang[2] or 0),
-        "garansi_akan_habis": int(garansi_akan_habis or 0),
+        "stok_menipis": int(piutang[3] or 0),
+        "stok_habis": int(piutang[4] or 0),
+        "garansi_akan_habis": int(piutang[5] or 0),
+        "gaji_dibayar": money(piutang[6] or 0),
     }
+
+
+def _apply_salary_net(summary: Dict[str, Any]) -> None:
+    komisi = Decimal(summary.get("laba_bersih_setelah_komisi") or 0)
+    gaji = Decimal(summary.get("gaji_dibayar") or 0)
+    summary["laba_bersih_setelah_komisi_dan_gaji"] = money(komisi - gaji)
 
 
 def daily_report(db: Session, day: date | None = None) -> Dict[str, Any]:
@@ -185,7 +255,8 @@ def daily_report(db: Session, day: date | None = None) -> Dict[str, Any]:
     # Sinkronkan item follow-up dulu agar kartu garansi memakai status terbaru.
     summary.update(followup_service.counts(db, date.today()))
     summary.update(pengerjaan_service.counts(db))
-    summary.update(_ops_snapshot(db))
+    summary.update(_ops_snapshot(db, start, end))
+    _apply_salary_net(summary)
     return summary
 
 
@@ -217,7 +288,8 @@ def period_report(db: Session, start_day: date, end_day: date) -> Dict[str, Any]
     summary["start"] = start_day
     summary["end"] = end_day
     summary["harian"] = daily
-    summary.update(_ops_snapshot(db))
+    summary.update(_ops_snapshot(db, start, end))
+    _apply_salary_net(summary)
     return summary
 
 
@@ -230,7 +302,14 @@ def all_time_report(db: Session) -> Dict[str, Any]:
         summary["start"] = today
         summary["end"] = today
         summary["harian"] = []
-        summary.update(_ops_snapshot(db))
+        summary.update(
+            _ops_snapshot(
+                db,
+                datetime.combine(today, time.min),
+                datetime.combine(today + timedelta(days=1), time.min),
+            )
+        )
+        _apply_salary_net(summary)
         return summary
     return period_report(db, oldest.date(), today)
 

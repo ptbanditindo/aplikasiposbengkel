@@ -333,13 +333,11 @@ def test_nomor_nota_unik_dan_berurutan(
 ):
     customer = create_customer()
     unit = create_unit(customer["id"])
-    prefix = f"INV-{date.today():%Y%m%d}-"
-
     first = make_transaction(unit["id"]).json()["record"]["no_nota"]
     second = make_transaction(unit["id"]).json()["record"]["no_nota"]
 
-    assert first == f"{prefix}0001"
-    assert second == f"{prefix}0002"
+    assert first == "1"
+    assert second == "2"
 
     records = client.get("/api/service-records").json()
     assert len(records) == 2

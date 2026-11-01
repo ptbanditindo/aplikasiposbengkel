@@ -193,6 +193,59 @@
         method: 'PUT',
         body: data,
       }),
+    employees: (activeOnly) =>
+      request('/api/employees' + (activeOnly ? '?active_only=true' : '')),
+    createEmployee: (data) =>
+      request('/api/employees', { method: 'POST', body: data }),
+    updateEmployee: (id, data) =>
+      request('/api/employees/' + id, { method: 'PUT', body: data }),
+    deleteEmployee: (id) =>
+      request('/api/employees/' + id, { method: 'DELETE' }),
+    employeePerformance: (id, start, end) => {
+      const params = [];
+      if (start) params.push('start=' + encodeURIComponent(start));
+      if (end) params.push('end=' + encodeURIComponent(end));
+      return request(
+        '/api/employees/' +
+          id +
+          '/performance' +
+          (params.length ? '?' + params.join('&') : '')
+      );
+    },
+    setEmployeeCommission: (id, recordId, nominal) =>
+      request('/api/employees/' + id + '/commissions/' + recordId, {
+        method: 'PUT',
+        body: { nominal: String(nominal) },
+      }),
+    salaryPayments: (start, end, employeeId) => {
+      const params = [];
+      if (start) params.push('start=' + encodeURIComponent(start));
+      if (end) params.push('end=' + encodeURIComponent(end));
+      if (employeeId) params.push('employee_id=' + encodeURIComponent(employeeId));
+      return request(
+        '/api/salary-payments' + (params.length ? '?' + params.join('&') : '')
+      );
+    },
+    createSalaryPayment: (data) =>
+      request('/api/salary-payments', { method: 'POST', body: data }),
+    updateSalaryPayment: (id, data) =>
+      request('/api/salary-payments/' + id, { method: 'PUT', body: data }),
+    deleteSalaryPayment: (id) =>
+      request('/api/salary-payments/' + id, { method: 'DELETE' }),
+    suppliers: (q) => request('/api/suppliers?q=' + qs(q || '')),
+    createSupplier: (data) =>
+      request('/api/suppliers', { method: 'POST', body: data }),
+    updateSupplier: (id, data) =>
+      request('/api/suppliers/' + id, { method: 'PUT', body: data }),
+    deleteSupplier: (id) =>
+      request('/api/suppliers/' + id, { method: 'DELETE' }),
+    supplierFollowup: () =>
+      request('/api/suppliers/followup-low-stock'),
+    supplierWhatsapp: (id, data) =>
+      request('/api/suppliers/' + id + '/whatsapp', {
+        method: 'POST',
+        body: data,
+      }),
     customerWaLink: (customerId, jenis) =>
       request(
         '/api/customers/' +
@@ -269,6 +322,9 @@
       ),
 
     opsSettings: () => request('/api/settings/ops'),
+    receiptSettings: () => request('/api/settings/receipt'),
+    updateReceiptSettings: (data) =>
+      request('/api/settings/receipt', { method: 'PUT', body: data }),
     updateOpsSettings: (data) =>
       request('/api/settings/ops', { method: 'PUT', body: data }),
 
@@ -282,6 +338,7 @@
           (excludeStatus ? '&exclude_status=' + qs(excludeStatus) : '')
       ),
     followupCounts: () => request('/api/followup/counts'),
+    followupResults: () => request('/api/followup/results'),
     followupDetail: (id) => request('/api/followup/items/' + id),
     followupItem: (id, data) =>
       request('/api/followup/items/' + id + '/followup', {
