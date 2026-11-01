@@ -210,6 +210,18 @@ class Employee(Base):
     komisi_nilai: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )
+    # Tarif terpisah: barang dihitung dari margin (jual - modal), jasa dari nilai jasa.
+    komisi_barang_nilai: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    komisi_jasa_nilai: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0.00"), nullable=False
+    )
+    # TANGGAL | MINGGUAN | DUA_MINGGUAN | TIGA_MINGGUAN | BULANAN
+    payroll_period: Mapped[str] = mapped_column(
+        String(16), default="BULANAN", nullable=False
+    )
+    payroll_tanggal: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False

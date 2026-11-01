@@ -107,6 +107,48 @@ def test_riwayat_gaji_tetap_ada_setelah_karyawan_dihapus(client):
     assert rows[0]["nominal"] == "1250000.00"
 
 
+def test_ringkasan_gaji_dan_komisi_per_siklus(
+    client, create_customer, create_unit, make_transaction
+):
+    today = date.today()
+    employee = _employee(
+        client,
+        nama="Mekanik Siklus",
+        peran="KEDUANYA",
+        jenis_imbalan="KOMISI_GAJI",
+        komisi_jasa_nilai="10",
+        payroll_period="TANGGAL",
+        payroll_tanggal=str(today.day),
+    )
+    customer = create_customer(nama="Pelanggan Siklus")
+    unit = create_unit(customer["id"], nopol="B 8602 SIK")
+    response = make_transaction(
+        unit["id"],
+        jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "100000"}],
+        mechanic_ids=[employee["id"]],
+    )
+    assert response.status_code == 201, response.text
+    assert _salary(client, employee["id"], nominal="3000000").status_code == 201
+
+    summary = client.get("/api/payroll/summary").json()
+    row = next(
+        item for item in summary["items"] if item["employee_id"] == employee["id"]
+    )
+    assert row["salary_due"] == "3000000.00"
+    assert row["commission_earned"] == "10000.00"
+    assert row["salary_paid"] == "3000000.00"
+    assert row["total_due"] == "10000.00"
+    assert summary["total_due"] == "10000.00"
+
+
+def test_gaji_karyawan_periode_sama_ditolak(client):
+    employee = _employee(client, nama="Kasir Sekali")
+    assert _salary(client, employee["id"]).status_code == 201
+    response = _salary(client, employee["id"])
+    assert response.status_code == 409, response.text
+    assert "sudah dicatat" in response.json()["detail"]
+
+
 def test_validasi_gaji(client):
     employee = _employee(client)
     assert _salary(client, employee["id"], nominal="0").status_code == 422

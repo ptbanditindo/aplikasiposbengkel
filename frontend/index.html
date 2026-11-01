@@ -200,6 +200,11 @@
             <strong id="statStockOut">0</strong>
             <span class="stat-sub">Tidak tersedia</span>
           </article>
+          <article class="stat-card stat-card--wide is-clickable hidden" id="dashboardPayrollCard" role="button" tabindex="0" title="Buka rincian gaji dan komisi" data-action="open-payroll">
+            <span class="stat-label">Gaji &amp; komisi harus dibayar</span>
+            <strong id="statPayroll">Rp 0</strong>
+            <span class="stat-sub" id="statPayrollSub">Belum ada tagihan gaji</span>
+          </article>
         </div>
 
         <section class="card">
@@ -658,7 +663,7 @@
         <div class="page-head">
           <div>
             <h1>Laporan kas</h1>
-            <p class="muted">Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi dan gaji.</p>
+            <p class="muted">Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi.</p>
           </div>
         </div>
 
@@ -698,12 +703,12 @@
             <strong id="reportProfitJasa">Rp 0</strong>
           </article>
           <article class="stat-card" title="Margin sparepart + jasa - komisi karyawan - gaji yang dibayar pada periode.">
-            <span class="stat-label">Estimasi laba bersih setelah komisi &amp; gaji</span>
+            <span class="stat-label">Estimasi laba bersih setelah komisi</span>
             <strong id="reportNetProfit">Rp 0</strong>
           </article>
         </div>
 
-        <div class="report-meta" id="reportMeta"></div>
+        <div class="report-meta hidden" id="reportMeta"></div>
 
         <section class="card">
           <div class="card-head">
@@ -1163,7 +1168,7 @@
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Nama</th><th>Peran</th><th>WhatsApp</th><th>Gaji bulanan</th><th>Komisi</th><th>Status</th><th></th></tr>
+                <tr><th>Nama</th><th>Peran</th><th>WhatsApp</th><th>Gaji bulanan</th><th>Jadwal gajian</th><th>Komisi</th><th>Status</th><th></th></tr>
               </thead>
               <tbody id="employeeBody"></tbody>
             </table>
@@ -1670,23 +1675,59 @@
             </select>
           </label>
           <label class="field">
-            <span>Basis komisi</span>
-            <select class="input" id="employeeKomisiBasis">
-              <option value="KEDUANYA">Jasa dan barang</option>
-              <option value="JASA">Jasa saja</option>
-              <option value="BARANG">Barang saja</option>
+            <span>Jadwal gajian</span>
+            <select class="input" id="employeePayrollPeriod">
+              <option value="TANGGAL">Per tanggal</option>
+              <option value="MINGGUAN">Per minggu</option>
+              <option value="DUA_MINGGUAN">Per 2 minggu</option>
+              <option value="TIGA_MINGGUAN">Per 3 minggu</option>
+              <option value="BULANAN">Bulanan</option>
             </select>
           </label>
         </div>
-        <label class="field">
-          <span>Nilai komisi (persen atau rupiah per nota)</span>
-          <input type="number" class="input" id="employeeKomisiNilai" min="0" step="0.01" value="0">
+        <div class="form-grid" id="employeeKomisiRateFields">
+          <label class="field">
+            <span id="employeeKomisiBarangLabel">Komisi barang (%)</span>
+            <input type="number" class="input" id="employeeKomisiBarang" min="0" step="0.01" value="0">
+          </label>
+          <label class="field">
+            <span id="employeeKomisiJasaLabel">Komisi jasa (%)</span>
+            <input type="number" class="input" id="employeeKomisiJasa" min="0" step="0.01" value="0">
+          </label>
+        </div>
+        <label class="field" id="employeePayrollTanggalField">
+          <span>Tanggal gajian (1-31)</span>
+          <input type="number" class="input" id="employeePayrollTanggal" min="1" max="31" step="1" value="1">
         </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="employeeCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan karyawan</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="payrollModal" role="dialog" aria-modal="true" aria-labelledby="payrollModalTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="payrollModalTitle">Gaji &amp; komisi</h3>
+          <p class="muted" id="payrollModalSubtitle">Perkiraan yang perlu dibayar pada siklus berjalan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="payrollModalClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Karyawan</th><th>Jadwal</th><th class="text-right">Gaji</th><th class="text-right">Komisi</th><th class="text-right">Sudah dibayar</th><th class="text-right">Perlu dibayar</th><th>Berikutnya</th></tr>
+          </thead>
+          <tbody id="payrollBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="payrollEmpty">Belum ada karyawan dengan gaji atau komisi.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="payrollModalDismiss">Tutup</button>
+      </div>
     </div>
   </div>
 
@@ -1734,7 +1775,7 @@
         </label>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="salaryCancel">Batal</button>
-          <button type="submit" class="btn btn-primary">Simpan gaji</button>
+          <button type="submit" class="btn btn-primary" id="salarySubmit">Simpan gaji</button>
         </div>
       </form>
     </div>
@@ -1757,6 +1798,22 @@
   </div>
 
   <!-- ============================ SUPPLIER MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="supplierPickModal" role="dialog" aria-modal="true" aria-labelledby="supplierPickTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="supplierPickTitle">Pilih supplier</h3>
+          <p class="muted" id="supplierPickSubtitle">Barang ini memiliki beberapa supplier.</p>
+        </div>
+        <button type="button" class="icon-btn" id="supplierPickClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div id="supplierPickBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="supplierPickDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hidden" id="supplierModal" role="dialog" aria-modal="true" aria-labelledby="supplierModalTitle">
     <div class="modal">
       <div class="modal-head">

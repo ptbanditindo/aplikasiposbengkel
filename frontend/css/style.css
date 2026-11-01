@@ -3761,3 +3761,10 @@ a.btn { text-decoration: none; }
   min-height: 34px;
   font-size: 13px;
 }
+
+/* Bagian fitur yang dibekukan saat toggle karyawan/supplier dimatikan */
+.feature-frozen {
+  opacity: 0.55;
+  pointer-events: none;
+  filter: grayscale(0.15);
+}

@@ -166,6 +166,13 @@ class EmployeeCreate(CompatBase):
     komisi_mode: str = Field(default="PERSEN", **_pattern("^(PERSEN|NOMINAL)$"))
     komisi_basis: str = Field(default="KEDUANYA", **_pattern("^(BARANG|JASA|KEDUANYA)$"))
     komisi_nilai: Decimal = Field(default=Decimal("0.00"), ge=0)
+    komisi_barang_nilai: Optional[Decimal] = Field(default=None, ge=0)
+    komisi_jasa_nilai: Optional[Decimal] = Field(default=None, ge=0)
+    payroll_period: str = Field(
+        default="BULANAN",
+        **_pattern("^(TANGGAL|MINGGUAN|DUA_MINGGUAN|TIGA_MINGGUAN|BULANAN)$"),
+    )
+    payroll_tanggal: int = Field(default=1, ge=1, le=31)
 
 
 class EmployeeUpdate(CompatBase):
@@ -179,6 +186,13 @@ class EmployeeUpdate(CompatBase):
     komisi_mode: Optional[str] = Field(default=None, **_pattern("^(PERSEN|NOMINAL)$"))
     komisi_basis: Optional[str] = Field(default=None, **_pattern("^(BARANG|JASA|KEDUANYA)$"))
     komisi_nilai: Optional[Decimal] = Field(default=None, ge=0)
+    komisi_barang_nilai: Optional[Decimal] = Field(default=None, ge=0)
+    komisi_jasa_nilai: Optional[Decimal] = Field(default=None, ge=0)
+    payroll_period: Optional[str] = Field(
+        default=None,
+        **_pattern("^(TANGGAL|MINGGUAN|DUA_MINGGUAN|TIGA_MINGGUAN|BULANAN)$"),
+    )
+    payroll_tanggal: Optional[int] = Field(default=None, ge=1, le=31)
 
 
 class EmployeeOut(CompatBase):
@@ -193,6 +207,31 @@ class EmployeeOut(CompatBase):
     komisi_mode: str = "PERSEN"
     komisi_basis: str = "KEDUANYA"
     komisi_nilai: Money = ZERO_MONEY
+    komisi_barang_nilai: Money = ZERO_MONEY
+    komisi_jasa_nilai: Money = ZERO_MONEY
+    payroll_period: str = "BULANAN"
+    payroll_tanggal: int = 1
+    payroll_label: str = "Bulanan"
+
+
+class PayrollItemOut(CompatBase):
+    employee_id: int
+    nama: str
+    jadwal: str
+    cycle_start: date
+    next_date: date
+    salary_due: Money = ZERO_MONEY
+    commission_earned: Money = ZERO_MONEY
+    salary_paid: Money = ZERO_MONEY
+    total_due: Money = ZERO_MONEY
+
+
+class PayrollSummaryOut(CompatBase):
+    today: date
+    total_due: Money = ZERO_MONEY
+    count: int = 0
+    next_date: Optional[date] = None
+    items: List[PayrollItemOut] = Field(default_factory=list)
 
 
 class EmployeeHistoryOut(CompatBase):

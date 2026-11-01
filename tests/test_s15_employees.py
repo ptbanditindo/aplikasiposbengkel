@@ -121,8 +121,45 @@ def test_laporan_estimasi_laba_bersih_setelah_komisi(
     report = client.get("/api/reports/daily-cash").json()
     assert report["laba_kotor"] == "17000.00"
     assert report["total_jasa"] == "150000.00"
-    assert report["komisi_total"] == "18500.00"
-    assert report["laba_bersih_setelah_komisi"] == "148500.00"
+    # Komisi barang dihitung dari margin (35.000 - 18.000), bukan total jual.
+    assert report["komisi_total"] == "16700.00"
+    assert report["laba_bersih_setelah_komisi"] == "150300.00"
+
+
+def test_komisi_barang_dari_margin_dan_jasa_terpisah(
+    client, create_customer, create_unit, make_transaction
+):
+    mechanic = _employee(
+        client,
+        "Mekanik Margin",
+        "MEKANIK",
+        nilai="0",
+        komisi_barang_nilai="10",
+        komisi_jasa_nilai="20",
+    )
+    customer = create_customer(nama="Pelanggan Margin")
+    unit = create_unit(customer["id"], nopol="B 8406 MAR")
+    part = next(
+        item
+        for item in client.get("/api/stock").json()
+        if item["kode"] == "SP-003"
+    )
+    response = make_transaction(
+        unit["id"],
+        jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "150000"}],
+        parts=[
+            {
+                "stock_item_id": part["id"],
+                "jumlah": 1,
+                "harga_satuan": "35000",
+            }
+        ],
+        mechanic_ids=[mechanic["id"]],
+    )
+    assert response.status_code == 201, response.text
+    body = client.get(f"/api/employees/{mechanic['id']}/performance").json()
+    # Margin sparepart 17.000 x 10% = 1.700; jasa 150.000 x 20% = 30.000.
+    assert body["komisi_total"] == "31700.00"
 
 
 def test_karyawan_gaji_tidak_mendapat_komisi(

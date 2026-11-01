@@ -14,6 +14,7 @@ from api.schemas import (
     EmployeeOut,
     EmployeePerformanceOut,
     EmployeeUpdate,
+    PayrollSummaryOut,
     SalaryPaymentCreate,
     SalaryPaymentOut,
     SalaryPaymentUpdate,
@@ -55,6 +56,10 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         komisi_nilai=payload.komisi_nilai,
         jenis_imbalan=payload.jenis_imbalan,
         gaji_bulanan=payload.gaji_bulanan,
+        komisi_barang_nilai=payload.komisi_barang_nilai,
+        komisi_jasa_nilai=payload.komisi_jasa_nilai,
+        payroll_period=payload.payroll_period,
+        payroll_tanggal=payload.payroll_tanggal,
     )
     return _out(employee)
 
@@ -75,6 +80,14 @@ def update_employee(
 def delete_employee(employee_id: int, db: Session = Depends(get_db)):
     employee_service.delete_employee(db, employee_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/payroll/summary", response_model=PayrollSummaryOut)
+def payroll_summary(
+    today: Optional[date] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    return PayrollSummaryOut(**employee_service.payroll_summary(db, today))
 
 
 @router.get("/salary-payments", response_model=List[SalaryPaymentOut])

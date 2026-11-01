@@ -1,6 +1,7 @@
 """Karyawan, penugasan nota, performa, dan komisi per nota."""
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from database.models import (
     Employee,
+    SalaryPayment,
+    ServicePart,
     ServiceRecord,
     ServiceRecordCommission,
     ServiceRecordMechanic,
@@ -21,6 +24,20 @@ from services.utils import clean_text, money
 PERAN_VALUES = {"MEKANIK", "KASIR", "KEDUANYA"}
 MODE_VALUES = {"PERSEN", "NOMINAL"}
 BASIS_VALUES = {"BARANG", "JASA", "KEDUANYA"}
+PAYROLL_VALUES = {
+    "TANGGAL",
+    "MINGGUAN",
+    "DUA_MINGGUAN",
+    "TIGA_MINGGUAN",
+    "BULANAN",
+}
+PAYROLL_LABELS = {
+    "TANGGAL": "Tanggal",
+    "MINGGUAN": "Per minggu",
+    "DUA_MINGGUAN": "Per 2 minggu",
+    "TIGA_MINGGUAN": "Per 3 minggu",
+    "BULANAN": "Bulanan",
+}
 
 
 def _clean_employee(
@@ -33,6 +50,10 @@ def _clean_employee(
     komisi_nilai: Any,
     jenis_imbalan: str = "KOMISI",
     gaji_bulanan: Any = 0,
+    komisi_barang_nilai: Any = None,
+    komisi_jasa_nilai: Any = None,
+    payroll_period: str = "BULANAN",
+    payroll_tanggal: Any = 1,
 ) -> Dict[str, Any]:
     clean_nama = clean_text(nama, max_length=255, allow_newlines=False)
     if len(clean_nama) < 2:
@@ -54,6 +75,27 @@ def _clean_employee(
         raise BusinessValidationError("Nilai komisi tidak boleh negatif.")
     if clean_mode == "PERSEN" and nilai > 100:
         raise BusinessValidationError("Persentase komisi maksimal 100.")
+
+    # Nilai lama tetap dipakai untuk kompatibilitas API. Bila dua tarif baru
+    # tidak dikirim, turunkan keduanya dari basis dan nilai lama.
+    if komisi_barang_nilai is None and komisi_jasa_nilai is None:
+        if clean_mode == "PERSEN":
+            barang_nilai = nilai if clean_basis in {"BARANG", "KEDUANYA"} else Decimal("0.00")
+            jasa_nilai = nilai if clean_basis in {"JASA", "KEDUANYA"} else Decimal("0.00")
+        else:
+            barang_nilai = nilai if clean_basis == "BARANG" else Decimal("0.00")
+            jasa_nilai = nilai if clean_basis == "JASA" else Decimal("0.00")
+    else:
+        try:
+            barang_nilai = money(Decimal(str(komisi_barang_nilai or 0)))
+            jasa_nilai = money(Decimal(str(komisi_jasa_nilai or 0)))
+        except Exception as exc:
+            raise BusinessValidationError("Nilai komisi barang/jasa tidak valid.") from exc
+    if barang_nilai < 0 or jasa_nilai < 0:
+        raise BusinessValidationError("Nilai komisi tidak boleh negatif.")
+    if clean_mode == "PERSEN" and (barang_nilai > 100 or jasa_nilai > 100):
+        raise BusinessValidationError("Persentase komisi maksimal 100.")
+
     clean_imbalan = (jenis_imbalan or "KOMISI").strip().upper()
     if clean_imbalan not in {"KOMISI", "GAJI", "KOMISI_GAJI"}:
         raise BusinessValidationError(
@@ -65,6 +107,17 @@ def _clean_employee(
         raise BusinessValidationError("Gaji bulanan tidak valid.") from exc
     if gaji < 0:
         raise BusinessValidationError("Gaji bulanan tidak boleh negatif.")
+
+    clean_payroll = (payroll_period or "BULANAN").strip().upper()
+    if clean_payroll not in PAYROLL_VALUES:
+        raise BusinessValidationError("Jadwal gajian tidak valid.")
+    try:
+        payroll_day = int(payroll_tanggal or 1)
+    except (TypeError, ValueError) as exc:
+        raise BusinessValidationError("Tanggal gajian harus berupa angka.") from exc
+    if payroll_day < 1 or payroll_day > 31:
+        raise BusinessValidationError("Tanggal gajian harus antara 1 dan 31.")
+
     return {
         "nama": clean_nama,
         "peran": clean_peran,
@@ -73,8 +126,12 @@ def _clean_employee(
         "komisi_mode": clean_mode,
         "komisi_basis": clean_basis,
         "komisi_nilai": nilai,
+        "komisi_barang_nilai": barang_nilai,
+        "komisi_jasa_nilai": jasa_nilai,
         "jenis_imbalan": clean_imbalan,
         "gaji_bulanan": gaji,
+        "payroll_period": clean_payroll,
+        "payroll_tanggal": payroll_day,
     }
 
 
@@ -89,8 +146,13 @@ def serialize(employee: Employee) -> Dict[str, Any]:
         "komisi_mode": employee.komisi_mode,
         "komisi_basis": employee.komisi_basis,
         "komisi_nilai": employee.komisi_nilai,
+        "komisi_barang_nilai": employee.komisi_barang_nilai,
+        "komisi_jasa_nilai": employee.komisi_jasa_nilai,
         "jenis_imbalan": employee.jenis_imbalan,
         "gaji_bulanan": employee.gaji_bulanan,
+        "payroll_period": employee.payroll_period,
+        "payroll_tanggal": employee.payroll_tanggal,
+        "payroll_label": PAYROLL_LABELS.get(employee.payroll_period, "Bulanan"),
     }
 
 
@@ -120,10 +182,15 @@ def create_employee(
     komisi_nilai: Any = 0,
     jenis_imbalan: str = "KOMISI",
     gaji_bulanan: Any = 0,
+    komisi_barang_nilai: Any = None,
+    komisi_jasa_nilai: Any = None,
+    payroll_period: str = "BULANAN",
+    payroll_tanggal: Any = 1,
 ) -> Employee:
     clean = _clean_employee(
         nama, peran, nomor_hp, catatan, komisi_mode, komisi_basis, komisi_nilai,
-        jenis_imbalan, gaji_bulanan,
+        jenis_imbalan, gaji_bulanan, komisi_barang_nilai, komisi_jasa_nilai,
+        payroll_period, payroll_tanggal,
     )
     employee = Employee(**clean, aktif=bool(aktif))
     db.add(employee)
@@ -134,6 +201,16 @@ def create_employee(
 
 def update_employee(db: Session, employee_id: int, **values: Any) -> Employee:
     employee = get_employee(db, employee_id)
+    legacy_changed = any(
+        key in values
+        for key in ("komisi_mode", "komisi_basis", "komisi_nilai")
+    )
+    if legacy_changed and "komisi_barang_nilai" not in values and "komisi_jasa_nilai" not in values:
+        barang_value = None
+        jasa_value = None
+    else:
+        barang_value = values.get("komisi_barang_nilai", employee.komisi_barang_nilai)
+        jasa_value = values.get("komisi_jasa_nilai", employee.komisi_jasa_nilai)
     clean = _clean_employee(
         values.get("nama", employee.nama),
         values.get("peran", employee.peran),
@@ -144,6 +221,10 @@ def update_employee(db: Session, employee_id: int, **values: Any) -> Employee:
         values.get("komisi_nilai", employee.komisi_nilai),
         values.get("jenis_imbalan", employee.jenis_imbalan),
         values.get("gaji_bulanan", employee.gaji_bulanan),
+        barang_value,
+        jasa_value,
+        values.get("payroll_period", employee.payroll_period),
+        values.get("payroll_tanggal", employee.payroll_tanggal),
     )
     for key, value in clean.items():
         setattr(employee, key, value)
@@ -194,7 +275,7 @@ def _record_statement(start: Optional[datetime], end: Optional[datetime]):
         .options(
             joinedload(ServiceRecord.unit).joinedload(VehicleOrUnit.customer),
             selectinload(ServiceRecord.jobs),
-            selectinload(ServiceRecord.parts),
+            selectinload(ServiceRecord.parts).selectinload(ServicePart.stock_item),
             selectinload(ServiceRecord.mechanics).joinedload(
                 ServiceRecordMechanic.employee
             ),
@@ -242,14 +323,21 @@ def _employee_records(
     return sorted(records.values(), key=lambda row: (row.waktu_service, row.id), reverse=True)
 
 
-def _basis_amount(record: ServiceRecord, basis: str) -> Decimal:
+def _commission_components(record: ServiceRecord) -> tuple[Decimal, Decimal]:
+    """Nilai jasa dan margin sparepart (harga jual - modal) untuk komisi."""
     jasa = Decimal(record.biaya_jasa or 0) - Decimal(record.total_retur_jasa or 0)
-    part = Decimal(record.total_part or 0) - Decimal(record.total_retur_part or 0)
-    if basis == "BARANG":
-        return money(part)
-    if basis == "JASA":
-        return money(jasa)
-    return money(jasa + part)
+    margin = Decimal("0.00")
+    for part in record.parts:
+        net_qty = int(part.jumlah or 0) - int(getattr(part, "jumlah_retur", 0) or 0)
+        if net_qty <= 0:
+            continue
+        modal = part.harga_modal
+        if modal is None and part.stock_item is not None:
+            modal = part.stock_item.harga_modal
+        if modal is None:
+            continue
+        margin += (Decimal(part.harga_satuan or 0) - Decimal(modal)) * net_qty
+    return money(max(Decimal("0.00"), jasa)), money(margin)
 
 
 def _commission_for(
@@ -276,12 +364,39 @@ def _commission_for(
         share = Decimal("1")
     else:
         return money(0)
-    basis = _basis_amount(record, employee.komisi_basis)
-    nilai = Decimal(employee.komisi_nilai or 0)
+
+    jasa, margin = _commission_components(record)
+    barang_nilai = Decimal(employee.komisi_barang_nilai or 0)
+    jasa_nilai = Decimal(employee.komisi_jasa_nilai or 0)
+
     if employee.komisi_mode == "PERSEN":
-        amount = basis * nilai / Decimal("100")
+        # Database lama yang belum memiliki tarif terpisah tetap memakai nilai
+        # tunggal sesuai basis lamanya.
+        if barang_nilai == 0 and jasa_nilai == 0 and employee.komisi_nilai:
+            legacy = Decimal(employee.komisi_nilai or 0)
+            if employee.komisi_basis == "BARANG":
+                barang_nilai = legacy
+            elif employee.komisi_basis == "JASA":
+                jasa_nilai = legacy
+            else:
+                barang_nilai = jasa_nilai = legacy
+        amount = (
+            margin * barang_nilai / Decimal("100")
+            + jasa * jasa_nilai / Decimal("100")
+        )
     else:
-        amount = nilai
+        if barang_nilai == 0 and jasa_nilai == 0 and employee.komisi_nilai:
+            legacy = Decimal(employee.komisi_nilai or 0)
+            if employee.komisi_basis == "BARANG":
+                amount = legacy if margin > 0 else Decimal("0.00")
+            elif employee.komisi_basis == "JASA":
+                amount = legacy if jasa > 0 else Decimal("0.00")
+            else:
+                amount = legacy if (margin > 0 or jasa > 0) else Decimal("0.00")
+        else:
+            amount = (barang_nilai if margin > 0 else Decimal("0.00")) + (
+                jasa_nilai if jasa > 0 else Decimal("0.00")
+            )
     return money(amount * share)
 
 
@@ -356,6 +471,132 @@ def performance(
         "pelanggan_unik": len(customers),
         "komisi_total": money(komisi_total),
         "riwayat": riwayat,
+    }
+
+
+def _payroll_cycle_start(employee: Employee, today: date) -> date:
+    period = employee.payroll_period or "BULANAN"
+    if period == "MINGGUAN":
+        return today - timedelta(days=6)
+    if period == "DUA_MINGGUAN":
+        return today - timedelta(days=13)
+    if period == "TIGA_MINGGUAN":
+        return today - timedelta(days=20)
+    return today.replace(day=1)
+
+
+def _payroll_salary_due(employee: Employee) -> Decimal:
+    if (employee.jenis_imbalan or "KOMISI") not in {"GAJI", "KOMISI_GAJI"}:
+        return money(0)
+    base = Decimal(employee.gaji_bulanan or 0)
+    period = employee.payroll_period or "BULANAN"
+    if period == "MINGGUAN":
+        return money(base * Decimal("7") / Decimal("30"))
+    if period == "DUA_MINGGUAN":
+        return money(base * Decimal("14") / Decimal("30"))
+    if period == "TIGA_MINGGUAN":
+        return money(base * Decimal("21") / Decimal("30"))
+    return money(base)
+
+
+def _next_pay_date(employee: Employee, today: date) -> date:
+    period = employee.payroll_period or "BULANAN"
+    if period in {"MINGGUAN", "DUA_MINGGUAN", "TIGA_MINGGUAN"}:
+        return today
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    if period == "BULANAN":
+        return date(today.year, today.month, last_day)
+    day = min(max(1, int(employee.payroll_tanggal or 1)), last_day)
+    candidate = date(today.year, today.month, day)
+    if candidate < today:
+        next_month = today.month + 1
+        next_year = today.year + (1 if next_month > 12 else 0)
+        next_month = 1 if next_month > 12 else next_month
+        last_next = calendar.monthrange(next_year, next_month)[1]
+        candidate = date(next_year, next_month, min(day, last_next))
+    return candidate
+
+
+def _has_compensation(employee: Employee) -> bool:
+    if (employee.jenis_imbalan or "KOMISI") in {"GAJI", "KOMISI_GAJI"} and Decimal(
+        employee.gaji_bulanan or 0
+    ) > 0:
+        return True
+    if Decimal(employee.komisi_barang_nilai or 0) > 0:
+        return True
+    if Decimal(employee.komisi_jasa_nilai or 0) > 0:
+        return True
+    return employee.komisi_mode == "NOMINAL" and Decimal(
+        employee.komisi_nilai or 0
+    ) > 0
+
+
+def payroll_summary(db: Session, today: Optional[date] = None) -> Dict[str, Any]:
+    """Estimasi gaji + komisi yang perlu dibayar pada siklus berjalan."""
+    target = today or date.today()
+    employees = [
+        employee
+        for employee in list_employees(db, active_only=True)
+        if _has_compensation(employee)
+    ]
+    if not employees:
+        return {
+            "today": target,
+            "total_due": money(0),
+            "count": 0,
+            "next_date": None,
+            "items": [],
+        }
+
+    starts = {employee.id: _payroll_cycle_start(employee, target) for employee in employees}
+    earliest = min(starts.values())
+    payments = list(
+        db.scalars(
+            select(SalaryPayment).where(
+                SalaryPayment.tanggal >= earliest,
+                SalaryPayment.tanggal <= target,
+            )
+        ).all()
+    )
+    paid: Dict[int, Decimal] = {}
+    for payment in payments:
+        if payment.employee_id is None:
+            continue
+        paid[payment.employee_id] = paid.get(payment.employee_id, Decimal("0.00")) + Decimal(
+            payment.nominal or 0
+        )
+
+    items = []
+    for employee in employees:
+        start = starts[employee.id]
+        commission = Decimal("0.00")
+        for record in _employee_records(db, employee, start, target):
+            commission += _commission_for(db, employee, record)
+        salary_due = _payroll_salary_due(employee)
+        salary_paid = money(paid.get(employee.id, Decimal("0.00")))
+        total_due = money(max(Decimal("0.00"), salary_due + commission - salary_paid))
+        items.append(
+            {
+                "employee_id": employee.id,
+                "nama": employee.nama,
+                "jadwal": PAYROLL_LABELS.get(employee.payroll_period, "Bulanan"),
+                "cycle_start": start,
+                "next_date": _next_pay_date(employee, target),
+                "salary_due": salary_due,
+                "commission_earned": money(commission),
+                "salary_paid": salary_paid,
+                "total_due": total_due,
+            }
+        )
+
+    items.sort(key=lambda row: (Decimal(row["total_due"]) <= 0, -Decimal(row["total_due"]), row["nama"].lower()))
+    due_items = [row for row in items if Decimal(row["total_due"]) > 0]
+    return {
+        "today": target,
+        "total_due": money(sum((Decimal(row["total_due"]) for row in items), Decimal("0.00"))),
+        "count": len(due_items),
+        "next_date": min((row["next_date"] for row in due_items), default=None),
+        "items": items,
     }
 
 

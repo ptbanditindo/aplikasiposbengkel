@@ -217,6 +217,8 @@
         method: 'PUT',
         body: { nominal: String(nominal) },
       }),
+    payrollSummary: (today) =>
+      request('/api/payroll/summary' + (today ? '?today=' + qs(today) : '')),
     salaryPayments: (start, end, employeeId) => {
       const params = [];
       if (start) params.push('start=' + encodeURIComponent(start));

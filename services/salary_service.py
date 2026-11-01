@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from database.models import Employee, SalaryPayment
-from services.errors import BusinessValidationError, NotFoundError
+from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
 
 METODE_VALUES = {"CASH", "TRANSFER"}
@@ -116,10 +116,21 @@ def create_payment(
     catatan: Optional[str] = None,
 ) -> SalaryPayment:
     employee = _get_employee(db, employee_id)
+    clean_period = _clean_period(periode)
+    existing = db.scalar(
+        select(SalaryPayment).where(
+            SalaryPayment.employee_id == employee.id,
+            SalaryPayment.periode == clean_period,
+        )
+    )
+    if existing is not None:
+        raise ConflictError(
+            f"Gaji {employee.nama} untuk periode {clean_period} sudah dicatat."
+        )
     payment = SalaryPayment(
         employee_id=employee.id,
         nama_karyawan=employee.nama,
-        periode=_clean_period(periode),
+        periode=clean_period,
         tanggal=_clean_date(tanggal),
         nominal=_clean_nominal(nominal),
         metode=_clean_metode(metode),
@@ -155,6 +166,17 @@ def update_payment(db: Session, payment_id: int, **values: Any) -> SalaryPayment
         payment.metode = _clean_metode(values["metode"])
     if "catatan" in values:
         payment.catatan = clean_text(values["catatan"], max_length=500) or None
+    duplicate = db.scalar(
+        select(SalaryPayment).where(
+            SalaryPayment.employee_id == payment.employee_id,
+            SalaryPayment.periode == payment.periode,
+            SalaryPayment.id != payment.id,
+        )
+    )
+    if duplicate is not None:
+        raise ConflictError(
+            f"Gaji karyawan ini untuk periode {payment.periode} sudah dicatat."
+        )
     db.commit()
     db.refresh(payment)
     return payment

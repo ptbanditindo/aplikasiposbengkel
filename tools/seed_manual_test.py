@@ -789,6 +789,10 @@ with SessionLocal() as db:
         komisi_mode="PERSEN",
         komisi_basis="JASA",
         komisi_nilai=Decimal("10.00"),
+        komisi_barang_nilai=Decimal("0.00"),
+        komisi_jasa_nilai=Decimal("10.00"),
+        payroll_period="BULANAN",
+        payroll_tanggal=25,
     )
     bayu = Employee(
         nama="Bayu",
@@ -797,6 +801,10 @@ with SessionLocal() as db:
         komisi_mode="PERSEN",
         komisi_basis="KEDUANYA",
         komisi_nilai=Decimal("5.00"),
+        komisi_barang_nilai=Decimal("5.00"),
+        komisi_jasa_nilai=Decimal("5.00"),
+        payroll_period="MINGGUAN",
+        payroll_tanggal=1,
     )
     sari = Employee(
         nama="Sari",
@@ -807,6 +815,10 @@ with SessionLocal() as db:
         komisi_mode="NOMINAL",
         komisi_basis="KEDUANYA",
         komisi_nilai=Decimal("0.00"),
+        komisi_barang_nilai=Decimal("0.00"),
+        komisi_jasa_nilai=Decimal("0.00"),
+        payroll_period="TANGGAL",
+        payroll_tanggal=1,
     )
     db.add_all([andi, bayu, sari])
     db.flush()

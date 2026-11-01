@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 
 def get_user_version(conn) -> int:
@@ -933,6 +933,46 @@ def _migrate_026_salary_payments(cursor: Cursor) -> None:
     )
 
 
+def _migrate_027_employee_commission_split(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "employees",
+        "komisi_barang_nilai",
+        "komisi_barang_nilai NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "komisi_jasa_nilai",
+        "komisi_jasa_nilai NUMERIC(14, 2) NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "payroll_period",
+        "payroll_period VARCHAR(16) NOT NULL DEFAULT 'BULANAN'",
+    )
+    _add_column(
+        cursor,
+        "employees",
+        "payroll_tanggal",
+        "payroll_tanggal INTEGER NOT NULL DEFAULT 1",
+    )
+    cursor.execute(
+        "UPDATE employees SET "
+        "komisi_barang_nilai = CASE "
+        "WHEN komisi_mode = 'PERSEN' AND komisi_basis IN ('BARANG', 'KEDUANYA') "
+        "THEN komisi_nilai "
+        "WHEN komisi_mode = 'NOMINAL' AND komisi_basis = 'BARANG' "
+        "THEN komisi_nilai ELSE 0 END, "
+        "komisi_jasa_nilai = CASE "
+        "WHEN komisi_mode = 'PERSEN' AND komisi_basis IN ('JASA', 'KEDUANYA') "
+        "THEN komisi_nilai "
+        "WHEN komisi_mode = 'NOMINAL' AND komisi_basis = 'JASA' "
+        "THEN komisi_nilai ELSE 0 END"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -960,6 +1000,7 @@ MIGRATIONS: List[Migration] = [
     (24, _migrate_024_employees),
     (25, _migrate_025_employee_salary),
     (26, _migrate_026_salary_payments),
+    (27, _migrate_027_employee_commission_split),
 ]
 
 
