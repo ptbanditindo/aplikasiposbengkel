@@ -779,16 +779,21 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
     unit = describe_unit(item.unit) if item.unit is not None else "unit"
     pekerjaan = _pekerjaan(record)
     tanggal = _format_date(record.waktu_service.date() if record else None)
+    opening = whatsapp_service.formal_opening(info, customer.nama)
 
     if item.jenis == JENIS_GARANSI and record is not None:
         days = (record.garansi_sampai - today).days if record.garansi_sampai else 0
-        return (
-            f"Halo Bapak/Ibu {customer.nama}, kami dari {info['nama']}. "
-            f"Garansi servis {unit} tanggal {tanggal} akan berakhir pada "
+        body = (
+            f"Kami ingin menginformasikan bahwa garansi servis {unit} "
+            f"tanggal {tanggal} akan berakhir pada "
             f"{_format_date(record.garansi_sampai)} ({days} hari lagi). "
-            f"Bagaimana kondisi {unit} setelah {pekerjaan}? Bila masih ada "
-            f"{_gejala(record)}, silakan cek ulang ke bengkel sebelum masa "
-            "garansi berakhir."
+            f"Bagaimana kondisi {unit} setelah {pekerjaan}? Apabila masih ada "
+            f"{_gejala(record)}, kami berharap Bapak/Ibu berkenan memeriksakan "
+            "kembali ke bengkel kami sebelum masa garansi berakhir."
+        )
+        return (
+            f"{opening} {body}\n\n"
+            "Terima kasih atas perhatian Bapak/Ibu."
         )
 
     if item.jenis == JENIS_SERVIS and record is not None:
@@ -796,30 +801,42 @@ def _message(db: Session, item: FollowupItem, today: date) -> str:
         for row in list(record.jobs) + list(record.parts):
             interval = max(interval, int(getattr(row, "interval_servis_bulan", 0) or 0))
         jadwal = _format_date(item.jatuh_tempo)
-        return (
-            f"Halo Bapak/Ibu {customer.nama}, kami dari {info['nama']}. "
-            f"Terakhir kami kerjakan {pekerjaan} pada {unit} tanggal {tanggal}. "
-            f"Sesuai jadwal servis berkala"
+        body = (
+            f"Kami ingin mengingatkan bahwa servis terakhir {pekerjaan} "
+            f"pada {unit} dilaksanakan tanggal {tanggal}. Sesuai jadwal servis "
+            "berkala"
             + (f" {interval} bulan" if interval else "")
-            + f", waktunya servis lagi sekitar {jadwal}. "
-            "Silakan datang bila ingin dijadwalkan. Terima kasih."
+            + f", waktunya servis kembali sekitar {jadwal}. "
+            "Kami berharap Bapak/Ibu berkenan datang untuk menjadwalkan servis."
+        )
+        return (
+            f"{opening} {body}\n\n"
+            "Terima kasih atas perhatian Bapak/Ibu."
         )
 
     if item.jenis == JENIS_PIUTANG:
         if record is not None:
-            return whatsapp_service.completion_wa_text(record, info)
+            return whatsapp_service.receivable_wa_text(record, info)
+        body = (
+            f"Kami ingin mengingatkan bahwa masih terdapat sisa pembayaran "
+            f"untuk {unit}. Mohon kiranya pembayaran dapat diselesaikan. "
+            "Apabila pembayaran sudah dilakukan, mohon abaikan pesan ini."
+        )
         return (
-            f"Halo Bapak/Ibu {customer.nama}, kendaraan {unit} sudah selesai "
-            f"dikerjakan dan siap diambil di {info['nama']}. "
-            "Sisa pembayaran dapat diselesaikan saat pengambilan. Terima kasih."
+            f"{opening} {body}\n\n"
+            "Terima kasih atas perhatian dan kerja samanya."
         )
 
-    return (
-        f"Halo Bapak/Ibu {customer.nama}, kami dari {info['nama']}. "
-        f"Sudah beberapa waktu sejak servis {unit} tanggal {tanggal} "
-        f"({pekerjaan}). Apakah masih ada kendala? "
+    body = (
+        f"Kami ingin menanyakan kondisi {unit} setelah servis {pekerjaan} "
+        f"tanggal {tanggal}. Apakah masih ada kendala? "
         f"{_garansi_clause(record, today)}"
-        "Silakan hubungi kami bila perlu dicek ulang. Terima kasih."
+        "Kami berharap Bapak/Ibu berkenan menghubungi kami apabila perlu "
+        "dilakukan pemeriksaan ulang."
+    )
+    return (
+        f"{opening} {body}\n\n"
+        "Terima kasih atas perhatian Bapak/Ibu."
     )
 
 

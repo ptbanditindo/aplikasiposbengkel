@@ -423,6 +423,32 @@ def test_prospek_batas_hari_cooldown_dan_arsip(
     assert _items(client, jenis="prospek") == []
 
 
+def test_pesan_followup_mengikuti_nama_bengkel_dari_pengaturan(
+    client, create_customer, create_unit, make_transaction, db_session
+):
+    updated = client.put(
+        "/api/settings/bengkel",
+        json={"nama": "BENGKEL UJI FORMAL"},
+    )
+    assert updated.status_code == 200, updated.text
+
+    customer = create_customer(nama="Pelanggan Nama Bengkel")
+    unit = create_unit(customer["id"], nopol="B 7021 NMB")
+    record_id = _record_id(make_transaction(unit["id"]))
+    _shift_record(db_session, record_id, days_ago=7)
+    item = _items(client, jenis="prospek")[0]
+
+    body = client.post(
+        f"/api/followup/items/{item['id']}/followup",
+        json={"status": "DIBUKA"},
+    ).json()
+    text = body["wa_text"]
+    assert text.startswith("Mohon maaf")
+    assert "Perkenalkan, kami dari BENGKEL UJI FORMAL." in text
+    assert "BENGKEL RADIATOR TEST" not in text
+    assert "Terima kasih atas perhatian" in text
+
+
 def test_garansi_akan_habis_followup_dan_hilangkan_pengingat(
     client, create_customer, create_unit, make_transaction, db_session
 ):
@@ -443,8 +469,11 @@ def test_garansi_akan_habis_followup_dan_hilangkan_pengingat(
         f"/api/followup/items/{item['id']}/followup",
         json={"status": "DIBUKA"},
     ).json()
-    assert "Garansi servis" in body["wa_text"]
+    assert body["wa_text"].startswith("Mohon maaf")
+    assert "Perkenalkan, kami dari" in body["wa_text"]
+    assert "garansi servis" in body["wa_text"]
     assert "5 hari lagi" in body["wa_text"]
+    assert "Terima kasih atas perhatian" in body["wa_text"]
 
     archived = client.post(
         f"/api/followup/items/{item['id']}/status",
@@ -506,9 +535,13 @@ def test_piutang_followup_tidak_mengubah_sisa_dan_hanya_lunas_menghapus(
         json={"status": "DIBUKA"},
     ).json()
     wa_text = body["wa_text"]
-    assert "sudah selesai dikerjakan" in wa_text
-    assert "siap diambil" in wa_text
-    assert "Sisa pembayaran" in wa_text
+    assert "Mohon maaf" in wa_text
+    assert "Perkenalkan, kami dari" in wa_text
+    assert item["no_nota"] in wa_text
+    assert "sisa sebesar" in wa_text.lower()
+    assert "pembayaran" in wa_text.lower()
+    assert "siap diambil" not in wa_text.lower()
+    assert "Terima kasih atas perhatian" in wa_text
     for kata in ("hutang", "piutang", "tagihan", "kekurangan"):
         assert kata not in wa_text.lower(), (kata, wa_text)
     assert body["item"]["status"] == "SUDAH_FOLLOWUP"

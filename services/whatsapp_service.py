@@ -36,6 +36,24 @@ JENIS_GARANSI = "garansi"
 JENIS_PIUTANG = "piutang"
 VALID_JENIS = {JENIS_STRUK, JENIS_FOLLOWUP, JENIS_GARANSI, JENIS_PIUTANG}
 
+def formal_opening(
+    bengkel: Dict[str, str], customer_nama: Optional[str] = None
+) -> str:
+    """Sapaan formal: minta maaf, lalu perkenalkan bengkel dari Pengaturan."""
+    nama = (customer_nama or "").strip()
+    sapaan = f"Bapak/Ibu {nama}" if nama else "Bapak/Ibu"
+    bengkel_nama = (bengkel.get("nama") or "").strip()
+    perkenalan = (
+        f"Perkenalkan, kami dari {bengkel_nama}."
+        if bengkel_nama
+        else "Perkenalkan, kami dari bengkel kami."
+    )
+    return (
+        f"Mohon maaf apabila pesan ini mengganggu waktu {sapaan}.\n\n"
+        f"{perkenalan}"
+    )
+
+
 def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
     """Satu-satunya sumber kalimat "kendaraan selesai" untuk pelanggan.
 
@@ -44,66 +62,82 @@ def completion_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
     """
     customer = record.unit.customer
     unit = describe_unit(record.unit)
-    bengkel_nama = (bengkel.get("nama") or "").strip()
     text = (
-        f"Halo Bapak/Ibu {customer.nama}, kendaraan {unit} dengan nota "
-        f"{record.no_nota} sudah selesai dikerjakan dan siap diambil"
-        + (f" di {bengkel_nama}" if bengkel_nama else "")
-        + "."
+        f"Kami ingin menyampaikan bahwa kendaraan {unit} dengan nota "
+        f"{record.no_nota} sudah selesai dikerjakan dan siap diambil "
+        "di bengkel kami."
     )
     sisa = payment_service.record_sisa(record)
-    if (record.status or "NORMAL") == "VOID" or sisa <= 0:
-        return text + " Terima kasih."
-
-    parts = [text]
-    if Decimal(record.total_dibayar or 0) > 0:
-        parts.append("Pembayaran awal sudah kami terima.")
-    parts.append(
-        f"Sisa pembayaran {format_rupiah(sisa)} dapat diselesaikan saat pengambilan."
+    if (record.status or "NORMAL") != "VOID" and sisa > 0:
+        if Decimal(record.total_dibayar or 0) > 0:
+            text += " Pembayaran awal sudah kami terima."
+        text += (
+            f" Sisa pembayaran {format_rupiah(sisa)} dapat diselesaikan "
+            "saat pengambilan."
+        )
+    return (
+        f"{formal_opening(bengkel, customer.nama)} {text}\n\n"
+        "Terima kasih atas kepercayaan Bapak/Ibu kepada kami."
     )
-    parts.append("Terima kasih.")
-    return " ".join(parts)
 
 
-def completion_wa_text_multi(
+def receivable_wa_text(record: ServiceRecord, bengkel: Dict[str, str]) -> str:
+    """Pengingat piutang formal; tidak mengklaim kendaraan siap diambil."""
+    customer = record.unit.customer
+    unit = describe_unit(record.unit)
+    sisa = payment_service.record_sisa(record)
+    due = (
+        f" Jatuh tempo pembayaran pada {record.jatuh_tempo.strftime('%d/%m/%Y')}."
+        if record.jatuh_tempo
+        else ""
+    )
+    body = (
+        f"Kami ingin mengingatkan bahwa pembayaran nota {record.no_nota} "
+        f"untuk {unit} masih memiliki sisa sebesar {format_rupiah(sisa)}."
+        + due
+        + " Apabila pembayaran sudah dilakukan, mohon abaikan pesan ini."
+    )
+    return (
+        f"{formal_opening(bengkel, customer.nama)} {body}\n\n"
+        "Terima kasih atas perhatian dan kerja samanya."
+    )
+
+
+def receivable_wa_text_multi(
     records: List[ServiceRecord], bengkel: Dict[str, str]
 ) -> str:
-    """Pesan satu kali untuk semua nota piutang pelanggan yang sama."""
+    """Satu pengingat formal untuk semua nota piutang pelanggan yang sama."""
     if not records:
         return ""
     ordered = sorted(
-        records, key=lambda record: (record.jatuh_tempo or date.max, record.waktu_service)
+        records,
+        key=lambda record: (record.jatuh_tempo or date.max, record.waktu_service),
     )
     customer = ordered[0].unit.customer
-    bengkel_nama = (bengkel.get("nama") or "").strip()
-    labels = [
-        f"{describe_unit(record.unit)} (nota {record.no_nota})"
-        for record in ordered
-    ]
-    if len(labels) == 2:
-        kendaraan = f"{labels[0]} dan {labels[1]}"
-    else:
-        kendaraan = ", ".join(labels[:-1]) + ", dan " + labels[-1]
-    text = (
-        f"Halo Bapak/Ibu {customer.nama}, kendaraan {kendaraan} sudah selesai "
-        "dikerjakan dan siap diambil"
-        + (f" di {bengkel_nama}" if bengkel_nama else "")
-        + "."
-    )
-    if any(Decimal(record.total_dibayar or 0) > 0 for record in ordered):
-        text += " Pembayaran awal sudah kami terima."
     total = Decimal("0.00")
     rincian = []
     for record in ordered:
         sisa = payment_service.record_sisa(record)
         total += sisa
-        rincian.append(f"nota {record.no_nota} {format_rupiah(sisa)}")
-    text += " Rincian sisa pembayaran: " + "; ".join(rincian) + "."
-    text += (
-        f" Total sisa {format_rupiah(total)} dapat diselesaikan saat pengambilan."
-        " Terima kasih."
+        keterangan = (
+            f"nota {record.no_nota} untuk {describe_unit(record.unit)} "
+            f"sebesar {format_rupiah(sisa)}"
+        )
+        if record.jatuh_tempo:
+            keterangan += (
+                f" (jatuh tempo {record.jatuh_tempo.strftime('%d/%m/%Y')})"
+            )
+        rincian.append(keterangan)
+    body = (
+        "Kami ingin mengingatkan pembayaran beberapa nota berikut:\n"
+        + "\n".join("- " + row for row in rincian)
+        + f"\nTotal sisa pembayaran sebesar {format_rupiah(total)}. "
+        "Apabila pembayaran sudah dilakukan, mohon abaikan pesan ini."
     )
-    return text
+    return (
+        f"{formal_opening(bengkel, customer.nama)} {body}\n\n"
+        "Terima kasih atas perhatian dan kerja samanya."
+    )
 
 
 def build_link(nomor: str, message: str) -> str:
@@ -278,7 +312,7 @@ def remind_receivable(
                 f"{record.jatuh_tempo.strftime('%d-%m-%Y')}."
             )
         info = settings_service.get_bengkel_info(db)
-        message = completion_wa_text(record, info)
+        message = receivable_wa_text(record, info)
         log, link = append_attempt(
             db,
             record.unit.customer,
@@ -367,7 +401,7 @@ def remind_customer_receivables(
                 f"{earliest.strftime('%d-%m-%Y')}."
             )
         info = settings_service.get_bengkel_info(db)
-        message = completion_wa_text_multi(records, info)
+        message = receivable_wa_text_multi(records, info)
         log = None
         link = ""
         for record in records:

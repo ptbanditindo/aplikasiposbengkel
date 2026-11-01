@@ -669,3 +669,11 @@ HTTP diganti dengan kalimat umum di atas.
     nonaktif dengan keterangan jam, dan backend menolak aksi tersebut.
     Update pengaturan yang hanya mengirim sebagian field tidak lagi menimpa
     field lain ke nilai default.
+32. Semua pesan follow-up memakai struktur formal: mohon maaf, perkenalkan
+    bengkel dengan nama dari Pengaturan, isi sesuai kategori, lalu terima
+    kasih. Template kendaraan selesai, piutang, prospek, servis berkala, dan
+    garansi dipisah. Pengingat piutang memakai kalimat pembayaran, bukan
+    "kendaraan siap diambil".
+33. Pesan disusun dalam tiga paragraf agar mudah dibaca: (1) permintaan
+    maaf, (2) perkenalan bengkel + isi pesan, (3) terima kasih. Daftar nota
+    piutang multi ditampilkan sebagai baris-baris terpisah.

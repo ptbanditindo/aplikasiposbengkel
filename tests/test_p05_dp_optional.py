@@ -67,10 +67,13 @@ def test_kredit_tanpa_jatuh_tempo_tersimpan_dan_muncul_di_piutang(
     assert row["sisa_bayar"] == "50000.00"
 
     completion = receipt["completion_wa_text"]
+    assert completion.startswith("Mohon maaf")
+    assert "Perkenalkan, kami dari" in completion
     assert "sudah selesai dikerjakan" in completion
     assert "siap diambil" in completion
     assert "Pembayaran awal sudah kami terima." in completion
     assert "Sisa pembayaran Rp 50.000" in completion
+    assert "Terima kasih atas kepercayaan" in completion
     _assert_pesan_pelanggan(completion)
 
     with SessionLocal() as db:

@@ -52,6 +52,11 @@ build step) di `http://127.0.0.1:8000`.
   struk lengkap; kasir tetap menekan kirim sendiri. Tombol WhatsApp lain juga
   membuka pratinjau pesan dan tautan `wa.me`. Setiap upaya dicatat, nomor
   ditampilkan tersamarkan, dan pesan hanya aktif bila pelanggan memberi izin.
+  Pesan follow-up memakai bahasa formal dan paragraf terpisah: pembuka
+  permintaan maaf, isi yang memperkenalkan bengkel dengan nama dari
+  Pengaturan, lalu penutup terima kasih. Template dipisah per keperluan:
+  kendaraan selesai, pengingat piutang, prospek, servis berkala, dan garansi;
+  pengingat piutang tidak lagi memakai kalimat “kendaraan siap diambil”.
 - **Follow-up & servis berkala** — menu **Follow up** tersendiri menampilkan
   delapan kartu kategori: Piutang, Kendaraan selesai, Prospek, Berkendala,
   Servis berkala, Garansi akan habis, serta Akan datang untuk garansi dan
