@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261187">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261191">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -234,7 +234,7 @@
         <div class="page-head">
           <div>
             <h1>Transaksi kasir</h1>
-            <p class="muted">Ubah harga deal bila perlu. Tarif master tetap.</p>
+            <p class="muted">Catat servis atau penjualan sparepart. Ikuti langkah 1–4, periksa nota, lalu simpan.</p>
           </div>
           <div class="page-actions">
             <div class="segmented sm" id="posModeSwitch" role="group" aria-label="Jenis transaksi">
@@ -252,7 +252,7 @@
                 <span class="step-num" aria-hidden="true">1</span>
                 <div>
                   <h2>Pilih pelanggan</h2>
-                  <p class="muted">Cari berdasarkan nama atau nomor HP.</p>
+                  <p class="muted">Ketik nama atau nomor HP pelanggan. Belum terdaftar? Klik + Pelanggan baru.</p>
                 </div>
               </div>
               <div class="search-row">
@@ -270,7 +270,7 @@
                 <span class="step-num" aria-hidden="true">2</span>
                 <div>
                   <h2>Pilih unit servis</h2>
-                  <p class="muted">Mobil lengkap atau radiator copotan tanpa nopol.</p>
+                  <p class="muted">Pilih unit yang diservis. Untuk radiator tanpa mobil, pilih Bawa radiator saja.</p>
                 </div>
               </div>
               <div class="unit-grid" id="unitList"></div>
@@ -328,7 +328,7 @@
                 <span class="step-num" aria-hidden="true">3</span>
                 <div>
                   <h2>Keluhan awal</h2>
-                  <p class="muted">Pilih keluhan yang sering muncul atau tulis sendiri.</p>
+                  <p class="muted">Klik keluhan yang sering muncul, atau tulis dengan bahasa pelanggan.</p>
                 </div>
               </div>
               <div class="chips" id="complaintChips"></div>
@@ -350,14 +350,14 @@
                 <span class="step-num" aria-hidden="true">4</span>
                 <div>
                   <h2>Rincian pengerjaan</h2>
-                  <p class="muted">Harga master hanya patokan. Harga deal bisa berbeda.</p>
+                  <p class="muted">Tambahkan jasa dan sparepart. Harga di sini hanya untuk nota ini; tarif master tidak berubah.</p>
                 </div>
               </div>
 
               <div class="line-form line-form--jasa">
                 <div class="line-form-head">
                   <h4>Jasa</h4>
-                  <span class="tiny muted">Harga deal tidak mengubah tarif master</span>
+                  <span class="tiny muted">Harga hanya untuk nota ini</span>
                 </div>
                 <div class="line-grid">
                   <select class="input" id="jasaPicker"></select>
@@ -375,7 +375,7 @@
                   </thead>
                   <tbody id="jobsBody"></tbody>
                 </table>
-                <div class="empty-state sm hidden" id="jobsEmpty">Belum ada jasa ditambahkan.</div>
+                <div class="empty-state sm hidden" id="jobsEmpty">Belum ada jasa. Pilih dari daftar tarif atau isi nama jasa, lalu klik + Tambah jasa.</div>
               </div>
 
               <div class="line-form line-form--part">
@@ -401,7 +401,7 @@
                   </thead>
                   <tbody id="partsBody"></tbody>
                 </table>
-                <div class="empty-state sm hidden" id="partsEmpty">Belum ada sparepart ditambahkan.</div>
+                <div class="empty-state sm hidden" id="partsEmpty">Belum ada sparepart. Pilih barang, isi jumlah, lalu klik + Tambah sparepart.</div>
               </div>
             </section>
           </div>
@@ -426,6 +426,7 @@
               <label class="field">
                 <span>Diskon (Rp)</span>
                 <input type="text" class="input money-input" id="diskonInput" inputmode="numeric" value="0">
+                <small class="tiny muted">Potongan dari total nota. Isi 0 bila tidak ada.</small>
               </label>
 
               <div class="field">
@@ -448,12 +449,13 @@
                   <button type="button" data-jenis="LUNAS" class="active">Lunas</button>
                   <button type="button" data-jenis="KREDIT">Kredit</button>
                 </div>
+                <small class="tiny muted">Pilih Kredit bila belum lunas. Sisa tagihan masuk piutang pelanggan.</small>
               </div>
 
               <div class="hidden" id="kreditFields">
                 <label class="field">
                   <span>Rencana pembayaran (Rp)</span>
-                  <input type="text" class="input money-input" id="rencanaBayarInput" inputmode="numeric" placeholder="0">
+                  <input type="text" class="input money-input" id="rencanaBayarInput" inputmode="numeric" placeholder="Contoh: 150000">
                   <small class="tiny muted">Nominal yang dijanjikan pelanggan. Boleh dikosongkan.</small>
                 </label>
                 <label class="field">
@@ -469,7 +471,7 @@
                 <div class="hidden" id="kreditUangMukaFields">
                   <label class="field">
                     <span>Uang muka diterima (Rp)</span>
-                    <input type="text" class="input money-input" id="kreditUangMukaInput" inputmode="numeric" placeholder="0">
+                    <input type="text" class="input money-input" id="kreditUangMukaInput" inputmode="numeric" placeholder="Contoh: 100000">
                     <small class="tiny muted">Sisanya menjadi tagihan kredit.</small>
                   </label>
                 </div>
@@ -484,7 +486,7 @@
               <div id="lunasFields">
                 <label class="field">
                   <span>Uang diterima (Rp)</span>
-                  <input type="text" class="input money-input" id="bayarInput" inputmode="numeric" placeholder="0">
+                  <input type="text" class="input money-input" id="bayarInput" inputmode="numeric" placeholder="Contoh: total nota">
                 </label>
                 <div class="summary-row change">
                   <span>Kembalian</span>
@@ -542,7 +544,7 @@
                   </label>
                   <label class="field">
                     <span>Catatan garansi</span>
-                    <textarea class="input textarea" id="garansiCatatan" rows="2"></textarea>
+                    <textarea class="input textarea" id="garansiCatatan" rows="2" placeholder="Contoh: garansi kebocoran las dan tangki 3 bulan"></textarea>
                   </label>
                 </div>
               </div>
@@ -596,7 +598,7 @@
         <div class="page-head">
           <div>
             <h1>Riwayat servis</h1>
-            <p class="muted">Cari nota, nopol, label radiator, atau nama pelanggan.</p>
+            <p class="muted">Cari nota, nopol, label radiator, atau nama pelanggan. Klik nomor nota untuk detail.</p>
           </div>
           <button type="button" class="btn btn-ghost" id="btnRefreshHistory">Muat ulang</button>
         </div>
@@ -622,7 +624,7 @@
               </thead>
               <tbody id="historyBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="historyEmpty">Belum ada riwayat servis.</div>
+            <div class="empty-state hidden" id="historyEmpty">Belum ada transaksi. Buat nota pertama dari menu Kasir.</div>
           </div>
         </div>
       </section>
@@ -632,7 +634,7 @@
         <div class="page-head">
           <div>
             <h1>Stok sparepart</h1>
-            <p class="muted">Harga master menjadi patokan awal.</p>
+            <p class="muted">Barang di gudang. Harga jual boleh diubah saat transaksi; stok berkurang otomatis.</p>
           </div>
           <div class="page-actions">
             <div class="segmented sm" id="stockFilterSwitch" aria-label="Filter stok">
@@ -640,7 +642,6 @@
               <button type="button" data-stock-filter="low">Menipis</button>
               <button type="button" data-stock-filter="out">Habis</button>
             </div>
-            <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
           </div>
         </div>
 
@@ -650,6 +651,9 @@
               <h2>Sparepart gudang</h2>
               <p class="muted" id="stockSummary">-</p>
             </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="btnAddStock">+ Sparepart</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table class="table table-stock">
@@ -658,7 +662,7 @@
               </thead>
               <tbody id="stockBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="stockEmpty">Belum ada data sparepart.</div>
+            <div class="empty-state hidden" id="stockEmpty">Belum ada sparepart. Klik + Sparepart untuk menambah barang.</div>
           </div>
         </div>
       </section>
@@ -668,10 +672,7 @@
         <div class="page-head">
           <div>
             <h1>Tarif jasa</h1>
-            <p class="muted">Tarif awal untuk kasir.</p>
-          </div>
-          <div class="page-actions">
-            <button type="button" class="btn btn-primary" id="btnAddJasa">+ Tarif jasa</button>
+            <p class="muted">Daftar tarif jasa. Nilai ini menjadi harga awal saat kasir menambah jasa.</p>
           </div>
         </div>
 
@@ -681,6 +682,9 @@
               <h2>Daftar tarif jasa</h2>
               <p class="muted" id="jasaSummary">-</p>
             </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="btnAddJasa">+ Tarif jasa</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table class="table table-jasa">
@@ -689,7 +693,7 @@
               </thead>
               <tbody id="jasaBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="jasaEmpty">Belum ada tarif jasa.</div>
+            <div class="empty-state hidden" id="jasaEmpty">Belum ada tarif jasa. Klik + Tarif jasa untuk menambah.</div>
           </div>
         </div>
       </section>
@@ -699,7 +703,7 @@
         <div class="page-head">
           <div>
             <h1>Laporan kas</h1>
-            <p class="muted">Pemasukan tunai, transfer, estimasi laba sparepart/jasa, dan estimasi laba bersih setelah komisi.</p>
+            <p class="muted">Uang masuk, piutang, dan estimasi laba. Pilih periode lalu klik Tampilkan.</p>
           </div>
         </div>
 
@@ -813,7 +817,7 @@
         <div class="page-head">
           <div>
             <h1>Pengaturan bengkel</h1>
-            <p class="muted">Identitas ini tampil di aplikasi dan tercetak pada struk.</p>
+            <p class="muted">Isi identitas bengkel, pengingat, struk, dan printer. Perubahan langsung dipakai.</p>
           </div>
         </div>
 
@@ -1171,11 +1175,10 @@
         <div class="page-head">
           <div>
             <h1>Pelanggan</h1>
-            <p class="muted">Daftar pelanggan bengkel beserta unit mobil dan radiatornya.</p>
+            <p class="muted">Data pelanggan dan unitnya. Cari dengan nama atau HP, atau tambahkan pelanggan baru.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-ghost" id="btnRefreshCustomers">Muat ulang</button>
-            <button type="button" class="btn btn-primary" id="btnAddCustomerDirectory">+ Pelanggan baru</button>
           </div>
         </div>
 
@@ -1215,6 +1218,15 @@
         </div>
 
         <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Daftar pelanggan</h2>
+              <p class="muted">Klik nama pelanggan untuk melihat unit dan riwayat servis.</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="btnAddCustomerDirectory">+ Pelanggan baru</button>
+            </div>
+          </div>
           <div class="customer-grid" id="customerDirectoryGrid"></div>
           <div class="empty-state hidden" id="customerDirectoryEmpty">Belum ada pelanggan terdaftar. Tambahkan pelanggan baru untuk mulai mencatat unit servis.</div>
         </section>
@@ -1224,7 +1236,7 @@
         <div class="page-head">
           <div>
             <h1>Karyawan</h1>
-            <p class="muted">Mekanik, kasir, performa, dan komisi.</p>
+            <p class="muted">Atur mekanik dan kasir: peran, komisi atau gaji, hutang, dan riwayat pembayaran.</p>
           </div>
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur karyawan</span><input type="checkbox" id="employeeFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
@@ -1256,7 +1268,7 @@
               </thead>
               <tbody id="employeeBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="employeeEmpty">Belum ada karyawan.</div>
+            <div class="empty-state hidden" id="employeeEmpty">Belum ada karyawan. Klik + Karyawan untuk menambah mekanik atau kasir.</div>
           </div>
         </div>
         </div>
@@ -1280,7 +1292,7 @@
               </thead>
               <tbody id="debtBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="debtEmpty">Belum ada hutang karyawan.</div>
+            <div class="empty-state hidden" id="debtEmpty">Belum ada hutang. Catat pinjaman karyawan dengan tombol + Catat hutang.</div>
           </div>
         </div>
         </div>
@@ -1303,7 +1315,7 @@
               </thead>
               <tbody id="salaryBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="salaryEmpty">Belum ada pembayaran gaji.</div>
+            <div class="empty-state hidden" id="salaryEmpty">Belum ada pembayaran gaji. Bayar dari Ringkasan atau tombol Bayar saat gajian.</div>
           </div>
         </div>
         </div>
@@ -1313,7 +1325,11 @@
         <div class="page-head">
           <div>
             <h1>Supplier</h1>
-            <p class="muted">Daftar supplier dan barang yang disuplai.</p>
+            <p class="muted">Toko penyedia sparepart. Atur barang yang disuplai; arsipkan supplier yang tidak dipakai.</p>
+          </div>
+          <div class="page-actions">
+            <label class="switch-row feature-switch"><span>Fitur supplier</span><input type="checkbox" id="supplierFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
+            <button type="button" class="btn btn-ghost" id="btnRefreshSuppliers">Muat ulang</button>
           </div>
         </div>
         <div class="card">
@@ -1323,9 +1339,7 @@
               <p class="muted" id="supplierSummary">-</p>
             </div>
             <div class="page-actions">
-              <label class="switch-row feature-switch"><span>Fitur supplier</span><input type="checkbox" id="supplierFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
               <button type="button" class="btn btn-outline" id="btnSupplierArchive">Lihat arsip</button>
-              <button type="button" class="btn btn-ghost" id="btnRefreshSuppliers">Muat ulang</button>
               <button type="button" class="btn btn-primary" id="btnAddSupplier">+ Supplier</button>
             </div>
           </div>
@@ -1336,7 +1350,7 @@
               </thead>
               <tbody id="supplierBody"></tbody>
             </table>
-            <div class="empty-state hidden" id="supplierEmpty">Belum ada supplier.</div>
+            <div class="empty-state hidden" id="supplierEmpty">Belum ada supplier. Klik + Supplier untuk menambah toko pemasok.</div>
           </div>
         </div>
       </section>
@@ -1345,7 +1359,7 @@
         <div class="page-head">
           <div>
             <h1>Follow up</h1>
-            <p class="muted" id="followupHeadDesc">Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.</p>
+            <p class="muted" id="followupHeadDesc">Pelanggan yang perlu dihubungi hari ini: piutang, servis berkala, garansi, dan prospek.</p>
           </div>
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur follow up</span><input type="checkbox" id="followupFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
@@ -1797,7 +1811,7 @@
       <div class="modal-head">
         <div>
           <h3 id="employeeModalTitle">Tambah karyawan</h3>
-          <p class="muted">Data karyawan operasional, bukan akun login.</p>
+          <p class="muted">Data karyawan operasional, bukan akun login. Komisi dan gaji dipakai untuk menghitung performa.</p>
         </div>
         <button type="button" class="icon-btn" id="employeeModalClose" aria-label="Tutup">&times;</button>
       </div>
@@ -1805,7 +1819,7 @@
         <input type="hidden" id="employeeId">
         <label class="field">
           <span>Nama <em>*</em></span>
-          <input type="text" class="input" id="employeeNama" required minlength="2" maxlength="255">
+          <input type="text" class="input" id="employeeNama" required minlength="2" maxlength="255" placeholder="Contoh: Andi">
         </label>
         <div class="form-grid">
           <label class="field">
@@ -1845,7 +1859,7 @@
         <div class="form-grid">
           <label class="field">
             <span>Nomor WhatsApp</span>
-            <input type="text" class="input" id="employeeHp" maxlength="64">
+            <input type="text" class="input" id="employeeHp" maxlength="64" placeholder="Contoh: 0812xxxxxxxx">
           </label>
           <label class="field">
             <span>Catatan</span>
@@ -1874,11 +1888,11 @@
         <div class="form-grid" id="employeeKomisiRateFields">
           <label class="field">
             <span id="employeeKomisiBarangLabel">Komisi barang (%)</span>
-            <input type="number" class="input" id="employeeKomisiBarang" min="0" step="0.01" value="0">
+            <input type="number" class="input" id="employeeKomisiBarang" min="0" step="0.01" value="0" placeholder="Contoh: 5">
           </label>
           <label class="field">
             <span id="employeeKomisiJasaLabel">Komisi jasa (%)</span>
-            <input type="number" class="input" id="employeeKomisiJasa" min="0" step="0.01" value="0">
+            <input type="number" class="input" id="employeeKomisiJasa" min="0" step="0.01" value="0" placeholder="Contoh: 10">
           </label>
         </div>
         <label class="field" id="employeePayrollTanggalField">
@@ -2057,7 +2071,7 @@
           </label>
           <label class="field">
             <span>Nominal (Rp) <em>*</em></span>
-            <input type="number" class="input" id="debtNominal" min="0.01" step="0.01" required>
+            <input type="number" class="input" id="debtNominal" min="0.01" step="0.01" required placeholder="Contoh: 50000">
           </label>
         </div>
         <label class="field">
@@ -2347,7 +2361,7 @@
       <div class="modal-head">
         <div>
           <h3 id="stockModalTitle">Tambah sparepart</h3>
-          <p class="muted">Harga jual ini menjadi patokan awal kasir.</p>
+          <p class="muted">Isi nama, harga, dan stok. Harga jual hanya patokan awal; kasir boleh mengubahnya per nota.</p>
         </div>
         <button type="button" class="icon-btn" id="stockModalClose" aria-label="Tutup">&times;</button>
       </div>
@@ -2356,11 +2370,11 @@
         <div class="form-grid">
           <label class="field">
             <span>Kode</span>
-            <input type="text" class="input" id="stockKode" maxlength="64" placeholder="SP-013">
+            <input type="text" class="input" id="stockKode" maxlength="64" placeholder="Contoh: SP-013">
           </label>
           <label class="field">
             <span>Jumlah stok</span>
-            <input type="number" class="input" id="stockJumlah" min="0" value="0">
+            <input type="number" class="input" id="stockJumlah" min="0" value="0" placeholder="Contoh: 12">
           </label>
         </div>
         <label class="field">
@@ -2370,11 +2384,11 @@
         <div class="form-grid">
           <label class="field">
             <span>Harga modal</span>
-            <input type="text" class="input money-input" id="stockModalHarga" inputmode="numeric" value="0">
+            <input type="text" class="input money-input" id="stockModalHarga" inputmode="numeric" value="0" placeholder="Contoh: 45000">
           </label>
           <label class="field">
             <span>Harga jual patokan</span>
-            <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0">
+            <input type="text" class="input money-input" id="stockJualHarga" inputmode="numeric" value="0" placeholder="Contoh: 65000">
           </label>
         </div>
         <div class="form-grid">
@@ -2408,7 +2422,7 @@
       <div class="modal-head">
         <div>
           <h3 id="jasaModalTitle">Tambah tarif jasa</h3>
-          <p class="muted">Patokan tarif untuk kasir.</p>
+          <p class="muted">Tarif ini menjadi harga awal saat kasir menambah jasa.</p>
         </div>
         <button type="button" class="icon-btn" id="jasaModalClose" aria-label="Tutup">&times;</button>
       </div>
@@ -2420,7 +2434,7 @@
         </label>
         <label class="field">
           <span>Tarif standar (Rp)</span>
-          <input type="text" class="input money-input" id="jasaHargaInput" inputmode="numeric" value="0">
+          <input type="text" class="input money-input" id="jasaHargaInput" inputmode="numeric" value="0" placeholder="Contoh: 150000">
         </label>
         <label class="field">
           <span>Servis berkala</span>
@@ -2645,15 +2659,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261187"></script>
-  <script src="/static/js/api-client.js?v=20261187"></script>
-  <script src="/static/js/printer-manager.js?v=20261187"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261187"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261187"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261187"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261187"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261187"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261187"></script>
-  <script src="/static/js/app.js?v=20261187"></script>
+  <script src="/static/js/native-bridge.js?v=20261191"></script>
+  <script src="/static/js/api-client.js?v=20261191"></script>
+  <script src="/static/js/printer-manager.js?v=20261191"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261191"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261191"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261191"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261191"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261191"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261191"></script>
+  <script src="/static/js/app.js?v=20261191"></script>
 </body>
 </html>

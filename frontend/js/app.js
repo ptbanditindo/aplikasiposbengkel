@@ -5966,7 +5966,7 @@
     if (headDesc) {
       headDesc.textContent = reseller
         ? 'Pantau stok menipis dan habis, lalu tanyakan ke supplier.'
-        : 'Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.';
+        : 'Pelanggan yang perlu dihubungi hari ini: piutang, servis berkala, garansi, dan prospek.';
     }
     $$('#followupTabSwitch [data-followup-tab]').forEach((button) => {
       button.classList.toggle(
@@ -9076,11 +9076,11 @@
   async function deleteEmployee(id) {
     const employee = state.employees.find((row) => row.id === id);
     if (!employee) return;
-    if (!window.confirm('Hapus karyawan "' + employee.nama + '"?')) return;
+    if (!window.confirm('Hapus karyawan "' + employee.nama + '"? Riwayat gaji dan hutang tetap tersimpan tanpa nama karyawan.')) return;
     try {
       await API.deleteEmployee(id);
       dismissModalStack(['#employeeDetailModal']);
-      toast('Karyawan dihapus.', 'success');
+      toast('Karyawan dihapus. Riwayat gaji dan hutang tetap tersimpan.', 'success');
       await loadEmployees();
     } catch (err) {
       toast(err.message, 'error', 6000);
@@ -11295,7 +11295,7 @@
     $('#btnNewCustomerPos').addEventListener('click', () => openCustomerModal(true));
 
     $('#posReset').addEventListener('click', () => {
-      if (window.confirm('Reset seluruh isian transaksi?')) resetPosState();
+      if (window.confirm('Kosongkan semua isian transaksi? Isian yang belum disimpan akan hilang.')) resetPosState();
     });
 
     $$('#posModeSwitch button').forEach((button) => {

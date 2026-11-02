@@ -3663,28 +3663,31 @@ a.btn { text-decoration: none; }
   .printer-pill { min-height: 36px; }
 }
 
-@media (max-width: 980px), (pointer: coarse) {
+@media (max-width: 980px) {
   .nav-tabs {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
     margin-inline: -16px;
-    padding-inline: 16px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    scroll-snap-type: x proximity;
+    padding: 0 16px 8px;
+    overflow: visible;
   }
-  .nav-tabs::-webkit-scrollbar { display: none; }
   .nav-tab {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: max-content;
-    height: 44px;
+    width: 100%;
+    min-width: 0;
+    height: auto;
     min-height: 44px;
-    padding-inline: 14px;
-    scroll-snap-align: start;
+    padding: 6px 4px;
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    line-height: 1.2;
   }
+}
+
+@media (pointer: coarse) {
+  .nav-tab { min-height: 44px; }
   .btn,
   .btn-sm,
   .btn-xs,
@@ -3914,4 +3917,73 @@ a.btn { text-decoration: none; }
 #view-pos.pos-part-mode .items-block--part .items-table td:nth-child(5),
 #view-pos.pos-part-mode #partInterval {
   display: none;
+}
+
+/* ------------------ Konsistensi aksi dan keamanan layar kecil ------------- */
+/* Grup aksi selalu mengalir dan membungkus; tidak ada tombol terpotong. */
+.page-actions { flex-wrap: wrap; align-items: center; }
+.card-head { flex-wrap: wrap; gap: 10px 16px; }
+.card-head .page-actions { margin-left: auto; }
+
+/* Tab panjang bisa digeser di dalam barisnya, bukan melebarkan halaman. */
+.segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.segmented::-webkit-scrollbar { display: none; }
+
+/* Tabel dan daftar panjang tetap bisa digulir di dalam kartunya. */
+.table-wrap,
+.modal-table-wrap { -webkit-overflow-scrolling: touch; }
+
+/* Tombol popup tetap terlihat saat isi popup digulir. */
+.modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+/* Kolom jumlah pada pesan supplier aman di layar sempit. */
+.wa-qty-row { flex-wrap: wrap; }
+.wa-qty-row .input { width: 100%; max-width: 150px; }
+
+@media (max-width: 560px) {
+  .page-actions .btn,
+  .modal-actions .btn {
+    flex: 1 1 auto;
+    min-width: calc(50% - 8px);
+  }
+  .card-head { align-items: flex-start; }
+}
+
+/* Navigasi HP: label boleh turun baris agar tidak terpotong di layar sempit. */
+@media (max-width: 980px) {
+  .nav-tabs { grid-auto-rows: minmax(44px, auto); }
+  .nav-tab {
+    height: auto;
+    min-height: 44px;
+    padding: 6px 4px;
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    line-height: 1.2;
+  }
+}
+
+/* Tabel manajemen di HP: kolom aksi menempel kanan agar tombol tidak
+   tertinggal saat tabel digeser ke samping. */
+@media (max-width: 640px) {
+  .table-wrap
+    table:not(.table-history):not(.table-report):not(.table-recent)
+    td.row-actions {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    max-width: 190px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    background: var(--surface);
+    box-shadow: -6px 0 8px rgba(0, 0, 0, .05);
+  }
 }
