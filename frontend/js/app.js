@@ -10633,6 +10633,7 @@
   const OPS_INT_FIELDS = [
     { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
     { id: 'opsStokMinimum', key: 'stok_minimum_default', low: 0, high: 1000000, label: 'Batas minimum stok' },
+    { id: 'opsSupplierJumlah', key: 'supplier_tanya_jumlah', low: 1, high: 10000, label: 'Jumlah ditanyakan ke supplier', unit: 'buah' },
     { id: 'opsProspek1', key: 'prospek_hari_1', low: 7, high: 180, label: 'Prospek tahap 1' },
     { id: 'opsProspek2', key: 'prospek_hari_2', low: 30, high: 365, label: 'Prospek tahap 2' },
     { id: 'opsProspek3', key: 'prospek_hari_3', low: 60, high: 540, label: 'Prospek tahap 3' },
@@ -10672,7 +10673,14 @@
       const value = intValue(input.value, NaN);
       if (!Number.isFinite(value) || value < field.low || value > field.high) {
         toast(
-          field.label + ' harus antara ' + field.low + ' dan ' + field.high + ' hari.',
+          field.label +
+            ' harus antara ' +
+            field.low +
+            ' dan ' +
+            field.high +
+            ' ' +
+            (field.unit || 'hari') +
+            '.',
           'warning'
         );
         input.focus();

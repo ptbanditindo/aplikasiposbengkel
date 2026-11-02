@@ -160,6 +160,7 @@ OPS_INT_KEYS = {
     "jeda_prospek_servis_hari": (1, 90, 7),
     "maks_tidak_merespons": (1, 10, 3),
     "stok_minimum_default": (0, 1000000, 3),
+    "supplier_tanya_jumlah": (1, 10000, 10),
 }
 OPS_TIME_KEYS = {
     "followup_jam_mulai": "08:00",

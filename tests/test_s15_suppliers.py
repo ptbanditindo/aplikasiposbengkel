@@ -66,6 +66,10 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
             "stock_item_ids": [item["id"]],
         },
     ).json()
+    ops = client.put(
+        "/api/settings/ops", json={"supplier_tanya_jumlah": 10}
+    )
+    assert ops.status_code == 200, ops.text
     response = client.post(
         f"/api/suppliers/{supplier['id']}/whatsapp-preview",
         json={"stock_item_ids": [item["id"]]},
@@ -75,6 +79,7 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     text = body["wa_text"].lower()
     assert "pengelola supplier preview" in text
     assert "barang preview" in text
+    assert "10 buah" in text
     assert "sisa" not in text
     assert "minimum" not in text
     assert "harga per satuan" in text

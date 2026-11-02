@@ -201,7 +201,10 @@ def pengerjaan_status_wa_text(
 
 
 def supplier_wa_text(
-    supplier: Supplier, items: List[Dict[str, Any]], bengkel: Dict[str, str]
+    supplier: Supplier,
+    items: List[Dict[str, Any]],
+    bengkel: Dict[str, str],
+    jumlah: int = 1,
 ) -> str:
     """Pesan formal untuk menanyakan ketersediaan stok ke supplier/reseller."""
     nama = (supplier.nama or "").strip()
@@ -212,13 +215,15 @@ def supplier_wa_text(
         if bengkel_nama
         else "Perkenalkan, kami dari bengkel kami."
     )
+    qty = max(1, int(jumlah or 1))
     names = [item.get("nama") or "-" for item in items]
     body = (
         f"{sapaan}\n\n{perkenalan} Kami ingin menanyakan ketersediaan "
-        "barang berikut:\n"
+        f"{qty} buah untuk setiap barang berikut:\n"
         + "\n".join(f"- {nama}" for nama in names)
-        + "\n\nMohon informasikan apakah stok tersedia, harga per satuan, "
-        "dan perkiraan waktu pengiriman. Terima kasih atas perhatiannya."
+        + "\n\nMohon informasikan apakah jumlah tersebut tersedia, "
+        "harga per satuan, dan perkiraan waktu pengiriman. "
+        "Terima kasih atas perhatiannya."
     )
     return body
 
@@ -247,14 +252,19 @@ def log_supplier_attempt(
             raise ConflictError(
                 "Supplier sedang nonaktif. Aktifkan kembali di halaman Supplier."
             )
+        ops = settings_service.get_ops_settings(db)
         if normalized == STATUS_OPENED:
-            ops = settings_service.get_ops_settings(db)
             if not settings_service.within_followup_window(ops, moment):
                 raise ConflictError(settings_service.followup_window_message(ops))
             if not is_valid_whatsapp(supplier.nomor_hp):
                 raise BusinessValidationError("Nomor WhatsApp supplier tidak valid.")
         info = settings_service.get_bengkel_info(db)
-        message = (pesan or "").strip() or supplier_wa_text(supplier, items, info)
+        message = (pesan or "").strip() or supplier_wa_text(
+            supplier,
+            items,
+            info,
+            jumlah=int(ops.get("supplier_tanya_jumlah", 1) or 1),
+        )
         link = (
             build_link(supplier.nomor_hp, message)
             if normalized == STATUS_OPENED

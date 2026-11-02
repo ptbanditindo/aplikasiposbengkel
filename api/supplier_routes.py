@@ -142,12 +142,18 @@ def supplier_whatsapp_preview(
             and (not payload.stock_item_ids or item.id in payload.stock_item_ids)
         ]
     info = settings_service.get_bengkel_info(db)
+    ops = settings_service.get_ops_settings(db)
     db.rollback()
     return SupplierWhatsAppPreviewOut(
         supplier_id=supplier.id,
         nama=supplier.nama,
         nomor=supplier.nomor_hp or "",
-        wa_text=whatsapp_service.supplier_wa_text(supplier, items, info),
+        wa_text=whatsapp_service.supplier_wa_text(
+            supplier,
+            items,
+            info,
+            jumlah=int(ops.get("supplier_tanya_jumlah", 1) or 1),
+        ),
     )
 
 

@@ -1321,6 +1321,7 @@ class OpsSettingsIn(CompatBase):
     jeda_prospek_servis_hari: int = Field(default=7, ge=1, le=90)
     maks_tidak_merespons: int = Field(default=3, ge=1, le=10)
     stok_minimum_default: int = Field(default=3, ge=0, le=1000000)
+    supplier_tanya_jumlah: int = Field(default=10, ge=1, le=10000)
     karyawan_aktif: bool = True
     supplier_aktif: bool = True
     followup_aktif: bool = True

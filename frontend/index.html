@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261183">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261184">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -919,6 +919,11 @@
               <span>Batas minimum stok bawaan</span>
               <input type="number" class="input" id="opsStokMinimum" min="0" max="1000000" step="1" inputmode="numeric">
               <small class="tiny muted">Dipakai untuk barang yang batas minimumnya dikosongkan. 0 berarti peringatan stok menipis nonaktif.</small>
+            </label>
+            <label class="field">
+              <span>Jumlah ditanyakan ke supplier</span>
+              <input type="number" class="input" id="opsSupplierJumlah" min="1" max="10000" step="1" inputmode="numeric">
+              <small class="tiny muted">Pesan WhatsApp ke supplier menanyakan ketersediaan sebanyak ini untuk setiap barang.</small>
             </label>
             <label class="field">
               <span>Prospek tahap 1 (hari)</span>
@@ -2636,15 +2641,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261183"></script>
-  <script src="/static/js/api-client.js?v=20261183"></script>
-  <script src="/static/js/printer-manager.js?v=20261183"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261183"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261183"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261183"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261183"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261183"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261183"></script>
-  <script src="/static/js/app.js?v=20261183"></script>
+  <script src="/static/js/native-bridge.js?v=20261184"></script>
+  <script src="/static/js/api-client.js?v=20261184"></script>
+  <script src="/static/js/printer-manager.js?v=20261184"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261184"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261184"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261184"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261184"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261184"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261184"></script>
+  <script src="/static/js/app.js?v=20261184"></script>
 </body>
 </html>
