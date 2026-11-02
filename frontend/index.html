@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261185">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261186">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -2445,10 +2445,10 @@
         </div>
         <button type="button" class="icon-btn" id="waModalClose" aria-label="Tutup">&times;</button>
       </div>
-      <label class="field hidden" id="waModalQtyField">
+      <div class="field hidden" id="waModalQtyField">
         <span>Jumlah yang ditanyakan</span>
-        <input type="number" class="input" id="waModalQty" min="1" max="10000" step="1" inputmode="numeric">
-      </label>
+        <div class="wa-qty-list" id="waModalQtyList"></div>
+      </div>
       <label class="field">
         <span>Nomor tujuan</span>
         <input type="text" class="input" id="waModalNumber" readonly>
@@ -2645,15 +2645,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261185"></script>
-  <script src="/static/js/api-client.js?v=20261185"></script>
-  <script src="/static/js/printer-manager.js?v=20261185"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261185"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261185"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261185"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261185"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261185"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261185"></script>
-  <script src="/static/js/app.js?v=20261185"></script>
+  <script src="/static/js/native-bridge.js?v=20261186"></script>
+  <script src="/static/js/api-client.js?v=20261186"></script>
+  <script src="/static/js/printer-manager.js?v=20261186"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261186"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261186"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261186"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261186"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261186"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261186"></script>
+  <script src="/static/js/app.js?v=20261186"></script>
 </body>
 </html>

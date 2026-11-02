@@ -2755,9 +2755,9 @@
       nomor: opts.nomor || '',
       disabled: Boolean(opts.disabled),
       onOpen: typeof opts.onOpen === 'function' ? opts.onOpen : null,
-      onQuantityChange:
-        typeof opts.onQuantityChange === 'function'
-          ? opts.onQuantityChange
+      onQuantitiesChange:
+        typeof opts.onQuantitiesChange === 'function'
+          ? opts.onQuantitiesChange
           : null,
     };
     $('#waModalTitle').textContent = opts.judul || 'Pesan WhatsApp';
@@ -2769,12 +2769,31 @@
       opts.note ||
       'Pesan hanya dibuka di WhatsApp, tidak dikirim otomatis. Upaya dicatat saat tombol dibuka.';
     const qtyField = $('#waModalQtyField');
-    const qtyInput = $('#waModalQty');
-    const hasQty = opts.quantity !== undefined && opts.quantity !== null;
-    if (qtyField) qtyField.classList.toggle('hidden', !hasQty);
-    if (qtyInput) qtyInput.value = hasQty ? String(opts.quantity) : '';
+    const qtyList = $('#waModalQtyList');
+    const qtyItems = Array.isArray(opts.quantityItems)
+      ? opts.quantityItems
+      : [];
+    if (qtyField) qtyField.classList.toggle('hidden', !qtyItems.length);
+    if (qtyList) {
+      qtyList.innerHTML = qtyItems
+        .map(
+          (item) =>
+            '<label class="wa-qty-row"><span>' +
+            esc(item.nama) +
+            '</span><input type="number" class="input" data-wa-qty="' +
+            item.stock_item_id +
+            '" min="1" max="10000" step="1" inputmode="numeric" value="' +
+            intValue(item.jumlah, 1) +
+            '"></label>'
+        )
+        .join('');
+    }
     updateWaOpenState();
     openModal('#waModal');
+  }
+
+  function waQuantityInputs() {
+    return $$('#waModalQtyList [data-wa-qty]');
   }
 
   function updateWaOpenState() {
@@ -2787,9 +2806,12 @@
     }
     const qtyField = $('#waModalQtyField');
     if (qtyField && !qtyField.classList.contains('hidden')) {
-      const qty = intValue($('#waModalQty').value, 0);
-      open.classList.toggle('hidden', qty < 1);
-      if (qty >= 1) open.href = preview.link;
+      const inputs = waQuantityInputs();
+      const valid =
+        inputs.length > 0 &&
+        inputs.every((input) => intValue(input.value, 0) >= 1);
+      open.classList.toggle('hidden', !valid);
+      if (valid) open.href = preview.link;
       return;
     }
     open.href = preview.link;
@@ -2802,10 +2824,12 @@
     if (!preview || preview.disabled) return;
     const qtyField = $('#waModalQtyField');
     if (qtyField && !qtyField.classList.contains('hidden')) {
-      const qty = intValue($('#waModalQty').value, 0);
-      if (qty < 1) {
+      const inputs = waQuantityInputs();
+      if (
+        !inputs.length ||
+        inputs.some((input) => intValue(input.value, 0) < 1)
+      ) {
         toast('Isi jumlah yang ditanyakan dulu.', 'warning');
-        $('#waModalQty')?.focus();
         return;
       }
     }
@@ -10282,11 +10306,14 @@
         subtitle: 'Periksa pesan untuk ' + preview.nama + '.',
         nomor: preview.nomor,
         text: preview.wa_text,
-        quantity: preview.jumlah,
-        onQuantityChange: async (jumlah) => {
+        quantityItems: preview.items || [],
+        onQuantitiesChange: async (map) => {
           const updated = await API.supplierWhatsappPreview(supplierId, {
             stock_item_ids: itemIds,
-            jumlah,
+            quantities: Object.entries(map).map(([id, jumlah]) => ({
+              stock_item_id: Number(id),
+              jumlah,
+            })),
           });
           return updated.wa_text;
         },
@@ -11579,17 +11606,24 @@
     $('#waModalOpen').addEventListener('click', handleWaOpen);
     $('#waModalClose').addEventListener('click', () => closeModal('#waModal'));
     $('#waModalCancel').addEventListener('click', () => closeModal('#waModal'));
-    $('#waModalQty').addEventListener('input', () => {
+    $('#waModalQtyList').addEventListener('input', (event) => {
+      if (!event.target.matches('[data-wa-qty]')) return;
       updateWaOpenState();
       const preview = state.waPreview;
-      if (!preview || !preview.onQuantityChange) return;
-      const qty = intValue($('#waModalQty').value, 0);
+      if (!preview || !preview.onQuantitiesChange) return;
       window.clearTimeout(state.waQtyTimer);
-      if (qty < 1) return;
       state.waQtyTimer = window.setTimeout(async () => {
         if (state.waPreview !== preview) return;
+        const map = {};
+        let valid = true;
+        waQuantityInputs().forEach((input) => {
+          const qty = intValue(input.value, 0);
+          if (qty < 1) valid = false;
+          map[Number(input.dataset.waQty)] = qty;
+        });
+        if (!valid) return;
         try {
-          const text = await preview.onQuantityChange(qty);
+          const text = await preview.onQuantitiesChange(map);
           if (typeof text === 'string' && state.waPreview === preview) {
             $('#waModalText').value = text;
           }

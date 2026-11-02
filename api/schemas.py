@@ -416,9 +416,20 @@ class SupplierWhatsAppOut(CompatBase):
     log: WhatsAppLogOut
 
 
+class SupplierPreviewQtyIn(StrictBase):
+    stock_item_id: int
+    jumlah: int = Field(default=1, ge=1, le=10000)
+
+
 class SupplierWhatsAppPreviewIn(StrictBase):
     stock_item_ids: List[int] = Field(default_factory=list)
-    jumlah: Optional[int] = Field(default=None, ge=1, le=10000)
+    quantities: List[SupplierPreviewQtyIn] = Field(default_factory=list)
+
+
+class SupplierWhatsAppPreviewItemOut(CompatBase):
+    stock_item_id: int
+    nama: str
+    jumlah: int
 
 
 class SupplierWhatsAppPreviewOut(CompatBase):
@@ -426,7 +437,7 @@ class SupplierWhatsAppPreviewOut(CompatBase):
     nama: str
     nomor: str = ""
     wa_text: str = ""
-    jumlah: int = 1
+    items: List[SupplierWhatsAppPreviewItemOut] = Field(default_factory=list)
 
 
 class SupplierFollowupIn(StrictBase):

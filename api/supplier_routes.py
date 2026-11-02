@@ -136,14 +136,29 @@ def supplier_whatsapp_preview(
     )
     if not items:
         items = [
-            {"nama": item.nama}
+            {"id": item.id, "nama": item.nama}
             for link in supplier.items
             if (item := link.stock_item) is not None
             and (not payload.stock_item_ids or item.id in payload.stock_item_ids)
         ]
     info = settings_service.get_bengkel_info(db)
     ops = settings_service.get_ops_settings(db)
-    qty = int(payload.jumlah or ops.get("supplier_tanya_jumlah", 1) or 1)
+    default_qty = int(ops.get("supplier_tanya_jumlah", 1) or 1)
+    qty_map = {
+        int(row.stock_item_id): min(max(int(row.jumlah or 1), 1), 10000)
+        for row in payload.quantities
+    }
+    preview_items = []
+    for item in items:
+        item_id = int(item.get("id") or 0)
+        qty = min(max(int(qty_map.get(item_id, default_qty) or 1), 1), 10000)
+        preview_items.append(
+            {
+                "stock_item_id": item_id,
+                "nama": item.get("nama") or "-",
+                "jumlah": qty,
+            }
+        )
     db.rollback()
     return SupplierWhatsAppPreviewOut(
         supplier_id=supplier.id,
@@ -153,9 +168,10 @@ def supplier_whatsapp_preview(
             supplier,
             items,
             info,
-            jumlah=qty,
+            qty_map,
+            default_qty,
         ),
-        jumlah=qty,
+        items=preview_items,
     )
 
 

@@ -204,7 +204,8 @@ def supplier_wa_text(
     supplier: Supplier,
     items: List[Dict[str, Any]],
     bengkel: Dict[str, str],
-    jumlah: int = 1,
+    jumlah_map: Optional[Dict[int, int]] = None,
+    default_jumlah: int = 1,
 ) -> str:
     """Pesan formal untuk menanyakan ketersediaan stok ke supplier/reseller."""
     nama = (supplier.nama or "").strip()
@@ -215,12 +216,17 @@ def supplier_wa_text(
         if bengkel_nama
         else "Perkenalkan, kami dari bengkel kami."
     )
-    qty = max(1, int(jumlah or 1))
-    names = [item.get("nama") or "-" for item in items]
+    qty_map = jumlah_map or {}
+    fallback_qty = max(1, int(default_jumlah or 1))
+    rows = []
+    for item in items:
+        qty = int(qty_map.get(item.get("id"), fallback_qty) or fallback_qty)
+        qty = min(max(qty, 1), 10000)
+        rows.append(f"- {item.get('nama') or '-'} ({qty} buah)")
     body = (
         f"{sapaan}\n\n{perkenalan} Kami ingin menanyakan ketersediaan "
-        f"{qty} buah untuk setiap barang berikut:\n"
-        + "\n".join(f"- {nama}" for nama in names)
+        "barang berikut:\n"
+        + "\n".join(rows)
         + "\n\nMohon informasikan apakah jumlah tersebut tersedia, "
         "harga per satuan, dan perkiraan waktu pengiriman. "
         "Terima kasih atas perhatiannya."
@@ -263,7 +269,7 @@ def log_supplier_attempt(
             supplier,
             items,
             info,
-            jumlah=int(ops.get("supplier_tanya_jumlah", 1) or 1),
+            default_jumlah=int(ops.get("supplier_tanya_jumlah", 1) or 1),
         )
         link = (
             build_link(supplier.nomor_hp, message)

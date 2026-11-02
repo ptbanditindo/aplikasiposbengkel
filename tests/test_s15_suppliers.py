@@ -84,15 +84,21 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     assert "minimum" not in text
     assert "harga per satuan" in text
     assert "pengiriman" in text
+    assert body["items"][0]["stock_item_id"] == item["id"]
+    assert body["items"][0]["nama"] == "Barang Preview"
+    assert body["items"][0]["jumlah"] == 10
 
     custom = client.post(
         f"/api/suppliers/{supplier['id']}/whatsapp-preview",
-        json={"stock_item_ids": [item["id"]], "jumlah": 3},
+        json={
+            "stock_item_ids": [item["id"]],
+            "quantities": [{"stock_item_id": item["id"], "jumlah": 3}],
+        },
     )
     assert custom.status_code == 200, custom.text
     custom_body = custom.json()
-    assert custom_body["jumlah"] == 3
-    assert "3 buah" in custom_body["wa_text"].lower()
+    assert custom_body["items"][0]["jumlah"] == 3
+    assert "(3 buah)" in custom_body["wa_text"].lower()
     from database.session import SessionLocal
 
     with SessionLocal() as db:
@@ -250,3 +256,35 @@ def test_followup_reseller_abaikan_supplier_nonaktif(client):
         json={"stock_item_ids": [item["id"]]},
     )
     assert chat.status_code == 409, chat.text
+
+
+def test_preview_supplier_jumlah_per_barang(client):
+    first = _stock(client, "Barang Qty A", 0, 5)
+    second = _stock(client, "Barang Qty B", 1, 5)
+    supplier = client.post(
+        "/api/suppliers",
+        json={
+            "nama": "Supplier Qty",
+            "nomor_hp": "081200008888",
+            "stock_item_ids": [first["id"], second["id"]],
+        },
+    ).json()
+    client.put("/api/settings/ops", json={"supplier_tanya_jumlah": 10})
+    response = client.post(
+        f"/api/suppliers/{supplier['id']}/whatsapp-preview",
+        json={
+            "stock_item_ids": [first["id"], second["id"]],
+            "quantities": [
+                {"stock_item_id": first["id"], "jumlah": 4},
+                {"stock_item_id": second["id"], "jumlah": 7},
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    qty_by_item = {row["stock_item_id"]: row["jumlah"] for row in body["items"]}
+    assert qty_by_item[first["id"]] == 4
+    assert qty_by_item[second["id"]] == 7
+    text = body["wa_text"].lower()
+    assert "barang qty a (4 buah)" in text
+    assert "barang qty b (7 buah)" in text

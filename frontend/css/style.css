@@ -3620,6 +3620,16 @@ a.btn { text-decoration: none; }
   border-top: 1px solid var(--border);
 }
 
+.wa-qty-list { display: grid; gap: 8px; }
+.wa-qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wa-qty-row span { color: var(--muted); font-size: 12.5px; }
+.wa-qty-row .input { width: 110px; flex: none; }
+
 /* WhatsApp */
 #waModalNumber { font-family: var(--mono); }
 
