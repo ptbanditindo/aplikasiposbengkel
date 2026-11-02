@@ -6,7 +6,12 @@ from typing import Any, Dict, Iterable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from database.models import StockItem, Supplier, SupplierItem
+from database.models import (
+    StockItem,
+    Supplier,
+    SupplierFollowup,
+    SupplierItem,
+)
 from services import settings_service, stock_service
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text
@@ -260,3 +265,59 @@ def low_stock_items_for_supplier(
         )
     rows.sort(key=lambda row: (row["status"] != SUPPLIER_KIND_OUT, row["nama"].lower()))
     return rows
+
+
+FOLLOWUP_STATUSES = {
+    "DIPESAN": "Sudah dipesan",
+    "DIKIRIM": "Akan dikirim",
+    "TIDAK_TERSEDIA": "Tidak tersedia",
+    "ARSIP": "Tidak perlu",
+}
+
+
+def _serialize_followup(row: SupplierFollowup) -> Dict[str, Any]:
+    return {
+        "stock_item_id": row.stock_item_id,
+        "supplier_id": row.supplier_id,
+        "status": row.status,
+        "catatan": row.catatan,
+        "updated_at": row.updated_at,
+    }
+
+
+def list_followup_statuses(db: Session) -> List[Dict[str, Any]]:
+    rows = db.scalars(select(SupplierFollowup)).all()
+    return [_serialize_followup(row) for row in rows]
+
+
+def set_followup_status(
+    db: Session,
+    stock_item_id: int,
+    status: str,
+    supplier_id: Optional[int] = None,
+    catatan: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    normalized = (status or "").strip().upper()
+    if normalized and normalized not in FOLLOWUP_STATUSES:
+        raise BusinessValidationError("Status follow up reseller tidak dikenal.")
+    with db.begin():
+        if db.get(StockItem, stock_item_id) is None:
+            raise NotFoundError("Barang tidak ditemukan.")
+        row = db.scalar(
+            select(SupplierFollowup).where(
+                SupplierFollowup.stock_item_id == stock_item_id
+            )
+        )
+        if not normalized:
+            if row is not None:
+                db.delete(row)
+            return None
+        if row is None:
+            row = SupplierFollowup(stock_item_id=stock_item_id)
+            db.add(row)
+        row.status = normalized
+        row.supplier_id = supplier_id or None
+        row.catatan = clean_text(catatan, max_length=255) or None
+        db.flush()
+    db.refresh(row)
+    return _serialize_followup(row)

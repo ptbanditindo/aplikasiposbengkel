@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261176">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261177">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -2309,6 +2309,38 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="supplierStatusModal" role="dialog" aria-modal="true" aria-labelledby="supplierStatusTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="supplierStatusTitle">Status follow up reseller</h3>
+          <p class="muted" id="supplierStatusSubtitle">-</p>
+        </div>
+        <button type="button" class="icon-btn" id="supplierStatusClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div>
+        <label class="field">
+          <span>Status</span>
+          <select class="input" id="supplierStatusSelect">
+            <option value="">Tanpa status</option>
+            <option value="DIPESAN">Sudah dipesan</option>
+            <option value="DIKIRIM">Akan dikirim</option>
+            <option value="TIDAK_TERSEDIA">Tidak tersedia</option>
+            <option value="ARSIP">Tidak perlu (sembunyikan dari daftar)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Catatan</span>
+          <input type="text" class="input" id="supplierStatusNote" maxlength="255" placeholder="Opsional">
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="supplierStatusDismiss">Tutup</button>
+        <button type="button" class="btn btn-primary" id="supplierStatusSave">Simpan status</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================ STOCK MODAL ============================ -->
   <div class="modal-backdrop hidden" id="stockModal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
     <div class="modal">
@@ -2609,15 +2641,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261176"></script>
-  <script src="/static/js/api-client.js?v=20261176"></script>
-  <script src="/static/js/printer-manager.js?v=20261176"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261176"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261176"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261176"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261176"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261176"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261176"></script>
-  <script src="/static/js/app.js?v=20261176"></script>
+  <script src="/static/js/native-bridge.js?v=20261177"></script>
+  <script src="/static/js/api-client.js?v=20261177"></script>
+  <script src="/static/js/printer-manager.js?v=20261177"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261177"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261177"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261177"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261177"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261177"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261177"></script>
+  <script src="/static/js/app.js?v=20261177"></script>
 </body>
 </html>

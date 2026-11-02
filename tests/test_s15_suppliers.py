@@ -129,3 +129,35 @@ def test_edit_stok_bisa_memilih_supplier(client):
     rows = client.get("/api/suppliers").json()
     row = next(row for row in rows if row["id"] == supplier["id"])
     assert stock_id not in {entry["id"] for entry in row["items"]}
+
+
+def test_status_followup_reseller_bisa_disimpan_dan_dihapus(client):
+    item = _stock(client, "Barang Status Reseller", 0, 5)
+    response = client.put(
+        f"/api/suppliers/followup-status/{item['id']}",
+        json={"status": "DIPESAN", "catatan": "Pesan 2 pcs"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["stock_item_id"] == item["id"]
+    assert body["status"] == "DIPESAN"
+    assert body["catatan"] == "Pesan 2 pcs"
+
+    listing = client.get("/api/suppliers/followup-statuses")
+    assert listing.status_code == 200
+    assert any(row["stock_item_id"] == item["id"] for row in listing.json())
+
+    invalid = client.put(
+        f"/api/suppliers/followup-status/{item['id']}",
+        json={"status": "STATUS_ASAL"},
+    )
+    assert invalid.status_code == 400, invalid.text
+
+    cleared = client.put(
+        f"/api/suppliers/followup-status/{item['id']}",
+        json={"status": ""},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json() is None
+    listing = client.get("/api/suppliers/followup-statuses").json()
+    assert all(row["stock_item_id"] != item["id"] for row in listing)

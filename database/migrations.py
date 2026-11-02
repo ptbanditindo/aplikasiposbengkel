@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 
 def get_user_version(conn) -> int:
@@ -1156,6 +1156,23 @@ def _migrate_037_part_exchange(cursor: Cursor) -> None:
     )
 
 
+def _migrate_038_supplier_followups(cursor: Cursor) -> None:
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS supplier_followups ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "stock_item_id INTEGER NOT NULL "
+        "REFERENCES stock_items(id) ON DELETE CASCADE, "
+        "supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL, "
+        "status VARCHAR(32) NOT NULL, "
+        "catatan VARCHAR(255), "
+        "updated_at DATETIME NOT NULL)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_supplier_followups_item "
+        "ON supplier_followups (stock_item_id)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1194,6 +1211,7 @@ MIGRATIONS: List[Migration] = [
     (35, _migrate_035_salary_bonus_note),
     (36, _migrate_036_sparepart_warranty),
     (37, _migrate_037_part_exchange),
+    (38, _migrate_038_supplier_followups),
 ]
 
 

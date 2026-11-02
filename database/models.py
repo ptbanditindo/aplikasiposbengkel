@@ -100,6 +100,28 @@ class SupplierItem(Base):
     stock_item: Mapped["StockItem"] = relationship()
 
 
+class SupplierFollowup(Base):
+    """Status follow up reseller per barang stok (halaman Follow up)."""
+
+    __tablename__ = "supplier_followups"
+    __table_args__ = (
+        Index("ux_supplier_followups_item", "stock_item_id", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stock_item_id: Mapped[int] = mapped_column(
+        ForeignKey("stock_items.id", ondelete="CASCADE"), nullable=False
+    )
+    supplier_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    catatan: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class VehicleOrUnit(Base):
     __tablename__ = "vehicle_or_units"
 

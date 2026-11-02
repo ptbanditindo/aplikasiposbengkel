@@ -427,6 +427,20 @@ class SupplierWhatsAppPreviewOut(CompatBase):
     wa_text: str = ""
 
 
+class SupplierFollowupIn(StrictBase):
+    status: str = Field(default="", max_length=32)
+    supplier_id: Optional[int] = None
+    catatan: Optional[str] = Field(default=None, max_length=255)
+
+
+class SupplierFollowupOut(CompatBase):
+    stock_item_id: int
+    supplier_id: Optional[int] = None
+    status: str
+    catatan: Optional[str] = None
+    updated_at: datetime
+
+
 # --- STOCK & JASA ---
 class StockItemCreate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)

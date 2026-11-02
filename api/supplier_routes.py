@@ -1,7 +1,7 @@
 """Endpoint supplier dan follow up reseller."""
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -10,6 +10,8 @@ from api.deps import require_auth
 from api.schemas import (
     SupplierCreate,
     SupplierFollowupGroupOut,
+    SupplierFollowupIn,
+    SupplierFollowupOut,
     SupplierOut,
     SupplierUpdate,
     SupplierWhatsAppIn,
@@ -48,6 +50,36 @@ def followup_low_stock(db: Session = Depends(get_db)):
         SupplierFollowupGroupOut(**group)
         for group in supplier_service.followup_groups(db)
     ]
+
+
+@router.get(
+    "/suppliers/followup-statuses",
+    response_model=List[SupplierFollowupOut],
+)
+def supplier_followup_statuses(db: Session = Depends(get_db)):
+    return [
+        SupplierFollowupOut(**row)
+        for row in supplier_service.list_followup_statuses(db)
+    ]
+
+
+@router.put(
+    "/suppliers/followup-status/{stock_item_id}",
+    response_model=Optional[SupplierFollowupOut],
+)
+def supplier_followup_status(
+    stock_item_id: int,
+    payload: SupplierFollowupIn,
+    db: Session = Depends(get_db),
+):
+    row = supplier_service.set_followup_status(
+        db,
+        stock_item_id,
+        payload.status,
+        supplier_id=payload.supplier_id,
+        catatan=payload.catatan,
+    )
+    return SupplierFollowupOut(**row) if row else None
 
 
 @router.post("/suppliers", response_model=SupplierOut, status_code=201)
