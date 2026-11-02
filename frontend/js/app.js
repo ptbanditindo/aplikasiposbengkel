@@ -247,6 +247,7 @@
     reportTab: 'kas',
     partsOutToday: 0,
     employeeTab: 'list',
+    navEdit: false,
     jasa: [],
     history: [],
     customerDirectory: [],
@@ -511,6 +512,113 @@
   }
 
   /* ----------------------------- Navigation ------------------------------- */
+  const NAV_ORDER_KEY = 'bengkel.navOrder';
+  const NAV_FIXED_VIEWS = ['dashboard', 'pos'];
+
+  function navReorderableTabs() {
+    return $$('.nav-tab').filter(
+      (tab) => !NAV_FIXED_VIEWS.includes(tab.dataset.view)
+    );
+  }
+
+  function navMoveUnits() {
+    return navReorderableTabs().map(
+      (tab) => tab.closest('.nav-order-row') || tab
+    );
+  }
+
+  function applyNavOrder() {
+    const nav = $('#navTabs');
+    const toggle = $('#navOrderToggle');
+    if (!nav || !toggle) return;
+    let saved = [];
+    try {
+      saved = JSON.parse(window.localStorage.getItem(NAV_ORDER_KEY) || '[]');
+    } catch (err) {
+      saved = [];
+    }
+    const byView = new Map(
+      navReorderableTabs().map((tab) => [tab.dataset.view, tab])
+    );
+    saved.forEach((view) => {
+      const tab = byView.get(view);
+      if (!tab) return;
+      nav.insertBefore(tab, toggle);
+      byView.delete(view);
+    });
+    byView.forEach((tab) => nav.insertBefore(tab, toggle));
+  }
+
+  function saveNavOrder() {
+    const order = navReorderableTabs().map((tab) => tab.dataset.view);
+    try {
+      window.localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order));
+    } catch (err) {
+      /* penyimpanan lokal tidak tersedia */
+    }
+  }
+
+  function refreshNavMoveButtons() {
+    const units = navMoveUnits();
+    units.forEach((unit, index) => {
+      const up = unit.querySelector('[data-nav-move="-1"]');
+      const down = unit.querySelector('[data-nav-move="1"]');
+      if (up) up.disabled = index === 0;
+      if (down) down.disabled = index === units.length - 1;
+    });
+  }
+
+  function moveNavTab(view, delta) {
+    const tabs = navReorderableTabs();
+    const index = tabs.findIndex((tab) => tab.dataset.view === view);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= tabs.length) return;
+    const units = navMoveUnits();
+    const unit = units[index];
+    const other = units[target];
+    if (delta < 0) {
+      other.parentNode.insertBefore(unit, other);
+    } else {
+      other.parentNode.insertBefore(other, unit);
+    }
+    saveNavOrder();
+    refreshNavMoveButtons();
+  }
+
+  function setNavEdit(enabled) {
+    state.navEdit = enabled;
+    const nav = $('#navTabs');
+    const toggle = $('#navOrderToggle');
+    if (!nav) return;
+    nav.classList.toggle('is-editing', enabled);
+    if (enabled) {
+      navReorderableTabs().forEach((tab) => {
+        if (tab.closest('.nav-order-row')) return;
+        const row = document.createElement('div');
+        row.className = 'nav-order-row';
+        tab.parentNode.insertBefore(row, tab);
+        row.appendChild(tab);
+        const move = document.createElement('span');
+        move.className = 'nav-move';
+        move.innerHTML =
+          '<button type="button" data-nav-move="-1" aria-label="Geser ke kiri">\u2190</button>' +
+          '<button type="button" data-nav-move="1" aria-label="Geser ke kanan">\u2192</button>';
+        row.appendChild(move);
+      });
+      refreshNavMoveButtons();
+    } else {
+      $$('.nav-order-row').forEach((row) => {
+        const tab = row.querySelector('.nav-tab');
+        if (tab) row.parentNode.insertBefore(tab, row);
+        row.remove();
+      });
+    }
+    if (toggle) {
+      toggle.textContent = enabled ? 'Selesai atur menu' : 'Atur menu';
+      toggle.classList.toggle('active', enabled);
+    }
+  }
+
   function navigate(view) {
     $$('.nav-tab').forEach((tab) => {
       tab.classList.toggle('active', tab.dataset.view === view);
@@ -10675,9 +10783,26 @@
 
   /* ------------------------------- Bindings ------------------------------- */
   function bindEvents() {
+    applyNavOrder();
     $$('.nav-tab').forEach((tab) =>
-      tab.addEventListener('click', () => navigate(tab.dataset.view))
+      tab.addEventListener('click', () => {
+        if (state.navEdit) return;
+        navigate(tab.dataset.view);
+      })
     );
+    $('#navOrderToggle').addEventListener('click', () =>
+      setNavEdit(!state.navEdit)
+    );
+    $('#navTabs').addEventListener('click', (event) => {
+      const moveButton = event.target.closest('[data-nav-move]');
+      if (!moveButton) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const row = moveButton.closest('.nav-order-row');
+      const tab = row && row.querySelector('.nav-tab');
+      if (!tab) return;
+      moveNavTab(tab.dataset.view, Number(moveButton.dataset.navMove));
+    });
 
     $('#btnNewCustomerPos').addEventListener('click', () => openCustomerModal(true));
 
