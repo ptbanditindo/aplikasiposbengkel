@@ -1,16 +1,27 @@
 """Pengelolaan stok sparepart & master tarif jasa."""
 from __future__ import annotations
 
+import re
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.models import HargaJasa, StockItem, StockMovement, Supplier, SupplierItem
+from database.models import (
+    HargaJasa,
+    StockBarcode,
+    StockItem,
+    StockMovement,
+    Supplier,
+    SupplierItem,
+)
+from database.session import begin_immediate
 from repositories import stock_repository as repo
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
 from services.utils import clean_text, money
+
+_BARCODE_PATTERN = re.compile(r"^[\x20-\x7E]+$")
 
 _STOCK_UPDATE_LABELS = {
     "nama": "Nama",
@@ -34,6 +45,70 @@ def _reject_null_fields(values: dict, labels: dict[str, str]) -> None:
 
 def list_stock(db: Session) -> List[StockItem]:
     return repo.list_stock(db)
+
+
+def normalize_barcode(value: Optional[str]) -> Optional[str]:
+    """Validasi kode scanner: 1-128 karakter ASCII yang dapat dicetak."""
+    text = clean_text(value, max_length=128, allow_newlines=False) or None
+    if not text:
+        return None
+    if not _BARCODE_PATTERN.fullmatch(text):
+        raise BusinessValidationError(
+            "Barcode hanya boleh berisi huruf, angka, dan simbol tanpa spasi baris."
+        )
+    return text
+
+
+def _clean_barcodes(
+    db: Session, values: Optional[List[str]], stock_item_id: Optional[int] = None
+) -> List[str]:
+    if not values:
+        return []
+    cleaned: List[str] = []
+    seen = set()
+    for raw in values:
+        code = normalize_barcode(raw)
+        if not code or code in seen:
+            continue
+        alias = repo.get_barcode(db, code)
+        if alias is not None and alias.stock_item_id != stock_item_id:
+            raise ConflictError(f"Barcode '{code}' sudah dipakai barang lain.")
+        other = repo.get_stock_by_kode(db, code)
+        if other is not None and other.id != stock_item_id:
+            raise ConflictError(f"Barcode '{code}' sudah dipakai barang lain.")
+        seen.add(code)
+        cleaned.append(code)
+    return cleaned
+
+
+def _replace_barcodes(db: Session, item: StockItem, barcodes: List[str]) -> None:
+    db.query(StockBarcode).filter(
+        StockBarcode.stock_item_id == item.id
+    ).delete(synchronize_session=False)
+    for code in barcodes:
+        db.add(StockBarcode(stock_item_id=item.id, barcode=code))
+    db.flush()
+
+
+def resolve_barcode(db: Session, code: str) -> Tuple[Optional[StockItem], str]:
+    """Cari barang dari barcode alias lebih dulu, lalu kode utama."""
+    normalized = normalize_barcode(code)
+    if not normalized:
+        return None, ""
+    item = repo.get_stock_by_barcode(db, normalized)
+    if item is not None:
+        return item, "barcode"
+    item = repo.get_stock_by_kode(db, normalized)
+    if item is not None:
+        return item, "kode"
+    return None, ""
+
+
+def list_barcodes(db: Session, stock_id: int) -> List[str]:
+    item = repo.get_stock(db, stock_id)
+    if item is None:
+        raise NotFoundError("Sparepart tidak ditemukan.")
+    return [row.barcode for row in repo.list_barcodes(db, stock_id)]
 
 
 def list_jasa(db: Session) -> List[HargaJasa]:
@@ -73,6 +148,7 @@ def create_stock(
     interval_servis_bulan: int = 0,
     stok_minimum: Optional[int] = None,
     supplier_ids: Optional[List[int]] = None,
+    barcodes: Optional[List[str]] = None,
 ) -> StockItem:
     clean_nama, modal, jual, qty, interval, minimum = _validate_stock_fields(
         nama, harga_modal, harga_jual, jumlah, interval_servis_bulan, stok_minimum
@@ -80,6 +156,9 @@ def create_stock(
     clean_kode = clean_text(kode, max_length=64, allow_newlines=False) or None
     if clean_kode and repo.get_stock_by_kode(db, clean_kode):
         raise ConflictError(f"Kode sparepart '{clean_kode}' sudah terdaftar.")
+    if clean_kode and repo.get_barcode(db, clean_kode):
+        raise ConflictError(f"Kode sparepart '{clean_kode}' sudah dipakai barcode.")
+    clean_barcodes = _clean_barcodes(db, barcodes)
 
     item = StockItem(
         kode=clean_kode,
@@ -92,6 +171,8 @@ def create_stock(
     )
     db.add(item)
     db.flush()
+    if clean_barcodes:
+        _replace_barcodes(db, item, clean_barcodes)
     if supplier_ids is not None:
         _set_suppliers(db, item.id, supplier_ids)
     if qty > 0:
@@ -119,6 +200,7 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
         values.pop("alasan", None), max_length=255, allow_newlines=False
     ) or "Koreksi stok manual"
     supplier_ids = values.pop("supplier_ids", None)
+    raw_barcodes = values.pop("barcodes", None)
     old_qty = item.jumlah
 
     _reject_null_fields(values, _STOCK_UPDATE_LABELS)
@@ -129,7 +211,16 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
             existing = repo.get_stock_by_kode(db, new_kode)
             if existing is not None and existing.id != item.id:
                 raise ConflictError(f"Kode sparepart '{new_kode}' sudah terdaftar.")
+            alias = repo.get_barcode(db, new_kode)
+            if alias is not None and alias.stock_item_id != item.id:
+                raise ConflictError(f"Kode sparepart '{new_kode}' sudah dipakai barcode.")
         item.kode = new_kode
+
+    clean_barcodes = (
+        _clean_barcodes(db, raw_barcodes, item.id)
+        if raw_barcodes is not None
+        else None
+    )
 
     clean_nama, modal, jual, qty, interval, minimum = _validate_stock_fields(
         values.get("nama", item.nama),
@@ -145,6 +236,8 @@ def update_stock(db: Session, stock_id: int, **values) -> StockItem:
     item.jumlah = qty
     item.interval_servis_bulan = interval
     item.stok_minimum = minimum
+    if clean_barcodes is not None:
+        _replace_barcodes(db, item, clean_barcodes)
     if supplier_ids is not None:
         _set_suppliers(db, item.id, supplier_ids)
 
@@ -186,6 +279,91 @@ def delete_stock(db: Session, stock_id: int) -> None:
             )
         )
     db.commit()
+
+
+def add_stock(
+    db: Session,
+    stock_id: int,
+    jumlah: int,
+    alasan: Optional[str] = None,
+    oleh: str = "Kasir",
+) -> StockItem:
+    """Tambah stok masuk dari scanner atau form manual."""
+    qty = int(jumlah)
+    if qty < 1:
+        raise BusinessValidationError("Jumlah stok masuk minimal 1.")
+    item = repo.get_stock(db, stock_id)
+    if item is None:
+        raise NotFoundError("Sparepart tidak ditemukan.")
+    item.jumlah = int(item.jumlah or 0) + qty
+    db.add(
+        StockMovement(
+            stock_item_id=item.id,
+            nama_item=item.nama,
+            jenis="MASUK",
+            jumlah=qty,
+            alasan=clean_text(alasan, max_length=255, allow_newlines=False)
+            or "Tambah stok",
+            oleh=oleh,
+        )
+    )
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def opname_stock(
+    db: Session,
+    items: List[dict],
+    alasan: Optional[str] = None,
+    oleh: str = "Kasir",
+) -> List[StockItem]:
+    """Sesuaikan stok hasil opname secara atomik.
+
+    Setiap barang hanya boleh muncul sekali; selisih dicatat sebagai KOREKSI.
+    """
+    if not items:
+        raise BusinessValidationError("Tambahkan minimal satu barang opname.")
+    seen = set()
+    reason = clean_text(alasan, max_length=255, allow_newlines=False) or "Stok opname"
+    results: List[StockItem] = []
+
+    with db.begin():
+        begin_immediate(db)
+        for row in items:
+            stock_id = int(row.get("stock_item_id") or 0)
+            new_qty = int(row.get("jumlah"))
+            if stock_id <= 0:
+                raise BusinessValidationError("Barang opname tidak valid.")
+            if stock_id in seen:
+                raise BusinessValidationError(
+                    "Barang opname tidak boleh muncul lebih dari sekali."
+                )
+            seen.add(stock_id)
+            if new_qty < 0:
+                raise BusinessValidationError("Jumlah opname tidak boleh negatif.")
+            item = db.get(StockItem, stock_id)
+            if item is None:
+                raise NotFoundError("Sparepart tidak ditemukan.")
+            old_qty = int(item.jumlah or 0)
+            item.jumlah = new_qty
+            if new_qty != old_qty:
+                db.add(
+                    StockMovement(
+                        stock_item_id=item.id,
+                        nama_item=item.nama,
+                        jenis="KOREKSI",
+                        jumlah=new_qty - old_qty,
+                        alasan=reason,
+                        oleh=oleh,
+                    )
+                )
+            db.flush()
+            results.append(item)
+
+    for item in results:
+        db.refresh(item)
+    return results
 
 
 def list_movements(

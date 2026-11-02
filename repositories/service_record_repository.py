@@ -59,6 +59,9 @@ def list_records(db: Session, query: str = "", limit: int = 200) -> List[Service
                 VehicleOrUnit.nopol.ilike(like),
                 VehicleOrUnit.label_radiator.ilike(like),
                 VehicleOrUnit.tipe_radiator.ilike(like),
+                VehicleOrUnit.nama_barang.ilike(like),
+                VehicleOrUnit.nomor_seri.ilike(like),
+                VehicleOrUnit.kendaraan_asal.ilike(like),
             )
         )
     statement = statement.order_by(

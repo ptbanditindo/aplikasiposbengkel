@@ -6,7 +6,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database.models import HargaJasa, StockItem, StockMovement
+from database.models import HargaJasa, StockBarcode, StockItem, StockMovement
 
 
 def list_stock(db: Session) -> List[StockItem]:
@@ -21,6 +21,30 @@ def get_stock(db: Session, stock_id: int) -> Optional[StockItem]:
 
 def get_stock_by_kode(db: Session, kode: str) -> Optional[StockItem]:
     return db.scalar(select(StockItem).where(StockItem.kode == kode))
+
+
+def get_stock_by_barcode(db: Session, barcode: str) -> Optional[StockItem]:
+    return db.scalar(
+        select(StockItem)
+        .join(StockBarcode, StockBarcode.stock_item_id == StockItem.id)
+        .where(StockBarcode.barcode == barcode)
+    )
+
+
+def get_barcode(db: Session, barcode: str) -> Optional[StockBarcode]:
+    return db.scalar(
+        select(StockBarcode).where(StockBarcode.barcode == barcode)
+    )
+
+
+def list_barcodes(db: Session, stock_item_id: int) -> List[StockBarcode]:
+    return list(
+        db.scalars(
+            select(StockBarcode)
+            .where(StockBarcode.stock_item_id == stock_item_id)
+            .order_by(StockBarcode.id.asc())
+        ).all()
+    )
 
 
 def list_jasa(db: Session) -> List[HargaJasa]:

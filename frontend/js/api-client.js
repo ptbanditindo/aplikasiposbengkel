@@ -294,11 +294,17 @@
     deleteUnit: (id) => request('/api/units/' + id, { method: 'DELETE' }),
 
     stock: () => request('/api/stock'),
+    lookupStock: (code) =>
+      request('/api/stock/lookup?code=' + qs(code || '')),
     createStock: (data) => request('/api/stock', { method: 'POST', body: data }),
     updateStock: (id, data) =>
       request('/api/stock/' + id, { method: 'PUT', body: data }),
     deleteStock: (id) =>
       request('/api/stock/' + id, { method: 'DELETE' }),
+    addStockIn: (id, data) =>
+      request('/api/stock/' + id + '/in', { method: 'POST', body: data }),
+    opnameStock: (data) =>
+      request('/api/stock/opname', { method: 'POST', body: data }),
 
     jasa: () => request('/api/harga-jasa'),
     createJasa: (data) =>
@@ -481,6 +487,13 @@
     soldParts: (start, end) =>
       request(
         '/api/reports/sold-parts' +
+          (start && end
+            ? '?start=' + qs(start) + '&end=' + qs(end)
+            : '')
+      ),
+    partGroups: (start, end) =>
+      request(
+        '/api/reports/part-groups' +
           (start && end
             ? '?start=' + qs(start) + '&end=' + qs(end)
             : '')

@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 
 def get_user_version(conn) -> int:
@@ -1174,6 +1174,51 @@ def _migrate_038_supplier_followups(cursor: Cursor) -> None:
     )
 
 
+def _migrate_039_unit_part_and_barcodes(cursor) -> None:
+    """Empat kategori unit: field part bebas dan alias barcode."""
+    _add_column(
+        cursor,
+        "vehicle_or_units",
+        "nama_barang",
+        "nama_barang VARCHAR(255)",
+    )
+    _add_column(
+        cursor,
+        "vehicle_or_units",
+        "nomor_seri",
+        "nomor_seri VARCHAR(120)",
+    )
+    _add_column(
+        cursor,
+        "vehicle_or_units",
+        "kondisi",
+        "kondisi VARCHAR(64)",
+    )
+    _add_column(
+        cursor,
+        "vehicle_or_units",
+        "kendaraan_asal",
+        "kendaraan_asal VARCHAR(255)",
+    )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS stock_barcodes ("
+        "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+        "stock_item_id INTEGER NOT NULL, "
+        "barcode VARCHAR(128) NOT NULL, "
+        "created_at DATETIME NOT NULL, "
+        "FOREIGN KEY(stock_item_id) REFERENCES stock_items (id) "
+        "ON DELETE CASCADE)"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_stock_barcodes_barcode "
+        "ON stock_barcodes (barcode)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_stock_barcodes_stock_item_id "
+        "ON stock_barcodes (stock_item_id)"
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1213,6 +1258,7 @@ MIGRATIONS: List[Migration] = [
     (36, _migrate_036_sparepart_warranty),
     (37, _migrate_037_part_exchange),
     (38, _migrate_038_supplier_followups),
+    (39, _migrate_039_unit_part_and_barcodes),
 ]
 
 

@@ -15,7 +15,18 @@ from services.auth_service import Operator
 from services.errors import BusinessValidationError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
-VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY", "SPAREPART"}
+VALID_UNIT_TYPES = {
+    "MOBIL",
+    "MOTOR_LENGKAP",
+    "PART_MOBIL",
+    "PART_MOTOR",
+    # Legacy: part mobil tanpa nopol yang sudah terlanjur tersimpan.
+    "RADIATOR_ONLY",
+    # Unit walk-in internal untuk pembelian sparepart tanpa kendaraan.
+    "SPAREPART",
+}
+COMPLETE_UNIT_TYPES = {"MOBIL", "MOTOR_LENGKAP"}
+PART_UNIT_TYPES = {"PART_MOBIL", "PART_MOTOR", "RADIATOR_ONLY"}
 WALKIN_CUSTOMER_NAME = "Pelanggan Umum"
 WALKIN_CUSTOMER_ADDRESS = "Pembelian sparepart"
 WALKIN_UNIT_TYPE = "SPAREPART"
@@ -144,12 +155,14 @@ def list_units(db: Session, customer_id: int) -> List[VehicleOrUnit]:
     ]
 
 
-def _next_radiator_label(db: Session, today: date) -> str:
-    """Generator label fisik unik RAD-YYYYMMDD-XXX.
+def _label_prefix(unit_type: str) -> str:
+    # Kode RAD dipertahankan untuk part mobil lama agar riwayat tetap terbaca.
+    return "PRT" if unit_type == "PART_MOTOR" else "RAD"
 
-    Ref: PRD FR-UNIT-04 / TC-05.
-    """
-    prefix = f"RAD-{today:%Y%m%d}-"
+
+def _next_unit_label(db: Session, today: date, unit_type: str) -> str:
+    """Generator label fisik unik per kategori dan tanggal."""
+    prefix = f"{_label_prefix(unit_type)}-{today:%Y%m%d}-"
     highest = 0
     for label in repo.labels_with_prefix(db, prefix):
         suffix = label[len(prefix):]
@@ -166,7 +179,7 @@ def ensure_unit_label(db: Session, unit: VehicleOrUnit, today: date) -> str:
     """
     if unit.label_radiator:
         return unit.label_radiator
-    unit.label_radiator = _next_radiator_label(db, today)
+    unit.label_radiator = _next_unit_label(db, today, unit.unit_type)
     db.flush()
     return unit.label_radiator
 
@@ -180,17 +193,27 @@ def create_unit(
     tahun_mobil: Optional[int] = None,
     tipe_radiator: Optional[str] = None,
     keterangan: Optional[str] = None,
+    nama_barang: Optional[str] = None,
+    nomor_seri: Optional[str] = None,
+    kondisi: Optional[str] = None,
+    kendaraan_asal: Optional[str] = None,
 ) -> VehicleOrUnit:
     normalized_type = (unit_type or "").strip().upper()
     if normalized_type not in VALID_UNIT_TYPES:
-        raise BusinessValidationError("Jenis unit harus MOBIL atau RADIATOR_ONLY.")
+        raise BusinessValidationError(
+            "Jenis unit harus MOBIL, MOTOR_LENGKAP, PART_MOBIL, atau PART_MOTOR."
+        )
 
     if tahun_mobil is not None and not (1900 <= int(tahun_mobil) <= 2100):
-        raise BusinessValidationError("Tahun mobil tidak valid.")
+        raise BusinessValidationError("Tahun kendaraan tidak valid.")
 
     clean_jenis = clean_text(jenis_mobil, max_length=255, allow_newlines=False) or None
     clean_tipe = clean_text(tipe_radiator, max_length=255, allow_newlines=False) or None
     clean_ket = clean_text(keterangan, max_length=1000) or None
+    clean_barang = clean_text(nama_barang, max_length=255, allow_newlines=False) or None
+    clean_seri = clean_text(nomor_seri, max_length=120, allow_newlines=False) or None
+    clean_kondisi = clean_text(kondisi, max_length=64, allow_newlines=False) or None
+    clean_asal = clean_text(kendaraan_asal, max_length=255, allow_newlines=False) or None
 
     if normalized_type == "SPAREPART":
         with db.begin():
@@ -212,10 +235,12 @@ def create_unit(
         db.refresh(unit)
         return unit
 
-    if normalized_type == "MOBIL":
+    if normalized_type in COMPLETE_UNIT_TYPES:
         normalized_nopol = normalize_nopol(nopol)
         if not normalized_nopol:
-            raise BusinessValidationError("Nomor polisi wajib diisi untuk unit mobil.")
+            raise BusinessValidationError(
+                "Nomor polisi wajib diisi untuk unit lengkap."
+            )
         if len(normalized_nopol) > 32:
             raise BusinessValidationError("Nomor polisi terlalu panjang.")
         with db.begin():
@@ -224,7 +249,7 @@ def create_unit(
                 raise NotFoundError("Pelanggan tidak ditemukan.")
             unit = VehicleOrUnit(
                 customer_id=customer_id,
-                unit_type="MOBIL",
+                unit_type=normalized_type,
                 nopol=normalized_nopol,
                 jenis_mobil=clean_jenis,
                 tahun_mobil=int(tahun_mobil) if tahun_mobil is not None else None,
@@ -237,20 +262,26 @@ def create_unit(
         db.refresh(unit)
         return unit
 
-    # Ref: PRD FR-UNIT-04 - radiator copotan tanpa nopol. Label fisik baru
-    # dibuat saat transaksi pertama agar nomor barang mengikuti nota.
+    # Part mobil/motor: bebas nopol. Label fisik baru dibuat saat transaksi
+    # pertama agar nomor barang mengikuti nota.
+    if normalized_type in {"PART_MOBIL", "PART_MOTOR"} and not clean_barang:
+        raise BusinessValidationError("Nama barang wajib diisi untuk part.")
     with db.begin():
         begin_immediate(db)
         if repo.get_customer(db, customer_id) is None:
             raise NotFoundError("Pelanggan tidak ditemukan.")
         unit = VehicleOrUnit(
             customer_id=customer_id,
-            unit_type="RADIATOR_ONLY",
+            unit_type=normalized_type,
             nopol=None,
             jenis_mobil=None,
             tahun_mobil=None,
             label_radiator=None,
             tipe_radiator=clean_tipe,
+            nama_barang=clean_barang,
+            nomor_seri=clean_seri,
+            kondisi=clean_kondisi,
+            kendaraan_asal=clean_asal,
             keterangan=clean_ket,
         )
         db.add(unit)
@@ -268,9 +299,23 @@ def describe_unit(unit: VehicleOrUnit) -> str:
         if unit.jenis_mobil:
             text += f" ({unit.jenis_mobil})"
         return text
-    text = "[BAWA RADIATOR SAJA]"
+    if unit.unit_type == "MOTOR_LENGKAP":
+        text = "Motor " + (unit.nopol or "-")
+        if unit.jenis_mobil:
+            text += f" ({unit.jenis_mobil})"
+        return text
+
+    if unit.unit_type == "PART_MOTOR":
+        text = "[PART MOTOR]"
+    elif unit.unit_type == "PART_MOBIL":
+        text = "[PART MOBIL]"
+    else:
+        text = "[BAWA RADIATOR SAJA]"
+    nama = unit.nama_barang or unit.tipe_radiator
+    if nama:
+        text += f" {nama}"
     if unit.label_radiator:
         text += f" {unit.label_radiator}"
-    if unit.tipe_radiator:
+    if unit.nama_barang and unit.tipe_radiator:
         text += f" ({unit.tipe_radiator})"
     return text

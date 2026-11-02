@@ -325,7 +325,7 @@
                 <span class="step-num" aria-hidden="true">2</span>
                 <div>
                   <h2>Pilih unit servis</h2>
-                  <p class="muted">Pilih unit yang diservis. Untuk radiator tanpa mobil, pilih Bawa radiator saja.</p>
+                  <p class="muted">Pilih unit yang diservis. Unit lengkap memakai nopol; part memakai nama barang.</p>
                 </div>
               </div>
               <div class="unit-grid" id="unitList"></div>
@@ -333,9 +333,11 @@
                 <button type="button" class="btn btn-ghost btn-sm" id="btnToggleNewUnit">Daftarkan unit baru</button>
               </div>
               <div class="new-unit-form hidden" id="newUnitForm">
-                <div class="segmented" id="unitTypeSwitch">
+                <div class="segmented segmented--wrap" id="unitTypeSwitch">
                   <button type="button" data-type="MOBIL" class="active">Mobil lengkap</button>
-                  <button type="button" data-type="RADIATOR_ONLY">Bawa radiator saja</button>
+                  <button type="button" data-type="MOTOR_LENGKAP">Motor lengkap</button>
+                  <button type="button" data-type="PART_MOBIL">Part mobil</button>
+                  <button type="button" data-type="PART_MOTOR">Part motor</button>
                 </div>
                 <div class="form-grid" id="mobilFields">
                   <label class="field">
@@ -343,7 +345,7 @@
                     <input type="text" class="input" id="unitNopol" placeholder="Contoh: B 1234 ABC" maxlength="32">
                   </label>
                   <label class="field">
-                    <span>Jenis atau tipe mobil</span>
+                    <span>Jenis atau tipe kendaraan</span>
                     <input type="text" class="input" id="unitJenis" placeholder="Contoh: Avanza 2018" maxlength="255">
                   </label>
                   <label class="field">
@@ -351,19 +353,31 @@
                     <input type="number" class="input" id="unitTahun" min="1900" max="2100" placeholder="2018">
                   </label>
                 </div>
-                <div class="form-grid hidden" id="radiatorFields">
+                <div class="form-grid hidden" id="partFields">
                   <label class="field">
-                    <span>Tipe radiator</span>
-                    <input type="text" class="input" id="unitTipe" placeholder="Contoh: Radiator Canter 2-ply" maxlength="255">
+                    <span>Nama barang <em>*</em></span>
+                    <input type="text" class="input" id="unitNamaBarang" placeholder="Contoh: Radiator Canter 2-ply" maxlength="255">
                   </label>
                   <label class="field">
-                    <span>Kondisi awal</span>
-                    <input type="text" class="input" id="unitKondisi" placeholder="Contoh: upper tank retak" maxlength="1000">
+                    <span>Merek atau ukuran</span>
+                    <input type="text" class="input" id="unitTipe" placeholder="Contoh: Denso / 2-ply" maxlength="255">
+                  </label>
+                  <label class="field">
+                    <span>Nomor seri</span>
+                    <input type="text" class="input" id="unitNomorSeri" placeholder="Opsional" maxlength="120">
+                  </label>
+                  <label class="field">
+                    <span>Kondisi</span>
+                    <input type="text" class="input" id="unitKondisi" placeholder="Contoh: upper tank retak" maxlength="64">
+                  </label>
+                  <label class="field">
+                    <span>Kendaraan asal</span>
+                    <input type="text" class="input" id="unitKendaraanAsal" placeholder="Contoh: Canter 2015" maxlength="255">
                   </label>
                   <div class="field hint-box">
-                    <span>Label radiator otomatis</span>
-                    <strong>RAD-YYYYMMDD-XXX</strong>
-                    <small>Dibuat otomatis saat unit disimpan.</small>
+                    <span>Label part otomatis</span>
+                    <strong>RAD/PRT-YYYYMMDD-XXX</strong>
+                    <small>Dibuat otomatis saat transaksi pertama.</small>
                   </div>
                 </div>
                 <div class="form-grid">
@@ -438,6 +452,12 @@
                   <h4>Sparepart</h4>
                   <span class="tiny muted" id="partStockHint">Stok gudang berkurang otomatis.</span>
                 </div>
+                <div class="scan-row scan-row--pos">
+                  <input type="text" class="input" id="posScanInput" placeholder="Scan / ketik kode barang lalu Enter" autocomplete="off" spellcheck="false" maxlength="128">
+                  <button type="button" class="btn btn-outline btn-sm" id="btnPosScanMode" aria-pressed="true">Mode scan: aktif</button>
+                  <button type="button" class="btn btn-ghost btn-sm hidden" id="btnPosScanNew">+ Barang baru</button>
+                </div>
+                <p class="tiny muted hidden" id="posScanHint"></p>
                 <div class="line-grid">
                   <select class="input" id="partPicker"></select>
                   <input type="text" class="input" id="partNama" placeholder="Nama sparepart atau sparepart lain" maxlength="255">
@@ -700,6 +720,26 @@
           </div>
         </div>
 
+        <div class="card scan-card">
+          <div class="card-head">
+            <div>
+              <h2>Scan barcode</h2>
+              <p class="muted">Scan dengan alat HID, atau ketik kode lalu Enter. Kode tidak dikenal bisa langsung didaftarkan.</p>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="btnStockScanMode" aria-pressed="true">Mode scan: aktif</button>
+          </div>
+          <div class="scan-row">
+            <input type="text" class="input" id="stockScanInput" placeholder="Scan / ketik kode barang" autocomplete="off" spellcheck="false" maxlength="128">
+            <button type="button" class="btn btn-outline" id="btnStockScanManual">Cari</button>
+            <button type="button" class="btn btn-primary hidden" id="btnStockScanNew">+ Barang baru</button>
+          </div>
+          <p class="tiny muted hidden" id="stockScanHint"></p>
+          <div class="page-actions">
+            <button type="button" class="btn btn-outline" id="btnStockIn">+ Tambah stok</button>
+            <button type="button" class="btn btn-outline" id="btnStockOpname">Stok opname</button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-head">
             <div>
@@ -766,6 +806,7 @@
           <button type="button" data-report-tab="kas" class="active">Laporan kas</button>
           <button type="button" data-report-tab="period">Transaksi pada periode</button>
           <button type="button" data-report-tab="sold">Stok pernah terjual</button>
+          <button type="button" data-report-tab="groups">Kelompok part</button>
         </div>
 
         <div class="card report-controls">
@@ -863,6 +904,24 @@
               <tbody id="soldPartsBody"></tbody>
             </table>
             <div class="empty-state hidden" id="soldPartsEmpty">Tidak ada penjualan sparepart pada periode ini.</div>
+          </div>
+        </section>
+
+        <section class="card hidden" id="reportPanelGroups">
+          <div class="card-head">
+            <div>
+              <h2>Kelompok part</h2>
+              <p class="muted" id="partGroupsNote">Pengelompokan otomatis dari nama barang yang terjual.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="table table-report">
+              <thead>
+                <tr><th>Kelompok</th><th class="text-center">Baris</th><th class="text-center">Qty</th><th class="text-right">Nilai</th><th>Contoh barang</th></tr>
+              </thead>
+              <tbody id="partGroupsBody"></tbody>
+            </table>
+            <div class="empty-state hidden" id="partGroupsEmpty">Tidak ada part terjual pada periode ini.</div>
           </div>
         </section>
       </section>
@@ -1369,10 +1428,15 @@
             <strong id="customerStatMobil">0</strong>
             <span class="stat-sub">Unit dengan nomor polisi</span>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat radiator copotan" data-action="customer-stat-radiator">
-            <span class="stat-label">Radiator copotan</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat unit motor" data-action="customer-stat-motor">
+            <span class="stat-label">Unit motor</span>
+            <strong id="customerStatMotor">0</strong>
+            <span class="stat-sub">Motor lengkap</span>
+          </article>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat part terdaftar" data-action="customer-stat-radiator">
+            <span class="stat-label">Part terdaftar</span>
             <strong id="customerStatRadiator">0</strong>
-            <span class="stat-sub">Radiator berlabel</span>
+            <span class="stat-sub">Part mobil, motor, radiator</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota bergaransi aktif" data-action="customer-warranties">
             <span class="stat-label">Garansi aktif</span>
@@ -2573,6 +2637,11 @@
           <span>Nama sparepart <em>*</em></span>
           <input type="text" class="input" id="stockNama" required minlength="2" maxlength="255" placeholder="Contoh: Tutup radiator 0.9">
         </label>
+        <label class="field">
+          <span>Barcode / alias lain</span>
+          <input type="text" class="input" id="stockBarcodes" placeholder="Pisahkan dengan koma" maxlength="1000">
+          <small class="tiny muted">Kode utama di atas juga bisa dipakai untuk scan. Alias membantu bila barang punya beberapa barcode.</small>
+        </label>
         <div class="form-grid">
           <label class="field">
             <span>Harga modal</span>
@@ -2603,6 +2672,81 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="stockCancel">Batal</button>
           <button type="submit" class="btn btn-primary">Simpan sparepart</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ STOCK IN MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="stockInModal" role="dialog" aria-modal="true" aria-labelledby="stockInTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="stockInTitle">Tambah stok masuk</h3>
+          <p class="muted">Scan atau cari barang, lalu isi jumlah yang masuk.</p>
+        </div>
+        <button type="button" class="icon-btn" id="stockInClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="scan-row">
+        <input type="text" class="input" id="stockInScan" placeholder="Scan / ketik kode barang" autocomplete="off" spellcheck="false" maxlength="128">
+        <button type="button" class="btn btn-outline" id="btnStockInScan">Cari</button>
+        <button type="button" class="btn btn-ghost hidden" id="btnStockInNew">+ Barang baru</button>
+      </div>
+      <p class="tiny muted hidden" id="stockInScanHint"></p>
+      <form id="stockInForm">
+        <input type="hidden" id="stockInItemId">
+        <div class="selected-box hidden" id="stockInSelected"></div>
+        <div class="form-grid">
+          <label class="field">
+            <span>Jumlah masuk <em>*</em></span>
+            <input type="number" class="input" id="stockInJumlah" min="1" step="1" inputmode="numeric" placeholder="Contoh: 10">
+          </label>
+          <label class="field">
+            <span>Catatan</span>
+            <input type="text" class="input" id="stockInAlasan" maxlength="255" placeholder="Contoh: kiriman supplier">
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="stockInCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan stok masuk</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ STOCK OPNAME MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="stockOpnameModal" role="dialog" aria-modal="true" aria-labelledby="stockOpnameTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="stockOpnameTitle">Stok opname</h3>
+          <p class="muted">Scan barang dan isi jumlah hasil hitung. Selisih dicatat sebagai koreksi.</p>
+        </div>
+        <button type="button" class="icon-btn" id="stockOpnameClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="scan-row">
+        <input type="text" class="input" id="stockOpnameScan" placeholder="Scan / ketik kode barang" autocomplete="off" spellcheck="false" maxlength="128">
+        <button type="button" class="btn btn-outline" id="btnStockOpnameScan">Tambah</button>
+        <button type="button" class="btn btn-ghost hidden" id="btnStockOpnameNew">+ Barang baru</button>
+      </div>
+      <p class="tiny muted hidden" id="stockOpnameScanHint"></p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Barang</th><th class="text-center">Stok sistem</th><th class="text-center">Hasil hitung</th><th></th></tr>
+          </thead>
+          <tbody id="stockOpnameBody"></tbody>
+        </table>
+        <div class="empty-state sm" id="stockOpnameEmpty">Belum ada barang discan.</div>
+      </div>
+      <form id="stockOpnameForm">
+        <label class="field">
+          <span>Catatan opname</span>
+          <input type="text" class="input" id="stockOpnameAlasan" maxlength="255" placeholder="Contoh: opname akhir bulan">
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="stockOpnameCancel">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan opname</button>
         </div>
       </form>
     </div>

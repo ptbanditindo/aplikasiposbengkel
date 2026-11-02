@@ -3987,3 +3987,68 @@ a.btn { text-decoration: none; }
     box-shadow: -6px 0 8px var(--color-shadow);
   }
 }
+
+/* Mode scan HID dan stok opname */
+.segmented--wrap {
+  flex-wrap: wrap;
+}
+.scan-card .card-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+.scan-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.scan-row .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.scan-row .btn {
+  flex: 0 0 auto;
+}
+.scan-result {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+.scan-result strong {
+  display: block;
+  font-size: 13.5px;
+}
+.scan-result span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.scan-result .badge {
+  flex: 0 0 auto;
+}
+.scan-card .page-actions {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.scan-flash {
+  animation: scanFlash 0.5s ease;
+}
+@keyframes scanFlash {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45); }
+  100% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+}
+@media (max-width: 640px) {
+  .scan-row {
+    flex-wrap: wrap;
+  }
+  .scan-row .input {
+    flex: 1 1 100%;
+  }
+  .scan-row .btn {
+    flex: 1 1 auto;
+  }
+}

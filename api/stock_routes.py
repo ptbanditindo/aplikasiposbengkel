@@ -11,13 +11,17 @@ from api.schemas import (
     HargaJasaCreate,
     HargaJasaOut,
     HargaJasaUpdate,
+    StockInIn,
     StockItemCreate,
     StockItemOut,
     StockItemUpdate,
+    StockLookupOut,
     StockMovementOut,
+    StockOpnameIn,
 )
 from database.session import get_db
 from services import stock_service
+from services.errors import NotFoundError
 
 router = APIRouter(
     tags=["Stok & Tarif Jasa"], dependencies=[Depends(require_auth)]
@@ -27,6 +31,20 @@ router = APIRouter(
 @router.get("/stock", response_model=List[StockItemOut])
 def list_stock(db: Session = Depends(get_db)):
     return [StockItemOut.model_validate(item) for item in stock_service.list_stock(db)]
+
+
+@router.get("/stock/lookup", response_model=StockLookupOut)
+def lookup_stock(
+    code: str = Query(..., min_length=1, max_length=128),
+    db: Session = Depends(get_db),
+):
+    """Cari barang berdasarkan barcode alias atau kode utama."""
+    item, matched = stock_service.resolve_barcode(db, code)
+    if item is None:
+        raise NotFoundError("Barcode tidak dikenal.")
+    data = StockLookupOut.model_validate(item)
+    data.matched_code = code.strip()
+    return data
 
 
 @router.get("/stock/movements", response_model=List[StockMovementOut])
@@ -59,8 +77,31 @@ def create_stock(payload: StockItemCreate, db: Session = Depends(get_db)):
         interval_servis_bulan=payload.interval_servis_bulan,
         stok_minimum=payload.stok_minimum,
         supplier_ids=payload.supplier_ids,
+        barcodes=payload.barcodes,
     )
     return StockItemOut.model_validate(item)
+
+
+@router.post("/stock/{stock_id}/in", response_model=StockItemOut)
+def add_stock(
+    stock_id: int,
+    payload: StockInIn,
+    db: Session = Depends(get_db),
+):
+    item = stock_service.add_stock(
+        db, stock_id, payload.jumlah, alasan=payload.alasan
+    )
+    return StockItemOut.model_validate(item)
+
+
+@router.post("/stock/opname", response_model=List[StockItemOut])
+def opname_stock(payload: StockOpnameIn, db: Session = Depends(get_db)):
+    items = [
+        {"stock_item_id": row.stock_item_id, "jumlah": row.jumlah}
+        for row in payload.items
+    ]
+    results = stock_service.opname_stock(db, items, alasan=payload.alasan)
+    return [StockItemOut.model_validate(item) for item in results]
 
 
 @router.put("/stock/{stock_id}", response_model=StockItemOut)

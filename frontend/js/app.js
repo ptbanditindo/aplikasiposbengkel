@@ -197,19 +197,61 @@
     };
   }
 
+  const UNIT_TYPE_META = {
+    MOBIL: { icon: 'MOBIL', label: 'Mobil', tag: 'Mobil', complete: true },
+    MOTOR_LENGKAP: { icon: 'MOTOR', label: 'Motor', tag: 'Motor', complete: true },
+    PART_MOBIL: { icon: 'PRT-M', label: 'Part mobil', tag: 'Part mobil', complete: false },
+    PART_MOTOR: { icon: 'PRT-T', label: 'Part motor', tag: 'Part motor', complete: false },
+    RADIATOR_ONLY: { icon: 'RAD', label: 'Radiator', tag: 'Radiator', complete: false },
+    SPAREPART: { icon: 'PART', label: 'Sparepart', tag: 'Sparepart', complete: false },
+  };
+
+  function unitDisplay(unit) {
+    const type = unit.unit_type || 'PART_MOBIL';
+    const meta = UNIT_TYPE_META[type] || UNIT_TYPE_META.PART_MOBIL;
+    let title = '';
+    let subtitle = '';
+
+    if (type === 'SPAREPART') {
+      title = unit.keterangan || 'Pembelian sparepart';
+      subtitle = 'Sparepart';
+    } else if (meta.complete) {
+      title = unit.nopol || '-';
+      subtitle =
+        [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
+        meta.label + ' lengkap';
+    } else if (type === 'RADIATOR_ONLY') {
+      title = unit.nama_barang || unit.label_radiator || 'Belum berlabel';
+      subtitle =
+        [unit.tipe_radiator, unit.kondisi].filter(Boolean).join(' · ') ||
+        'Radiator copotan';
+    } else {
+      title =
+        unit.nama_barang || unit.tipe_radiator || unit.label_radiator || 'Belum berlabel';
+      subtitle =
+        [
+          unit.nomor_seri ? 'SN ' + unit.nomor_seri : '',
+          unit.kendaraan_asal,
+          unit.kondisi,
+        ]
+          .filter(Boolean)
+          .join(' · ') || meta.label;
+    }
+
+    return {
+      type: type,
+      icon: meta.icon,
+      label: meta.label,
+      tag: meta.tag,
+      title: title,
+      subtitle: subtitle,
+    };
+  }
+
   function describeUnit(unit) {
     if (!unit) return '-';
-    if (unit.unit_type === 'SPAREPART') {
-      return unit.keterangan || 'Pembelian sparepart';
-    }
-    if (unit.unit_type === 'MOBIL') {
-      let text = unit.nopol || '-';
-      if (unit.jenis_mobil) text += ' (' + unit.jenis_mobil + ')';
-      return text;
-    }
-    let text = 'Radiator saja · ' + (unit.label_radiator || 'belum berlabel');
-    if (unit.tipe_radiator) text += ' (' + unit.tipe_radiator + ')';
-    return text;
+    const display = unitDisplay(unit);
+    return display.title + (display.subtitle ? ' · ' + display.subtitle : '');
   }
 
   /* ------------------------------ State ---------------------------------- */
@@ -270,6 +312,13 @@
     customerReturnToPos: false,
     editingStock: null,
     editingJasa: null,
+    posScanMode: true,
+    stockScanMode: true,
+    pendingScanCode: '',
+    pendingStockCode: '',
+    stockInItem: null,
+    opnameItems: [],
+    partGroups: null,
     searchTimer: null,
     saving: false,
     pendingRequest: null,
@@ -1126,7 +1175,7 @@
 
     if (!state.units.length) {
       container.innerHTML =
-        '<div class="empty-state sm">Belum ada unit terdaftar. Daftarkan mobil atau radiator baru di bawah.</div>';
+        '<div class="empty-state sm">Belum ada unit terdaftar. Daftarkan mobil, motor, atau part baru di bawah.</div>';
       syncNewUnitForm();
       return;
     }
@@ -1135,17 +1184,15 @@
       .map((unit) => {
         const selected =
           state.selectedUnit && state.selectedUnit.id === unit.id;
-        const isCar = unit.unit_type === 'MOBIL';
-        const title = isCar
-          ? unit.nopol || '-'
-          : unit.label_radiator || 'Belum berlabel';
-        const subtitle = isCar
-          ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
-            'Mobil lengkap'
-          : unit.tipe_radiator || 'Radiator copotan';
-        const tag = isCar
+        const display = unitDisplay(unit);
+        const complete = !!(
+          UNIT_TYPE_META[display.type] && UNIT_TYPE_META[display.type].complete
+        );
+        const tag = complete
           ? ''
-          : '<span class="unit-label">Tanpa nopol</span>';
+          : '<span class="unit-label">' +
+            esc(display.tag) +
+            '</span>';
         return (
           '<div class="unit-card-wrap">' +
           '<button type="button" class="unit-card' +
@@ -1154,14 +1201,14 @@
           unit.id +
           '">' +
           '<span class="unit-icon">' +
-          (isCar ? 'MOBIL' : 'RAD') +
+          esc(display.icon) +
           '</span>' +
           '<span class="unit-info">' +
           '<span class="unit-title">' +
-          esc(title) +
+          esc(display.title) +
           '</span>' +
           '<span class="unit-sub">' +
-          esc(subtitle) +
+          esc(display.subtitle) +
           '</span>' +
           '<span class="unit-pick">Pilih</span>' +
           tag +
@@ -1170,7 +1217,7 @@
           '<button type="button" class="unit-delete" data-delete-unit="' +
           unit.id +
           '" aria-label="Hapus unit ' +
-          esc(title) +
+          esc(display.title) +
           '">Hapus</button>' +
           '</div>'
         );
@@ -1195,10 +1242,8 @@
   async function deleteUnit(unitId) {
     const unit = state.units.find((item) => item.id === unitId);
     if (!unit) return;
-    const title =
-      unit.unit_type === 'MOBIL'
-        ? unit.nopol || 'unit mobil'
-        : unit.tipe_radiator || unit.label_radiator || 'unit radiator';
+    const display = unitDisplay(unit);
+    const title = display.title || display.label || 'unit';
     if (
       !window.confirm(
         'Hapus unit ' +
@@ -1264,16 +1309,26 @@
     $$('#unitTypeSwitch button').forEach((button) => {
       button.classList.toggle('active', button.dataset.type === type);
     });
-    $('#mobilFields').classList.toggle('hidden', type !== 'MOBIL');
-    $('#radiatorFields').classList.toggle('hidden', type !== 'RADIATOR_ONLY');
+    const complete = type === 'MOBIL' || type === 'MOTOR_LENGKAP';
+    $('#mobilFields').classList.toggle('hidden', !complete);
+    $('#partFields').classList.toggle('hidden', complete);
+    $('#unitNopol').placeholder =
+      type === 'MOTOR_LENGKAP' ? 'Contoh: B 1234 XYZ' : 'Contoh: B 1234 ABC';
+    $('#unitJenis').placeholder =
+      type === 'MOTOR_LENGKAP'
+        ? 'Contoh: Vario 150 2019'
+        : 'Contoh: Avanza 2018';
   }
 
   function resetUnitForm() {
     $('#unitNopol').value = '';
     $('#unitJenis').value = '';
     $('#unitTahun').value = '';
+    $('#unitNamaBarang').value = '';
     $('#unitTipe').value = '';
+    $('#unitNomorSeri').value = '';
     $('#unitKondisi').value = '';
+    $('#unitKendaraanAsal').value = '';
     $('#unitKeterangan').value = '';
   }
 
@@ -1283,16 +1338,23 @@
       return;
     }
 
+    const complete =
+      state.unitType === 'MOBIL' || state.unitType === 'MOTOR_LENGKAP';
     const payload = {
       customer_id: state.selectedCustomer.id,
       unit_type: state.unitType,
       keterangan: $('#unitKeterangan').value.trim() || null,
     };
 
-    if (state.unitType === 'MOBIL') {
+    if (complete) {
       const nopol = $('#unitNopol').value.trim();
       if (!nopol) {
-        toast('Nomor polisi wajib diisi untuk mobil.', 'warning');
+        toast(
+          state.unitType === 'MOTOR_LENGKAP'
+            ? 'Nomor polisi wajib diisi untuk motor.'
+            : 'Nomor polisi wajib diisi untuk mobil.',
+          'warning'
+        );
         $('#unitNopol').focus();
         return;
       }
@@ -1301,13 +1363,17 @@
       const tahun = intValue($('#unitTahun').value, null);
       payload.tahun_mobil = tahun && tahun >= 1900 && tahun <= 2100 ? tahun : null;
     } else {
-      payload.tipe_radiator = $('#unitTipe').value.trim() || null;
-      const kondisi = $('#unitKondisi').value.trim();
-      if (kondisi) {
-        payload.keterangan = payload.keterangan
-          ? kondisi + ' - ' + payload.keterangan
-          : kondisi;
+      const namaBarang = $('#unitNamaBarang').value.trim();
+      if (!namaBarang) {
+        toast('Nama barang wajib diisi untuk unit part.', 'warning');
+        $('#unitNamaBarang').focus();
+        return;
       }
+      payload.nama_barang = namaBarang;
+      payload.tipe_radiator = $('#unitTipe').value.trim() || null;
+      payload.nomor_seri = $('#unitNomorSeri').value.trim() || null;
+      payload.kondisi = $('#unitKondisi').value.trim() || null;
+      payload.kendaraan_asal = $('#unitKendaraanAsal').value.trim() || null;
     }
 
     const button = $('#btnAddUnit');
@@ -1319,10 +1385,11 @@
       renderUnits();
       selectUnit(unit.id);
       resetUnitForm();
+      const display = unitDisplay(unit);
       toast(
-        unit.unit_type === 'RADIATOR_ONLY'
-          ? 'Unit radiator tersimpan. Label dibuat saat transaksi pertama.'
-          : 'Unit mobil ' + unit.nopol + ' tersimpan.',
+        complete
+          ? display.label + ' ' + display.title + ' tersimpan.'
+          : display.tag + ' tersimpan. Label dibuat saat transaksi pertama.',
         'success',
         5000
       );
@@ -1385,31 +1452,26 @@
   }
 
   function customerUnitHtml(unit) {
-    const isCar = unit.unit_type === 'MOBIL';
-    const title = isCar
-      ? unit.nopol || '-'
-      : unit.label_radiator || 'Belum berlabel';
-    const subtitle = isCar
-      ? [unit.jenis_mobil, unit.tahun_mobil].filter(Boolean).join(' · ') ||
-        'Mobil lengkap'
-      : unit.tipe_radiator || 'Radiator copotan';
+    const display = unitDisplay(unit);
     return (
       '<div class="customer-unit">' +
       '<span class="unit-icon">' +
-      (isCar ? 'MOBIL' : 'RAD') +
+      esc(display.icon) +
       '</span>' +
       '<span class="customer-unit-info">' +
       '<span class="customer-unit-title">' +
-      esc(title) +
+      esc(display.title) +
       '</span>' +
       '<span class="customer-unit-sub">' +
-      esc(subtitle) +
+      esc(display.subtitle) +
       '</span>' +
       '</span>' +
       '<span class="unit-tag' +
-      (isCar ? '' : ' radiator') +
+      (display.type === 'MOBIL' || display.type === 'MOTOR_LENGKAP'
+        ? ''
+        : ' radiator') +
       '">' +
-      (isCar ? 'Mobil' : 'Radiator') +
+      esc(display.tag) +
       '</span>' +
       '</div>'
     );
@@ -1421,6 +1483,23 @@
     if (customer.total_mobil) {
       unitCounts.push(
         '<span class="unit-count">' + customer.total_mobil + ' mobil</span>'
+      );
+    }
+    if (customer.total_motor) {
+      unitCounts.push(
+        '<span class="unit-count">' + customer.total_motor + ' motor</span>'
+      );
+    }
+    if (customer.total_part_mobil) {
+      unitCounts.push(
+        '<span class="unit-count radiator">' +
+          customer.total_part_mobil + ' part mobil</span>'
+      );
+    }
+    if (customer.total_part_motor) {
+      unitCounts.push(
+        '<span class="unit-count radiator">' +
+          customer.total_part_motor + ' part motor</span>'
       );
     }
     if (customer.total_radiator) {
@@ -1499,16 +1578,21 @@
       function (acc, customer) {
         acc.units += Number(customer.total_unit) || 0;
         acc.mobil += Number(customer.total_mobil) || 0;
+        acc.motor += Number(customer.total_motor) || 0;
+        acc.partMobil += Number(customer.total_part_mobil) || 0;
+        acc.partMotor += Number(customer.total_part_motor) || 0;
         acc.radiator += Number(customer.total_radiator) || 0;
         return acc;
       },
-      { units: 0, mobil: 0, radiator: 0 }
+      { units: 0, mobil: 0, motor: 0, partMobil: 0, partMotor: 0, radiator: 0 }
     );
 
     $('#customerStatTotal').textContent = customers.length;
     $('#customerStatUnits').textContent = totals.units;
     $('#customerStatMobil').textContent = totals.mobil;
-    $('#customerStatRadiator').textContent = totals.radiator;
+    $('#customerStatMotor').textContent = totals.motor;
+    $('#customerStatRadiator').textContent =
+      totals.partMobil + totals.partMotor + totals.radiator;
     $('#customerStatWarranty').textContent = (
       state.customerWarrantyRecords || []
     ).length;
@@ -1558,12 +1642,23 @@
         empty: 'Belum ada unit mobil terdaftar.',
         head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
       },
-      radiator: {
-        title: 'Radiator copotan',
+      motor: {
+        title: 'Unit motor',
         subtitle:
-          units.filter((row) => row.unit.unit_type === 'RADIATOR_ONLY').length +
-          ' radiator terdaftar',
-        empty: 'Belum ada radiator terdaftar.',
+          units.filter((row) => row.unit.unit_type === 'MOTOR_LENGKAP').length +
+          ' unit motor terdaftar',
+        empty: 'Belum ada unit motor terdaftar.',
+        head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
+      },
+      radiator: {
+        title: 'Part terdaftar',
+        subtitle:
+          units.filter((row) =>
+            ['PART_MOBIL', 'PART_MOTOR', 'RADIATOR_ONLY'].includes(
+              row.unit.unit_type
+            )
+          ).length + ' part terdaftar',
+        empty: 'Belum ada part terdaftar.',
         head: '<tr><th>Pelanggan</th><th>Unit</th><th>Jenis</th></tr>',
       },
     }[kind];
@@ -1583,19 +1678,27 @@
     } else {
       const filtered = units.filter((row) => {
         if (kind === 'mobil') return row.unit.unit_type === 'MOBIL';
-        if (kind === 'radiator') return row.unit.unit_type === 'RADIATOR_ONLY';
+        if (kind === 'motor') return row.unit.unit_type === 'MOTOR_LENGKAP';
+        if (kind === 'radiator')
+          return ['PART_MOBIL', 'PART_MOTOR', 'RADIATOR_ONLY'].includes(
+            row.unit.unit_type
+          );
         return true;
       });
       rows = filtered.map((row) => {
-        const isCar = row.unit.unit_type === 'MOBIL';
+        const display = unitDisplay(row.unit);
         return (
           '<tr>' +
           '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
           row.customer.id + '">' + esc(row.customer.nama) + '</button>' +
           '<span class="cell-sub">' + esc(row.customer.nomor_hp || '-') + '</span></td>' +
           '<td>' + esc(describeUnit(row.unit)) + '</td>' +
-          '<td><span class="unit-tag' + (isCar ? '' : ' radiator') + '">' +
-          (isCar ? 'Mobil' : 'Radiator') + '</span></td>' +
+          '<td><span class="unit-tag' +
+          (display.type === 'MOBIL' || display.type === 'MOTOR_LENGKAP'
+            ? ''
+            : ' radiator') +
+          '">' +
+          esc(display.tag) + '</span></td>' +
           '</tr>'
         );
       });
@@ -1810,6 +1913,250 @@
     $('#partStockHint').textContent = 'Stok gudang berkurang otomatis.';
     $('#partIntervalHint').classList.add('hidden');
     renderItems();
+  }
+
+  /* ------------------------------ Scanner HID ----------------------------- */
+  const SCAN_MIN_LENGTH = 2;
+  const SCAN_MAX_LENGTH = 128;
+  const SCAN_VALID_CHARS = /^[\x20-\x7E]+$/;
+  let scanAudioContext = null;
+
+  function normalizeScanCode(raw) {
+    const code = String(raw || '').trim();
+    if (!code) return { ok: false, message: 'Kode kosong.' };
+    if (code.length < SCAN_MIN_LENGTH) {
+      return { ok: false, message: 'Kode terlalu pendek.' };
+    }
+    if (code.length > SCAN_MAX_LENGTH) {
+      return { ok: false, message: 'Kode terlalu panjang.' };
+    }
+    if (!SCAN_VALID_CHARS.test(code)) {
+      return { ok: false, message: 'Kode berisi karakter tidak valid.' };
+    }
+    return { ok: true, code: code };
+  }
+
+  function scanBeep(success, enabled) {
+    if (enabled === false) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      scanAudioContext = scanAudioContext || new Ctx();
+      const now = scanAudioContext.currentTime;
+      const osc = scanAudioContext.createOscillator();
+      const gain = scanAudioContext.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = success ? 880 : 320;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      osc.connect(gain);
+      gain.connect(scanAudioContext.destination);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    } catch (err) {
+      // Audio tidak wajib; abaikan bila browser memblokir.
+    }
+  }
+
+  function findStockByCode(code) {
+    const needle = String(code || '').trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      state.stock.find((item) => {
+        if (String(item.kode || '').toLowerCase() === needle) return true;
+        return (item.barcodes || []).some(
+          (barcode) => String(barcode).toLowerCase() === needle
+        );
+      }) || null
+    );
+  }
+
+  function showPosScanHint(text) {
+    const hint = $('#posScanHint');
+    if (!hint) return;
+    hint.textContent = text;
+    hint.classList.remove('hidden');
+  }
+
+  function setPosScanMode(enabled) {
+    state.posScanMode = !!enabled;
+    const button = $('#btnPosScanMode');
+    if (button) {
+      button.textContent = 'Mode scan: ' + (state.posScanMode ? 'aktif' : 'nonaktif');
+      button.setAttribute('aria-pressed', state.posScanMode ? 'true' : 'false');
+    }
+  }
+
+  function addScannedPart(stock) {
+    const existingIndex = state.parts.findIndex(
+      (part) => part.stock_item_id === stock.id
+    );
+    if (existingIndex >= 0) {
+      const existing = state.parts[existingIndex];
+      if (
+        !window.confirm(
+          'Barang "' +
+            stock.nama +
+            '" sudah ada di nota. Tambah qty sebanyak 1?'
+        )
+      ) {
+        showPosScanHint('Scan dibatalkan: barang sudah ada di nota.');
+        return;
+      }
+      existing.jumlah = Math.max(1, intValue(existing.jumlah, 1)) + 1;
+      invalidateNotaReview();
+      renderItems();
+      scanBeep(true, state.posScanMode);
+      toast('Qty ' + stock.nama + ' menjadi ' + existing.jumlah + '.', 'success');
+    } else {
+      state.parts.push({
+        stock_item_id: stock.id,
+        nama_part: stock.nama,
+        jumlah: 1,
+        harga_satuan: String(Math.round(Number(stock.harga_jual) || 0)),
+        harga_modal: null,
+        interval_servis_bulan:
+          state.posMode === 'PART'
+            ? 0
+            : clampInterval(stock.interval_servis_bulan),
+      });
+      invalidateNotaReview();
+      renderItems();
+      scanBeep(true, state.posScanMode);
+      toast('Ditambahkan: ' + stock.nama, 'success', 2500);
+    }
+    showPosScanHint(
+      'Kode ' +
+        (stock.kode || (stock.barcodes || [])[0] || '-') +
+        ' · ' +
+        stock.nama +
+        ' · stok ' +
+        stock.jumlah
+    );
+    $('#btnPosScanNew').classList.add('hidden');
+    state.pendingScanCode = '';
+  }
+
+  function handlePosScan() {
+    const input = $('#posScanInput');
+    if (!input) return;
+    const result = normalizeScanCode(input.value);
+    if (!result.ok) {
+      scanBeep(false, state.posScanMode);
+      showPosScanHint(result.message);
+      input.select();
+      return;
+    }
+    const stock = findStockByCode(result.code);
+    if (!stock) {
+      state.pendingScanCode = result.code;
+      scanBeep(false, state.posScanMode);
+      showPosScanHint(
+        'Kode "' +
+          result.code +
+          '" tidak dikenal. Cari manual lewat daftar sparepart atau tambahkan barang baru.'
+      );
+      $('#btnPosScanNew').classList.remove('hidden');
+      input.select();
+      return;
+    }
+    if (intValue(stock.jumlah, 0) <= 0) {
+      toast('Stok ' + stock.nama + ' habis. Barang tetap bisa ditambahkan.', 'warning');
+    }
+    addScannedPart(stock);
+    input.value = '';
+    input.focus();
+  }
+
+  function handlePosScanNew() {
+    const code = state.pendingScanCode;
+    openStockModal(null, code);
+    state.pendingScanCode = '';
+    $('#btnPosScanNew').classList.add('hidden');
+  }
+
+  function showStockScanResult(stock, code) {
+    const hint = $('#stockScanHint');
+    if (!hint) return;
+    hint.innerHTML =
+      'Ditemukan: <strong>' +
+      esc(stock.nama) +
+      '</strong> · stok ' +
+      intValue(stock.jumlah, 0) +
+      ' · kode ' +
+      esc(code);
+    hint.classList.remove('hidden');
+    $('#btnStockScanNew').classList.add('hidden');
+    const row = document.querySelector(
+      '#stockBody [data-stock-id="' + stock.id + '"]'
+    );
+    if (row) {
+      row.classList.remove('scan-flash');
+      void row.offsetWidth;
+      row.classList.add('scan-flash');
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => row.classList.remove('scan-flash'), 1200);
+    }
+  }
+
+  async function handleStockScan() {
+    const input = $('#stockScanInput');
+    if (!input) return;
+    const result = normalizeScanCode(input.value);
+    const hint = $('#stockScanHint');
+    if (!result.ok) {
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent = result.message;
+        hint.classList.remove('hidden');
+      }
+      input.select();
+      return;
+    }
+
+    const local = findStockByCode(result.code);
+    if (local) {
+      showStockScanResult(local, result.code);
+      scanBeep(true, state.stockScanMode);
+      input.value = '';
+      input.focus();
+      return;
+    }
+
+    try {
+      const found = await API.lookupStock(result.code);
+      const existingIndex = state.stock.findIndex((item) => item.id === found.id);
+      if (existingIndex >= 0) state.stock[existingIndex] = found;
+      else state.stock = [found].concat(state.stock);
+      renderStock();
+      showStockScanResult(found, result.code);
+      scanBeep(true, state.stockScanMode);
+      input.value = '';
+      input.focus();
+    } catch (err) {
+      state.pendingStockCode = result.code;
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent =
+          'Kode "' +
+          result.code +
+          '" tidak dikenal. Tambahkan barang baru dengan kode ini.';
+        hint.classList.remove('hidden');
+      }
+      $('#btnStockScanNew').classList.remove('hidden');
+      input.select();
+    }
+  }
+
+  function setStockScanMode(enabled) {
+    state.stockScanMode = !!enabled;
+    const button = $('#btnStockScanMode');
+    if (button) {
+      button.textContent =
+        'Mode scan: ' + (state.stockScanMode ? 'aktif' : 'nonaktif');
+      button.setAttribute('aria-pressed', state.stockScanMode ? 'true' : 'false');
+    }
   }
 
   function renderItems() {
@@ -5660,8 +6007,11 @@
     const units = customer.units || [];
     const unitsHtml = units.length
       ? units
-          .map(
-            (unit) =>
+          .map((unit) => {
+            const display = unitDisplay(unit);
+            const complete =
+              display.type === 'MOBIL' || display.type === 'MOTOR_LENGKAP';
+            return (
               '<div class="detail-unit"><div><strong>' +
               esc(describeUnit(unit)) +
               '</strong>' +
@@ -5669,11 +6019,12 @@
                 ? '<span class="muted">' + esc(unit.keterangan) + '</span>'
                 : '') +
               '</div><span class="badge ' +
-              (unit.unit_type === 'MOBIL' ? 'blue' : 'gray') +
+              (complete ? 'blue' : 'gray') +
               '">' +
-              (unit.unit_type === 'MOBIL' ? 'Mobil' : 'Radiator') +
+              esc(display.tag) +
               '</span></div>'
-          )
+            );
+          })
           .join('')
       : '<div class="empty-state">Belum ada unit terdaftar.</div>';
 
@@ -7899,6 +8250,7 @@
       action === 'customer-stat-customers' ||
       action === 'customer-stat-units' ||
       action === 'customer-stat-mobil' ||
+      action === 'customer-stat-motor' ||
       action === 'customer-stat-radiator'
     ) {
       openCustomerStatList(action.replace('customer-stat-', ''));
@@ -8253,10 +8605,18 @@
               ? String(minimum)
               : 'Nonaktif';
         return (
-          '<tr>' +
+          '<tr data-stock-id="' +
+          item.id +
+          '">' +
           '<td><span class="cell-sub">' +
           esc(item.kode || '-') +
-          '</span></td>' +
+          '</span>' +
+          ((item.barcodes || []).length
+            ? '<span class="cell-sub">' +
+              esc(item.barcodes.join(', ')) +
+              '</span>'
+            : '') +
+          '</td>' +
           '<td><span class="cell-primary">' +
           esc(item.nama) +
           '</span></td>' +
@@ -8347,11 +8707,12 @@
     $('#jasaEmpty').classList.toggle('hidden', state.jasa.length > 0);
   }
 
-  function openStockModal(item) {
+  function openStockModal(item, prefillCode) {
     state.editingStock = item || null;
     $('#stockModalTitle').textContent = item ? 'Edit sparepart' : 'Tambah sparepart';
     $('#stockId').value = item ? item.id : '';
-    $('#stockKode').value = item ? item.kode || '' : '';
+    $('#stockKode').value = item ? item.kode || '' : prefillCode || '';
+    $('#stockBarcodes').value = item ? (item.barcodes || []).join(', ') : '';
     $('#stockNama').value = item ? item.nama : '';
     setMoneyValue(
       $('#stockModalHarga'),
@@ -8381,6 +8742,10 @@
     event.preventDefault();
     const id = intValue($('#stockId').value, 0);
     const minimumRaw = $('#stockMinimum').value.trim();
+    const barcodes = $('#stockBarcodes').value
+      .split(/[\n,;]+/)
+      .map((code) => code.trim())
+      .filter(Boolean);
     const payload = {
       kode: $('#stockKode').value.trim() || null,
       nama: $('#stockNama').value.trim(),
@@ -8390,6 +8755,7 @@
       interval_servis_bulan: clampInterval($('#stockIntervalInput').value),
       stok_minimum:
         minimumRaw === '' ? null : Math.max(0, intValue(minimumRaw, 0)),
+      barcodes: barcodes,
       supplier_ids:
         state.config && state.config.ops && state.config.ops.supplier_aktif === false
           ? undefined
@@ -8421,6 +8787,303 @@
       await loadStock();
     } catch (err) {
       toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function resolveStockByCode(code) {
+    const local = findStockByCode(code);
+    if (local) return local;
+    try {
+      const found = await API.lookupStock(code);
+      const index = state.stock.findIndex((item) => item.id === found.id);
+      if (index >= 0) state.stock[index] = found;
+      else state.stock = [found].concat(state.stock);
+      renderStock();
+      return found;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /* ----------------------------- Stok masuk -------------------------------- */
+  function renderStockInSelected() {
+    const box = $('#stockInSelected');
+    if (!box) return;
+    const item = state.stockInItem;
+    if (!item) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+    box.innerHTML =
+      '<div><strong>' +
+      esc(item.nama) +
+      '</strong><span>' +
+      esc(item.kode || (item.barcodes || [])[0] || '-') +
+      ' · stok sekarang ' +
+      intValue(item.jumlah, 0) +
+      '</span></div>';
+    box.classList.remove('hidden');
+  }
+
+  function setStockInItem(item) {
+    state.stockInItem = item || null;
+    $('#stockInItemId').value = item ? item.id : '';
+    renderStockInSelected();
+    const button = $('#btnStockInNew');
+    if (button) button.classList.add('hidden');
+  }
+
+  function openStockInModal(prefillCode) {
+    setStockInItem(null);
+    $('#stockInScan').value = prefillCode || '';
+    $('#stockInJumlah').value = '';
+    $('#stockInAlasan').value = '';
+    const hint = $('#stockInScanHint');
+    if (hint) hint.classList.add('hidden');
+    openModal('#stockInModal');
+    setTimeout(() => {
+      if (prefillCode) handleStockInScan();
+      else $('#stockInScan').focus();
+    }, 60);
+  }
+
+  async function handleStockInScan() {
+    const input = $('#stockInScan');
+    if (!input) return;
+    const result = normalizeScanCode(input.value);
+    const hint = $('#stockInScanHint');
+    if (!result.ok) {
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent = result.message;
+        hint.classList.remove('hidden');
+      }
+      input.select();
+      return;
+    }
+    const item = await resolveStockByCode(result.code);
+    if (!item) {
+      state.pendingStockCode = result.code;
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent =
+          'Kode "' +
+          result.code +
+          '" tidak dikenal. Tambahkan barang baru dengan kode ini.';
+        hint.classList.remove('hidden');
+      }
+      $('#btnStockInNew').classList.remove('hidden');
+      input.select();
+      return;
+    }
+    setStockInItem(item);
+    scanBeep(true, state.stockScanMode);
+    if (hint) {
+      hint.textContent = 'Barang ditemukan. Isi jumlah yang masuk.';
+      hint.classList.remove('hidden');
+    }
+    input.value = '';
+    $('#stockInJumlah').focus();
+  }
+
+  async function handleStockInSubmit(event) {
+    event.preventDefault();
+    const item = state.stockInItem;
+    if (!item) {
+      toast('Scan atau cari barang terlebih dahulu.', 'warning');
+      $('#stockInScan').focus();
+      return;
+    }
+    const jumlah = intValue($('#stockInJumlah').value, 0);
+    if (jumlah < 1) {
+      toast('Jumlah masuk minimal 1.', 'warning');
+      $('#stockInJumlah').focus();
+      return;
+    }
+    const button = $('#stockInForm button[type="submit"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.addStockIn(item.id, {
+        jumlah: jumlah,
+        alasan: $('#stockInAlasan').value.trim() || null,
+      });
+      closeModal('#stockInModal');
+      toast('Stok ' + item.nama + ' bertambah ' + jumlah + '.', 'success');
+      await loadStock();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  function handleStockInNew() {
+    const code = state.pendingStockCode;
+    closeModal('#stockInModal');
+    openStockModal(null, code);
+    state.pendingStockCode = '';
+  }
+
+  /* ----------------------------- Stok opname ------------------------------- */
+  function renderOpnameItems() {
+    const body = $('#stockOpnameBody');
+    if (!body) return;
+    body.innerHTML = state.opnameItems
+      .map(
+        (row, index) =>
+          '<tr>' +
+          '<td><span class="cell-primary">' +
+          esc(row.nama) +
+          '</span>' +
+          (row.kode
+            ? '<span class="cell-sub">' + esc(row.kode) + '</span>'
+            : '') +
+          '</td>' +
+          '<td class="text-center">' +
+          row.stok +
+          '</td>' +
+          '<td class="text-center"><input type="number" min="0" step="1" inputmode="numeric" class="input qty-input" data-opname-index="' +
+          index +
+          '" value="' +
+          esc(row.jumlah) +
+          '"></td>' +
+          '<td class="text-right"><button type="button" class="icon-btn danger" data-remove-opname="' +
+          index +
+          '" aria-label="Hapus barang">&times;</button></td>' +
+          '</tr>'
+      )
+      .join('');
+    $('#stockOpnameEmpty').classList.toggle(
+      'hidden',
+      state.opnameItems.length > 0
+    );
+  }
+
+  function openStockOpnameModal(prefillCode) {
+    state.opnameItems = [];
+    $('#stockOpnameScan').value = prefillCode || '';
+    $('#stockOpnameAlasan').value = '';
+    const hint = $('#stockOpnameScanHint');
+    if (hint) hint.classList.add('hidden');
+    renderOpnameItems();
+    openModal('#stockOpnameModal');
+    setTimeout(() => {
+      if (prefillCode) handleStockOpnameScan();
+      else $('#stockOpnameScan').focus();
+    }, 60);
+  }
+
+  function addOpnameItem(item) {
+    const existingIndex = state.opnameItems.findIndex(
+      (row) => row.stock_item_id === item.id
+    );
+    if (existingIndex >= 0) {
+      if (
+        !window.confirm(
+          'Barang "' +
+            item.nama +
+            '" sudah ada di daftar opname. Perbarui hasil hitungnya?'
+        )
+      ) {
+        return;
+      }
+      const input = document.querySelector(
+        '[data-opname-index="' + existingIndex + '"]'
+      );
+      if (input) {
+        input.focus();
+        input.select();
+      }
+      return;
+    }
+    state.opnameItems.push({
+      stock_item_id: item.id,
+      nama: item.nama,
+      kode: item.kode || (item.barcodes || [])[0] || '',
+      stok: intValue(item.jumlah, 0),
+      jumlah: intValue(item.jumlah, 0),
+    });
+    renderOpnameItems();
+    const input = document.querySelector(
+      '[data-opname-index="' + (state.opnameItems.length - 1) + '"]'
+    );
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  async function handleStockOpnameScan() {
+    const input = $('#stockOpnameScan');
+    if (!input) return;
+    const result = normalizeScanCode(input.value);
+    const hint = $('#stockOpnameScanHint');
+    if (!result.ok) {
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent = result.message;
+        hint.classList.remove('hidden');
+      }
+      input.select();
+      return;
+    }
+    const item = await resolveStockByCode(result.code);
+    if (!item) {
+      state.pendingStockCode = result.code;
+      scanBeep(false, state.stockScanMode);
+      if (hint) {
+        hint.textContent =
+          'Kode "' +
+          result.code +
+          '" tidak dikenal. Tambahkan barang baru dengan kode ini.';
+        hint.classList.remove('hidden');
+      }
+      $('#btnStockOpnameNew').classList.remove('hidden');
+      input.select();
+      return;
+    }
+    addOpnameItem(item);
+    scanBeep(true, state.stockScanMode);
+    if (hint) {
+      hint.textContent = 'Ditambahkan: ' + item.nama + '. Isi hasil hitung.';
+      hint.classList.remove('hidden');
+    }
+    input.value = '';
+  }
+
+  function handleStockOpnameNew() {
+    const code = state.pendingStockCode;
+    closeModal('#stockOpnameModal');
+    openStockModal(null, code);
+    state.pendingStockCode = '';
+  }
+
+  async function handleStockOpnameSubmit(event) {
+    event.preventDefault();
+    if (!state.opnameItems.length) {
+      toast('Scan minimal satu barang untuk opname.', 'warning');
+      $('#stockOpnameScan').focus();
+      return;
+    }
+    const items = state.opnameItems.map((row) => ({
+      stock_item_id: row.stock_item_id,
+      jumlah: Math.max(0, intValue(row.jumlah, 0)),
+    }));
+    const button = $('#stockOpnameForm button[type="submit"]');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.opnameStock({
+        items: items,
+        alasan: $('#stockOpnameAlasan').value.trim() || null,
+      });
+      closeModal('#stockOpnameModal');
+      toast('Stok opname tersimpan.', 'success');
+      await loadStock();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    } finally {
+      setBusy(button, false);
     }
   }
 
@@ -8585,6 +9248,49 @@
       .join('');
   }
 
+  function renderPartGroups(report, periodLabel) {
+    const groups =
+      report && Array.isArray(report.groups) ? report.groups : [];
+    if (!groups.length) {
+      $('#partGroupsBody').innerHTML = '';
+      $('#partGroupsEmpty')?.classList.remove('hidden');
+      $('#partGroupsNote').textContent =
+        periodLabel + ' · belum ada part terjual pada periode ini.';
+      return;
+    }
+    $('#partGroupsEmpty')?.classList.add('hidden');
+    $('#partGroupsNote').textContent =
+      periodLabel +
+      ' · ' +
+      groups.length +
+      ' kelompok · ' +
+      intValue(report.total_qty, 0) +
+      ' unit · total ' +
+      fmtRp(report.total_nilai);
+    $('#partGroupsBody').innerHTML = groups
+      .map(
+        (group) =>
+          '<tr>' +
+          '<td><span class="cell-primary">' +
+          esc(group.kelompok || '-') +
+          '</span></td>' +
+          '<td class="text-center">' +
+          intValue(group.jumlah_item, 0) +
+          '</td>' +
+          '<td class="text-center">' +
+          intValue(group.total_qty, 0) +
+          '</td>' +
+          '<td class="text-right money">' +
+          fmtRp(group.total_nilai) +
+          '</td>' +
+          '<td><span class="cell-sub">' +
+          esc((group.contoh_barang || []).join(', ') || '-') +
+          '</span></td>' +
+          '</tr>'
+      )
+      .join('');
+  }
+
   let reportRequestId = 0;
 
   function setEmployeeTab(tab) {
@@ -8623,6 +9329,10 @@
       state.reportTab !== 'period'
     );
     $('#reportPanelSold').classList.toggle('hidden', state.reportTab !== 'sold');
+    $('#reportPanelGroups').classList.toggle(
+      'hidden',
+      state.reportTab !== 'groups'
+    );
   }
 
   async function loadReport() {
@@ -8634,6 +9344,7 @@
       : 'Hari ini';
     let endISO = todayISO();
     const soldRequest = period === 'all' ? API.soldParts() : null;
+    const groupsRequest = period === 'all' ? API.partGroups() : null;
     try {
       let data;
       let startISO;
@@ -8646,7 +9357,10 @@
         data = await API.period(startISO, endISO);
       }
 
-      const soldData = await (soldRequest || API.soldParts(startISO, endISO));
+      const [soldData, groupsData] = await Promise.all([
+        soldRequest || API.soldParts(startISO, endISO),
+        groupsRequest || API.partGroups(startISO, endISO),
+      ]);
       const rows = data.transaksi || [];
 
       if (requestId !== reportRequestId) return;
@@ -8722,6 +9436,7 @@
 
       renderPeriodRecap(data.harian, period, periodLabel);
       renderSoldParts(soldData, periodLabel);
+      renderPartGroups(groupsData, periodLabel);
     } catch (err) {
       if (requestId === reportRequestId) {
         toast('Laporan gagal dimuat. Coba lagi.', 'error', 6000);
@@ -11649,6 +12364,17 @@
     $('#partPicker').addEventListener('change', onPartPickerChange);
     $('#btnAddJob').addEventListener('click', addJob);
     $('#btnAddPart').addEventListener('click', addPart);
+    $('#posScanInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handlePosScan();
+      }
+    });
+    $('#btnPosScanMode').addEventListener('click', () =>
+      setPosScanMode(!state.posScanMode)
+    );
+    $('#btnPosScanNew').addEventListener('click', handlePosScanNew);
+    setPosScanMode(true);
     $('#btnSaveComplaint').addEventListener('click', saveComplaint);
 
     $$('input[name="metode"]').forEach((radio) =>
@@ -11879,6 +12605,73 @@
     );
     $('#btnAddStock').addEventListener('click', () => openStockModal(null));
     $('#btnAddJasa').addEventListener('click', () => openJasaModal(null));
+
+    $('#stockScanInput').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleStockScan();
+      }
+    });
+    $('#btnStockScanManual').addEventListener('click', handleStockScan);
+    $('#btnStockScanMode').addEventListener('click', () =>
+      setStockScanMode(!state.stockScanMode)
+    );
+    $('#btnStockScanNew').addEventListener('click', () => {
+      const code = state.pendingStockCode;
+      state.pendingStockCode = '';
+      openStockModal(null, code);
+    });
+    setStockScanMode(true);
+
+    $('#btnStockIn').addEventListener('click', () => openStockInModal(''));
+    $('#btnStockOpname').addEventListener('click', () => openStockOpnameModal(''));
+    $('#stockInScan').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleStockInScan();
+      }
+    });
+    $('#btnStockInScan').addEventListener('click', handleStockInScan);
+    $('#btnStockInNew').addEventListener('click', handleStockInNew);
+    $('#stockInForm').addEventListener('submit', handleStockInSubmit);
+    $('#stockInClose').addEventListener('click', () =>
+      closeModal('#stockInModal')
+    );
+    $('#stockInCancel').addEventListener('click', () =>
+      closeModal('#stockInModal')
+    );
+
+    $('#stockOpnameScan').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleStockOpnameScan();
+      }
+    });
+    $('#btnStockOpnameScan').addEventListener('click', handleStockOpnameScan);
+    $('#btnStockOpnameNew').addEventListener('click', handleStockOpnameNew);
+    $('#stockOpnameForm').addEventListener('submit', handleStockOpnameSubmit);
+    $('#stockOpnameClose').addEventListener('click', () =>
+      closeModal('#stockOpnameModal')
+    );
+    $('#stockOpnameCancel').addEventListener('click', () =>
+      closeModal('#stockOpnameModal')
+    );
+    $('#stockOpnameBody').addEventListener('input', (event) => {
+      const input = event.target.closest('[data-opname-index]');
+      if (!input) return;
+      const index = intValue(input.dataset.opnameIndex, -1);
+      const row = state.opnameItems[index];
+      if (row) row.jumlah = input.value;
+    });
+    $('#stockOpnameBody').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-remove-opname]');
+      if (!button) return;
+      const index = intValue(button.dataset.removeOpname, -1);
+      if (index >= 0) {
+        state.opnameItems.splice(index, 1);
+        renderOpnameItems();
+      }
+    });
 
     $('#btnLoadReport').addEventListener('click', loadReport);
     $('#reportPeriod').addEventListener('change', loadReport);

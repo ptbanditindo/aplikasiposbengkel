@@ -14,7 +14,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth, require_owner
-from api.schemas import DailyReportOut, PeriodReportOut, SoldPartsReportOut
+from api.schemas import (
+    DailyReportOut,
+    PartGroupsReportOut,
+    PeriodReportOut,
+    SoldPartsReportOut,
+)
 from config import settings
 from database.session import SessionLocal, get_db
 from services import audit_service, backup_service, report_service
@@ -85,6 +90,32 @@ def sold_parts(
             )
     return SoldPartsReportOut.model_validate(
         report_service.sold_parts_report(db, start, end)
+    )
+
+
+@router.get("/reports/part-groups", response_model=PartGroupsReportOut)
+def part_groups(
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Pengelompokan part terjual dari kolom nama barang bebas."""
+    if (start is None) != (end is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Isi tanggal mulai dan akhir, atau kosongkan keduanya.",
+        )
+    if start is not None and end is not None:
+        if end < start:
+            raise HTTPException(
+                status_code=400, detail="Tanggal akhir sebelum tanggal mulai."
+            )
+        if end - start > timedelta(days=366):
+            raise HTTPException(
+                status_code=400, detail="Rentang laporan maksimal 366 hari."
+            )
+    return PartGroupsReportOut.model_validate(
+        report_service.part_groups_report(db, start, end)
     )
 
 

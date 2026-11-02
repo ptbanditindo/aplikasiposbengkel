@@ -125,11 +125,20 @@ class WaGateOut(CompatBase):
 
 class UnitCreate(CompatBase):
     customer_id: int = Field(..., gt=0)
-    unit_type: str = Field(..., **_pattern("^(MOBIL|RADIATOR_ONLY|SPAREPART)$"))
+    unit_type: str = Field(
+        ...,
+        **_pattern(
+            "^(MOBIL|MOTOR_LENGKAP|PART_MOBIL|PART_MOTOR|RADIATOR_ONLY|SPAREPART)$"
+        ),
+    )
     nopol: Optional[str] = Field(default=None, max_length=32)
     jenis_mobil: Optional[str] = Field(default=None, max_length=255)
     tahun_mobil: Optional[int] = Field(default=None, ge=1900, le=2100)
     tipe_radiator: Optional[str] = Field(default=None, max_length=255)
+    nama_barang: Optional[str] = Field(default=None, max_length=255)
+    nomor_seri: Optional[str] = Field(default=None, max_length=120)
+    kondisi: Optional[str] = Field(default=None, max_length=64)
+    kendaraan_asal: Optional[str] = Field(default=None, max_length=255)
     keterangan: Optional[str] = Field(default=None, max_length=1000)
 
 
@@ -142,6 +151,10 @@ class UnitOut(ORMModel):
     tahun_mobil: Optional[int] = None
     label_radiator: Optional[str] = None
     tipe_radiator: Optional[str] = None
+    nama_barang: Optional[str] = None
+    nomor_seri: Optional[str] = None
+    kondisi: Optional[str] = None
+    kendaraan_asal: Optional[str] = None
     keterangan: Optional[str] = None
     deskripsi: Optional[str] = None
     created_at: datetime
@@ -151,6 +164,9 @@ class CustomerOverviewOut(CustomerOut):
     total_unit: int
     total_mobil: int
     total_radiator: int
+    total_motor: int = 0
+    total_part_mobil: int = 0
+    total_part_motor: int = 0
     units: List[UnitOut]
 
 
@@ -456,6 +472,7 @@ class SupplierFollowupOut(CompatBase):
 # --- STOCK & JASA ---
 class StockItemCreate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
+    barcodes: Optional[List[str]] = None
     nama: str = Field(..., min_length=2, max_length=255)
     harga_modal: Decimal = Field(default=Decimal("0.00"), ge=0)
     harga_jual: Decimal = Field(default=Decimal("0.00"), ge=0)
@@ -467,6 +484,7 @@ class StockItemCreate(CompatBase):
 
 class StockItemUpdate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
+    barcodes: Optional[List[str]] = None
     nama: Optional[str] = Field(default=None, min_length=2, max_length=255)
     harga_modal: Optional[Decimal] = Field(default=None, ge=0)
     harga_jual: Optional[Decimal] = Field(default=None, ge=0)
@@ -480,12 +498,32 @@ class StockItemUpdate(CompatBase):
 class StockItemOut(ORMModel):
     id: int
     kode: Optional[str] = None
+    barcodes: List[str] = Field(default_factory=list)
     nama: str
     harga_modal: Money
     harga_jual: Money
     jumlah: int
     interval_servis_bulan: int = 0
     stok_minimum: Optional[int] = None
+
+
+class StockLookupOut(StockItemOut):
+    matched_code: str = ""
+
+
+class StockInIn(StrictBase):
+    jumlah: int = Field(..., ge=1, le=1000000)
+    alasan: Optional[str] = Field(default=None, max_length=255)
+
+
+class StockOpnameItemIn(StrictBase):
+    stock_item_id: int = Field(..., gt=0)
+    jumlah: int = Field(..., ge=0, le=1000000)
+
+
+class StockOpnameIn(StrictBase):
+    items: List[StockOpnameItemIn] = Field(default_factory=list)
+    alasan: Optional[str] = Field(default=None, max_length=255)
 
 
 class HargaJasaCreate(CompatBase):
@@ -1208,6 +1246,21 @@ class SoldPartsReportOut(CompatBase):
     total_qty: int
     total_nilai: Money
     items: List[SoldPartOut] = Field(default_factory=list)
+
+
+class PartGroupOut(CompatBase):
+    kelompok: str
+    jumlah_item: int
+    total_qty: int
+    total_nilai: Money
+    contoh_barang: List[str] = Field(default_factory=list)
+
+
+class PartGroupsReportOut(CompatBase):
+    total_kelompok: int
+    total_qty: int
+    total_nilai: Money
+    groups: List[PartGroupOut] = Field(default_factory=list)
 
 
 # --- KONFIGURASI PUBLIK ---

@@ -100,6 +100,15 @@ def customer_overview(
                 total_radiator=sum(
                     1 for unit in unit_items if unit.unit_type == "RADIATOR_ONLY"
                 ),
+                total_motor=sum(
+                    1 for unit in unit_items if unit.unit_type == "MOTOR_LENGKAP"
+                ),
+                total_part_mobil=sum(
+                    1 for unit in unit_items if unit.unit_type == "PART_MOBIL"
+                ),
+                total_part_motor=sum(
+                    1 for unit in unit_items if unit.unit_type == "PART_MOTOR"
+                ),
                 units=unit_items,
             )
         )
@@ -133,6 +142,10 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
         tahun_mobil=payload.tahun_mobil,
         tipe_radiator=payload.tipe_radiator,
         keterangan=payload.keterangan,
+        nama_barang=payload.nama_barang,
+        nomor_seri=payload.nomor_seri,
+        kondisi=payload.kondisi,
+        kendaraan_asal=payload.kendaraan_asal,
     )
     return _unit_out(unit)
 

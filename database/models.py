@@ -134,14 +134,23 @@ class VehicleOrUnit(Base):
     customer_id: Mapped[int] = mapped_column(
         ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    unit_type: Mapped[str] = mapped_column(String(32), nullable=False)  # MOBIL | RADIATOR_ONLY
+    # MOBIL | MOTOR_LENGKAP | PART_MOBIL | PART_MOTOR |
+    # RADIATOR_ONLY (legacy) | SPAREPART (unit walk-in internal)
+    unit_type: Mapped[str] = mapped_column(String(32), nullable=False)
     nopol: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    # Merek/model untuk unit lengkap; merek/ukuran untuk part.
     jenis_mobil: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     tahun_mobil: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     label_radiator: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, unique=True, index=True
     )
+    # Tipe/ukuran part. Nama kolom dipertahankan untuk data lama.
     tipe_radiator: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Field bebas khusus part: nama barang, nomor seri, kondisi, asal kendaraan.
+    nama_barang: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    nomor_seri: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    kondisi: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    kendaraan_asal: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     keterangan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Soft delete: unit disembunyikan dari pilihan, riwayat nota tetap ada.
     archived_at: Mapped[Optional[datetime]] = mapped_column(
@@ -179,6 +188,37 @@ class StockItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
+
+    barcode_rows: Mapped[List["StockBarcode"]] = relationship(
+        back_populates="stock_item",
+        cascade="all, delete-orphan",
+        order_by="StockBarcode.id",
+    )
+
+    @property
+    def barcodes(self) -> List[str]:
+        return [row.barcode for row in self.barcode_rows]
+
+
+class StockBarcode(Base):
+    """Alias barcode/QR untuk satu barang stok.
+
+    Satu nilai barcode hanya boleh menunjuk satu barang. `stock_items.kode`
+    tetap menjadi kode utama dan ikut dicari saat scan.
+    """
+
+    __tablename__ = "stock_barcodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stock_item_id: Mapped[int] = mapped_column(
+        ForeignKey("stock_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    barcode: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    stock_item: Mapped["StockItem"] = relationship(back_populates="barcode_rows")
 
 
 class HargaJasa(Base):

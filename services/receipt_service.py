@@ -57,20 +57,30 @@ def _duration_label(record: ServiceRecord) -> str:
 
 
 def _label_item_name(unit) -> str:
-    base = (unit.tipe_radiator or unit.jenis_mobil or "").strip()
+    base = (
+        getattr(unit, "nama_barang", None)
+        or unit.tipe_radiator
+        or unit.jenis_mobil
+        or ""
+    ).strip()
     if not base:
-        return "Radiator"
-    if "radiator" in base.lower():
-        return base
-    return f"Radiator {base}"
+        return "Part"
+    # Data radiator lama tetap memakai awalan Radiator agar label historis sama.
+    if unit.unit_type == "RADIATOR_ONLY" and "radiator" not in base.lower():
+        return f"Radiator {base}"
+    return base
 
 
 def _label_unit_text(unit) -> str:
-    if unit.unit_type == "MOBIL":
+    if unit.unit_type in {"MOBIL", "MOTOR_LENGKAP"}:
         text = unit.nopol or "-"
         if unit.jenis_mobil:
             text += f" ({unit.jenis_mobil})"
         return text
+    if unit.unit_type == "PART_MOTOR":
+        return "[PART MOTOR]"
+    if unit.unit_type == "PART_MOBIL":
+        return "[PART MOBIL]"
     return "[BAWA RADIATOR SAJA]"
 
 
@@ -81,8 +91,12 @@ def _labels(record: ServiceRecord) -> List[Dict[str, Any]]:
     dipakai agar beberapa strip dapat dicetak bila unit bertambah.
     """
     unit = record.unit
-    # Mobil utuh tidak memakai strip label, walau data label lama masih ada.
-    if not unit or unit.unit_type != "RADIATOR_ONLY" or not unit.label_radiator:
+    # Unit lengkap tidak memakai strip label, walau data label lama masih ada.
+    if (
+        not unit
+        or unit.unit_type not in {"PART_MOBIL", "PART_MOTOR", "RADIATOR_ONLY"}
+        or not unit.label_radiator
+    ):
         return []
     customer = unit.customer
     return [

@@ -1,6 +1,7 @@
 """Agregasi laporan kas harian & periode."""
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
@@ -402,4 +403,113 @@ def sold_parts_report(
         "total_qty": total_qty,
         "total_nilai": money(total_nilai),
         "items": items,
+    }
+
+
+# Kata kunci dipakai lebih dulu agar nama bebas seperti "Radiator Mitsubishi"
+# tetap masuk kelompok "Radiator", bukan kelompok merek.
+_PART_GROUP_KEYWORDS = (
+    "shockbreaker",
+    "radiator",
+    "intercooler",
+    "alternator",
+    "karburator",
+    "kampas",
+    "bearing",
+    "bushing",
+    "dinamo",
+    "starter",
+    "injector",
+    "filter",
+    "lampu",
+    "pompa",
+    "kabel",
+    "mesin",
+    "cakram",
+    "velg",
+    "belt",
+    "karet",
+    "klakson",
+    "bumper",
+    "fender",
+    "pintu",
+    "turbo",
+    "spion",
+    "kaca",
+    "busi",
+    "koil",
+    "ban",
+    "aki",
+    "oli",
+    "kap",
+)
+
+
+def _part_group_name(name: str | None) -> str:
+    text = (name or "").strip()
+    if not text:
+        return "Tanpa Nama"
+    lowered = text.lower()
+    for keyword in _PART_GROUP_KEYWORDS:
+        if keyword in lowered:
+            return keyword.title()
+    token = re.split(r"[\s/|,;+]+", text, maxsplit=1)[0].strip()
+    return (token or text)[:40]
+
+
+def part_groups_report(
+    db: Session, start_day: date | None = None, end_day: date | None = None
+) -> Dict[str, Any]:
+    """Kelompokkan part terjual berdasarkan isi kolom nama barang bebas."""
+    if start_day is not None and end_day is not None:
+        start = datetime.combine(start_day, time.min)
+        end = datetime.combine(end_day + timedelta(days=1), time.min)
+        records = record_repo.records_between(db, start, end)
+    else:
+        records = record_repo.all_records(db)
+
+    groups: Dict[str, Dict[str, Any]] = {}
+    total_qty = 0
+    total_nilai = Decimal("0.00")
+
+    for record in records:
+        if _is_void(record):
+            continue
+        for part in record.parts:
+            retur_qty = int(getattr(part, "jumlah_retur", 0) or 0)
+            net_qty = int(part.jumlah) - retur_qty
+            if net_qty <= 0:
+                continue
+            nama = (part.nama_part or "").strip() or "Tanpa Nama"
+            kelompok = _part_group_name(nama)
+            subtotal = money(part.harga_satuan * net_qty)
+            total_qty += net_qty
+            total_nilai += subtotal
+            entry = groups.get(kelompok)
+            if entry is None:
+                entry = {
+                    "kelompok": kelompok,
+                    "jumlah_item": 0,
+                    "total_qty": 0,
+                    "total_nilai": Decimal("0.00"),
+                    "contoh_barang": [],
+                }
+                groups[kelompok] = entry
+            entry["jumlah_item"] += 1
+            entry["total_qty"] += net_qty
+            entry["total_nilai"] += subtotal
+            if nama not in entry["contoh_barang"]:
+                if len(entry["contoh_barang"]) < 5:
+                    entry["contoh_barang"].append(nama)
+
+    hasil = list(groups.values())
+    for entry in hasil:
+        entry["total_nilai"] = money(entry["total_nilai"])
+    hasil.sort(key=lambda item: (-item["total_nilai"], item["kelompok"]))
+
+    return {
+        "total_kelompok": len(hasil),
+        "total_qty": total_qty,
+        "total_nilai": money(total_nilai),
+        "groups": hasil,
     }

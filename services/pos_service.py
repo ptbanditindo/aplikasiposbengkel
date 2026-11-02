@@ -153,8 +153,8 @@ def _create_transaction_locked(
                     "Transaksi harus memiliki minimal satu jasa atau sparepart."
                 )
 
-        # Nomor barang hanya untuk radiator copotan; mobil utuh tidak berlabel.
-        if unit.unit_type == "RADIATOR_ONLY":
+        # Nomor barang untuk unit part; unit lengkap tidak berlabel.
+        if unit.unit_type in {"PART_MOBIL", "PART_MOTOR", "RADIATOR_ONLY"}:
             customer_service.ensure_unit_label(db, unit, now.date())
 
         job_lines: List[Dict[str, Any]] = []
