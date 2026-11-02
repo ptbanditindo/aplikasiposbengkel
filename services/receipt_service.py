@@ -1,6 +1,7 @@
 """Penyusun data struk & ringkasan transaksi servis."""
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Dict, List
 
@@ -246,19 +247,54 @@ def _build(
 
     if flags["garansi"]:
         b.divider("-")
-        b.add("GARANSI SERVIS:", bold=True)
-        if _is_void(record):
-            b.kv("Status", "DIBATALKAN")
-        elif record.bergaransi and record.garansi_sampai:
-            b.kv("Status", "BERGARANSI")
-            b.kv(
-                "Sampai",
-                record.garansi_sampai.strftime("%d/%m/%Y") + _duration_label(record),
-            )
-            if record.catatan_garansi:
-                b.field("Catatan", record.catatan_garansi)
+        if record.sparepart_only:
+            b.add("GARANSI SPAREPART:", bold=True)
+            if _is_void(record):
+                b.kv("Status", "DIBATALKAN")
+            else:
+                has_tukar = bool(
+                    record.garansi_tukar_aktif and record.garansi_tukar_hari
+                )
+                has_barang = bool(
+                    record.garansi_barang_aktif
+                    and record.garansi_barang_sampai
+                )
+                if has_tukar:
+                    tukar_sampai = record.waktu_service.date() + timedelta(
+                        days=int(record.garansi_tukar_hari)
+                    )
+                    b.kv(
+                        "Garansi tukar",
+                        f"{int(record.garansi_tukar_hari)} hari"
+                        f" (sampai {tukar_sampai:%d/%m/%Y})",
+                    )
+                if has_barang:
+                    satuan = (record.garansi_barang_satuan or "HARI").lower()
+                    b.kv(
+                        "Garansi barang",
+                        f"{int(record.garansi_barang_nilai)} {satuan}",
+                    )
+                    b.kv(
+                        "Sampai",
+                        record.garansi_barang_sampai.strftime("%d/%m/%Y"),
+                    )
+                if not has_tukar and not has_barang:
+                    b.kv("Status", "TANPA GARANSI")
         else:
-            b.kv("Status", "TANPA GARANSI")
+            b.add("GARANSI SERVIS:", bold=True)
+            if _is_void(record):
+                b.kv("Status", "DIBATALKAN")
+            elif record.bergaransi and record.garansi_sampai:
+                b.kv("Status", "BERGARANSI")
+                b.kv(
+                    "Sampai",
+                    record.garansi_sampai.strftime("%d/%m/%Y")
+                    + _duration_label(record),
+                )
+                if record.catatan_garansi:
+                    b.field("Catatan", record.catatan_garansi)
+            else:
+                b.kv("Status", "TANPA GARANSI")
 
     if flags["rekening"]:
         b.divider("-")
@@ -386,6 +422,13 @@ def build_receipt_payload(
         "bergaransi": record.bergaransi,
         "garansi_sampai": record.garansi_sampai,
         "catatan_garansi": record.catatan_garansi,
+        "sparepart_only": bool(record.sparepart_only),
+        "garansi_tukar_aktif": bool(record.garansi_tukar_aktif),
+        "garansi_tukar_hari": int(record.garansi_tukar_hari or 0),
+        "garansi_barang_aktif": bool(record.garansi_barang_aktif),
+        "garansi_barang_nilai": int(record.garansi_barang_nilai or 0),
+        "garansi_barang_satuan": record.garansi_barang_satuan or "HARI",
+        "garansi_barang_sampai": record.garansi_barang_sampai,
         "status_klaim": record.status_klaim,
         "tanggal_klaim": record.tanggal_klaim,
         "garansi_aktif": warranty_service.is_active(record),
@@ -469,6 +512,13 @@ def record_summary(record: ServiceRecord) -> Dict[str, Any]:
         "bergaransi": record.bergaransi,
         "garansi_sampai": record.garansi_sampai,
         "catatan_garansi": record.catatan_garansi,
+        "sparepart_only": bool(record.sparepart_only),
+        "garansi_tukar_aktif": bool(record.garansi_tukar_aktif),
+        "garansi_tukar_hari": int(record.garansi_tukar_hari or 0),
+        "garansi_barang_aktif": bool(record.garansi_barang_aktif),
+        "garansi_barang_nilai": int(record.garansi_barang_nilai or 0),
+        "garansi_barang_satuan": record.garansi_barang_satuan or "HARI",
+        "garansi_barang_sampai": record.garansi_barang_sampai,
         "status_klaim": record.status_klaim,
         "tanggal_klaim": record.tanggal_klaim,
         "garansi_aktif": warranty_service.is_active(record),

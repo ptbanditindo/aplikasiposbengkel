@@ -3857,3 +3857,10 @@ a.btn { text-decoration: none; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
+
+/* Mode beli sparepart: interval servis tidak relevan. */
+#view-pos.pos-part-mode .items-block--part .items-table th:nth-child(5),
+#view-pos.pos-part-mode .items-block--part .items-table td:nth-child(5),
+#view-pos.pos-part-mode #partInterval {
+  display: none;
+}

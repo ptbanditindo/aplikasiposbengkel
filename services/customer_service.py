@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.models import Customer, VehicleOrUnit
@@ -14,7 +15,61 @@ from services.auth_service import Operator
 from services.errors import BusinessValidationError, NotFoundError
 from services.utils import clean_text, normalize_nopol, normalize_phone
 
-VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY"}
+VALID_UNIT_TYPES = {"MOBIL", "RADIATOR_ONLY", "SPAREPART"}
+WALKIN_CUSTOMER_NAME = "Pelanggan Umum"
+WALKIN_CUSTOMER_ADDRESS = "Pembelian sparepart"
+WALKIN_UNIT_TYPE = "SPAREPART"
+
+def is_walkin_customer(customer: Customer) -> bool:
+    return (
+        customer.nama == WALKIN_CUSTOMER_NAME
+        and (customer.alamat or "") == WALKIN_CUSTOMER_ADDRESS
+    )
+
+
+def get_or_create_walkin_unit(
+    db: Session, customer_id: Optional[int] = None
+) -> VehicleOrUnit:
+    """Unit netral untuk penjualan sparepart tanpa data kendaraan."""
+    customer: Optional[Customer] = None
+    if customer_id:
+        customer = db.get(Customer, int(customer_id))
+        if customer is None:
+            raise NotFoundError("Pelanggan tidak ditemukan.")
+    else:
+        customer = db.scalar(
+            select(Customer).where(
+                Customer.nama == WALKIN_CUSTOMER_NAME,
+                Customer.alamat == WALKIN_CUSTOMER_ADDRESS,
+            )
+        )
+        if customer is None:
+            customer = Customer(
+                nama=WALKIN_CUSTOMER_NAME,
+                nomor_hp="",
+                alamat=WALKIN_CUSTOMER_ADDRESS,
+            )
+            db.add(customer)
+            db.flush()
+
+    unit = db.scalar(
+        select(VehicleOrUnit)
+        .where(
+            VehicleOrUnit.customer_id == customer.id,
+            VehicleOrUnit.unit_type == WALKIN_UNIT_TYPE,
+            VehicleOrUnit.archived_at.is_(None),
+        )
+        .order_by(VehicleOrUnit.id.asc())
+    )
+    if unit is None:
+        unit = VehicleOrUnit(
+            customer_id=customer.id,
+            unit_type=WALKIN_UNIT_TYPE,
+            keterangan="Pembelian sparepart",
+        )
+        db.add(unit)
+        db.flush()
+    return unit
 
 
 def create_customer(
@@ -71,13 +126,22 @@ def search_customers(db: Session, query: str = "", limit: int = 20) -> List[Cust
 def list_customers_with_units(
     db: Session, query: str = "", limit: int = 100
 ) -> List[Customer]:
-    return repo.list_customers_with_units(db, query, limit)
+    customers = repo.list_customers_with_units(db, query, limit)
+    return [
+        customer
+        for customer in customers
+        if not is_walkin_customer(customer)
+    ]
 
 
 def list_units(db: Session, customer_id: int) -> List[VehicleOrUnit]:
     if repo.get_customer(db, customer_id) is None:
         raise NotFoundError("Pelanggan tidak ditemukan.")
-    return repo.list_units(db, customer_id)
+    return [
+        unit
+        for unit in repo.list_units(db, customer_id)
+        if unit.unit_type != WALKIN_UNIT_TYPE
+    ]
 
 
 def _next_radiator_label(db: Session, today: date) -> str:
@@ -128,6 +192,26 @@ def create_unit(
     clean_tipe = clean_text(tipe_radiator, max_length=255, allow_newlines=False) or None
     clean_ket = clean_text(keterangan, max_length=1000) or None
 
+    if normalized_type == "SPAREPART":
+        with db.begin():
+            begin_immediate(db)
+            if repo.get_customer(db, customer_id) is None:
+                raise NotFoundError("Pelanggan tidak ditemukan.")
+            unit = VehicleOrUnit(
+                customer_id=customer_id,
+                unit_type="SPAREPART",
+                nopol=None,
+                jenis_mobil=None,
+                tahun_mobil=None,
+                label_radiator=None,
+                tipe_radiator=None,
+                keterangan=clean_ket or "Pembelian sparepart",
+            )
+            db.add(unit)
+            db.flush()
+        db.refresh(unit)
+        return unit
+
     if normalized_type == "MOBIL":
         normalized_nopol = normalize_nopol(nopol)
         if not normalized_nopol:
@@ -177,6 +261,8 @@ def create_unit(
 
 def describe_unit(unit: VehicleOrUnit) -> str:
     """Deskripsi unit untuk struk / riwayat."""
+    if unit.unit_type == "SPAREPART":
+        return unit.keterangan or "Pembelian sparepart"
     if unit.unit_type == "MOBIL":
         text = unit.nopol or "-"
         if unit.jenis_mobil:

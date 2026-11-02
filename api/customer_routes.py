@@ -77,7 +77,11 @@ def customer_overview(
     result = []
     for customer in customers:
         units = sorted(
-            (unit for unit in customer.units if unit.archived_at is None),
+            (
+                unit
+                for unit in customer.units
+                if unit.archived_at is None and unit.unit_type != "SPAREPART"
+            ),
             key=lambda unit: (unit.created_at, unit.id),
             reverse=True,
         )

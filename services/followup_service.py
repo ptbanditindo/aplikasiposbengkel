@@ -181,6 +181,8 @@ def _collect_sources(
     for record in records:
         if record.id in open_record_ids:
             continue
+        if record.unit is not None and record.unit.unit_type == "SPAREPART":
+            continue
         by_unit.setdefault(record.unit_id, []).append(record)
 
     existing_rows = list(
@@ -221,6 +223,8 @@ def _collect_sources(
         if not unit_records:
             continue
         latest = unit_records[0]
+        is_sparepart_unit = latest.unit.unit_type == "SPAREPART"
+        lifecycle_records = [] if is_sparepart_unit else unit_records
         reference = reference_day(latest)
         lifecycle_key = "lifecycle:unit:" + str(unit_id)
         existing = existing_by_key.get(lifecycle_key)
@@ -234,7 +238,7 @@ def _collect_sources(
         warranty_record = next(
             (
                 record
-                for record in unit_records
+                for record in lifecycle_records
                 if record.bergaransi
                 and record.garansi_sampai is not None
                 and record.garansi_sampai
@@ -320,7 +324,7 @@ def _collect_sources(
                                 }
                             ],
                         )
-        else:
+        elif lifecycle_records:
             milestones = [int(ops["prospek_hari_1"]), int(ops["prospek_hari_3"])]
             if stage < len(milestones):
                 due = reference + timedelta(days=milestones[stage])
@@ -357,7 +361,7 @@ def _collect_sources(
 
         seen_rows: set = set()
         servis_rows: Dict[str, Dict[str, Any]] = {}
-        for record in unit_records:
+        for record in lifecycle_records:
             if _fully_returned(record):
                 continue
             servis_day = reference_day(record)

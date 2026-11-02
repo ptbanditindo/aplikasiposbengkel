@@ -17,7 +17,7 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 37
 
 
 def get_user_version(conn) -> int:
@@ -1084,6 +1084,78 @@ def _migrate_035_salary_bonus_note(cursor: Cursor) -> None:
     )
 
 
+def _migrate_036_sparepart_warranty(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "service_records",
+        "sparepart_only",
+        "sparepart_only BOOLEAN NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_tukar_aktif",
+        "garansi_tukar_aktif BOOLEAN NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_tukar_hari",
+        "garansi_tukar_hari INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_barang_aktif",
+        "garansi_barang_aktif BOOLEAN NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_barang_nilai",
+        "garansi_barang_nilai INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_barang_satuan",
+        "garansi_barang_satuan VARCHAR(8) NOT NULL DEFAULT 'HARI'",
+    )
+    _add_column(
+        cursor,
+        "service_records",
+        "garansi_barang_sampai",
+        "garansi_barang_sampai DATE",
+    )
+
+
+def _migrate_037_part_exchange(cursor: Cursor) -> None:
+    _add_column(
+        cursor,
+        "service_returns",
+        "jenis",
+        "jenis VARCHAR(16) NOT NULL DEFAULT 'RETUR'",
+    )
+    _add_column(
+        cursor,
+        "service_returns",
+        "ganti_nama",
+        "ganti_nama VARCHAR(255) NOT NULL DEFAULT ''",
+    )
+    _add_column(
+        cursor,
+        "service_returns",
+        "ganti_jumlah",
+        "ganti_jumlah INTEGER NOT NULL DEFAULT 0",
+    )
+    _add_column(
+        cursor,
+        "service_returns",
+        "ganti_service_part_id",
+        "ganti_service_part_id INTEGER",
+    )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1120,6 +1192,8 @@ MIGRATIONS: List[Migration] = [
     (33, _migrate_033_payroll_day),
     (34, _migrate_034_employee_join_date),
     (35, _migrate_035_salary_bonus_note),
+    (36, _migrate_036_sparepart_warranty),
+    (37, _migrate_037_part_exchange),
 ]
 
 

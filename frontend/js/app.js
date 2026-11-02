@@ -199,6 +199,9 @@
 
   function describeUnit(unit) {
     if (!unit) return '-';
+    if (unit.unit_type === 'SPAREPART') {
+      return unit.keterangan || 'Pembelian sparepart';
+    }
     if (unit.unit_type === 'MOBIL') {
       let text = unit.nopol || '-';
       if (unit.jenis_mobil) text += ' (' + unit.jenis_mobil + ')';
@@ -216,6 +219,7 @@
     customerResults: [],
     units: [],
     selectedUnit: null,
+    posMode: 'SERVICE',
     newUnitFormOpen: false,
     unitType: 'MOBIL',
     jobs: [],
@@ -631,6 +635,12 @@
   function updateSummaryCustomer() {
     const label = $('#summaryCustomer');
     if (!label) return;
+    if (state.posMode === 'PART') {
+      label.textContent = state.selectedCustomer
+        ? state.selectedCustomer.nama + ' - pembelian sparepart'
+        : 'Pelanggan Umum - pembelian sparepart';
+      return;
+    }
     if (!state.selectedCustomer) {
       label.textContent = 'Belum ada pelanggan dipilih.';
       return;
@@ -650,12 +660,10 @@
     state.jobs = [];
     state.parts = [];
     state.complaintConfirmed = false;
-    $('#unitCard').classList.add('hidden');
-    $('#complaintCard').classList.add('hidden');
-    $('#itemsCard').classList.add('hidden');
     $('#unitList').innerHTML = '';
     renderSelectedCustomer();
     renderItems();
+    applyPosMode();
   }
 
   function clearCustomerSelection() {
@@ -731,6 +739,11 @@
     hideCustomerResults();
     renderSelectedCustomer();
     renderItems();
+    if (state.posMode === 'PART') {
+      applyPosMode();
+      updateSummary();
+      return;
+    }
     $('#unitCard').classList.remove('hidden');
     $('#complaintCard').classList.add('hidden');
     $('#itemsCard').classList.add('hidden');
@@ -871,6 +884,7 @@
     renderUnits();
     $('#complaintCard').classList.remove('hidden');
     $('#itemsCard').classList.remove('hidden');
+    applyPosMode();
     updateSummaryCustomer();
     updateSummary();
   }
@@ -1411,6 +1425,10 @@
       interval_servis_bulan: clampInterval($('#partInterval').value),
     });
 
+    if (state.posMode === 'PART') {
+      state.parts[state.parts.length - 1].interval_servis_bulan = 0;
+    }
+
     $('#partPicker').value = '';
     $('#partNama').value = '';
     $('#partQty').value = '1';
@@ -1796,6 +1814,59 @@
     return state.pendingRequest.id;
   }
 
+  function updatePartWarrantyFields() {
+    $('#garansiTukarFields')?.classList.toggle(
+      'hidden',
+      !$('#garansiTukarAktif')?.checked
+    );
+    $('#garansiBarangFields')?.classList.toggle(
+      'hidden',
+      !$('#garansiBarangAktif')?.checked
+    );
+  }
+
+  function applyPosMode() {
+    const partMode = state.posMode === 'PART';
+    $('#view-pos')?.classList.toggle('pos-part-mode', partMode);
+    $('#unitDitinggalField')?.classList.toggle('hidden', partMode);
+    $('#serviceWarrantyBox')?.classList.toggle('hidden', partMode);
+    $('#partWarrantyBox')?.classList.toggle('hidden', !partMode);
+    $('#unitCard')?.classList.toggle(
+      'hidden',
+      partMode || !state.selectedCustomer
+    );
+    $('#complaintCard')?.classList.toggle(
+      'hidden',
+      partMode || !state.selectedCustomer || !state.selectedUnit
+    );
+    $('#itemsCard')?.classList.toggle(
+      'hidden',
+      partMode ? false : !(state.selectedCustomer && state.selectedUnit)
+    );
+    $$('.line-form--jasa, .items-block--jasa').forEach((element) => {
+      element.classList.toggle('hidden', partMode);
+    });
+    $('#jobSubtotalRow')?.classList.toggle('hidden', partMode);
+    if ($('#customerSearch')) {
+      $('#customerSearch').placeholder = partMode
+        ? 'Cari pelanggan (opsional)'
+        : 'Cari nama atau no. HP';
+    }
+    updateSummaryCustomer();
+    updatePartWarrantyFields();
+  }
+
+  function setPosMode(mode) {
+    const next = mode === 'PART' ? 'PART' : 'SERVICE';
+    if (state.posMode === next) return;
+    state.posMode = next;
+    $$('#posModeSwitch button').forEach((button) => {
+      button.classList.toggle('active', button.dataset.posMode === next);
+    });
+    resetPosState();
+    applyPosMode();
+  }
+
   function resetPosState() {
     state.pendingRequest = null;
     state.selectedCustomer = null;
@@ -1835,6 +1906,15 @@
     $('#garansiAktif').checked = true;
     $('#partInterval').value = '0';
     $('#partIntervalHint').classList.add('hidden');
+    if ($('#garansiTukarAktif')) {
+      $('#garansiTukarAktif').checked = false;
+      $('#garansiTukarHari').value = '7';
+    }
+    if ($('#garansiBarangAktif')) {
+      $('#garansiBarangAktif').checked = false;
+      $('#garansiBarangNilai').value = '1';
+      $('#garansiBarangSatuan').value = 'BULAN';
+    }
 
     if (state.config) {
       setGaransiBulan(state.config.default_garansi_bulan || 1);
@@ -1856,12 +1936,14 @@
     renderSelectedCustomer();
     renderItems();
     updateSummary();
+    applyPosMode();
   }
 
   /* ---------------------------- Transaction ------------------------------- */
   function buildTransactionPayload() {
     const metode = getMetode();
     const kreditMode = isKreditMode();
+    const partMode = state.posMode === 'PART';
     // Server menghitung nilai final; frontend hanya mengirim angka mentah.
     const paid =
       !kreditMode && metode === 'CASH'
@@ -1870,10 +1952,19 @@
     const uangMuka = kreditUangMukaAktif()
       ? String(parseMoney($('#kreditUangMukaInput').value))
       : '0';
+    const tukarAktif = partMode && Boolean($('#garansiTukarAktif')?.checked);
+    const barangAktif = partMode && Boolean($('#garansiBarangAktif')?.checked);
 
     return {
-      unit_id: state.selectedUnit.id,
-      keluhan_awal: $('#keluhanInput').value.trim(),
+      unit_id: partMode
+        ? state.selectedUnit
+          ? state.selectedUnit.id
+          : null
+        : state.selectedUnit.id,
+      customer_id:
+        partMode && state.selectedCustomer ? state.selectedCustomer.id : null,
+      sparepart_only: partMode,
+      keluhan_awal: partMode ? '' : $('#keluhanInput').value.trim(),
       catatan_pengerjaan: $('#catatanPengerjaan').value.trim() || null,
       diskon: String(parseMoney($('#diskonInput').value)),
       metode_bayar: metode,
@@ -1886,7 +1977,7 @@
       jatuh_tempo: kreditMode
         ? $('#rencanaTanggalInput').value || null
         : null,
-      unit_ditinggal: $('#unitDitinggalAktif').checked,
+      unit_ditinggal: partMode ? false : $('#unitDitinggalAktif').checked,
       cashier_employee_id:
         state.config && state.config.ops && state.config.ops.karyawan_aktif === false
           ? null
@@ -1895,16 +1986,31 @@
         state.config && state.config.ops && state.config.ops.karyawan_aktif === false
           ? []
           : $$('#posMechanics input:checked').map((input) => Number(input.value)),
-      bergaransi: $('#garansiAktif').checked,
-      garansi_bulan: garansiBulanValue(),
-      catatan_garansi: $('#garansiCatatan').value.trim() || null,
-      jobs: state.jobs.map((job) => ({
-        harga_jasa_id: job.harga_jasa_id || null,
-        deskripsi: job.deskripsi,
-        jumlah: Math.max(1, intValue(job.jumlah, 1)),
-        harga: String(parseMoney(job.harga)),
-        interval_servis_bulan: clampInterval(job.interval_servis_bulan),
-      })),
+      bergaransi: partMode ? false : $('#garansiAktif').checked,
+      garansi_bulan: partMode ? 1 : garansiBulanValue(),
+      catatan_garansi: partMode
+        ? null
+        : $('#garansiCatatan').value.trim() || null,
+      garansi_tukar_aktif: tukarAktif,
+      garansi_tukar_hari: tukarAktif
+        ? Math.max(1, intValue($('#garansiTukarHari').value, 1))
+        : 0,
+      garansi_barang_aktif: barangAktif,
+      garansi_barang_nilai: barangAktif
+        ? Math.max(1, intValue($('#garansiBarangNilai').value, 1))
+        : 0,
+      garansi_barang_satuan: barangAktif
+        ? $('#garansiBarangSatuan').value
+        : 'HARI',
+      jobs: partMode
+        ? []
+        : state.jobs.map((job) => ({
+            harga_jasa_id: job.harga_jasa_id || null,
+            deskripsi: job.deskripsi,
+            jumlah: Math.max(1, intValue(job.jumlah, 1)),
+            harga: String(parseMoney(job.harga)),
+            interval_servis_bulan: clampInterval(job.interval_servis_bulan),
+          })),
       parts: state.parts.map((part) => ({
         stock_item_id: part.stock_item_id || null,
         nama_part: part.nama_part,
@@ -1914,7 +2020,9 @@
           part.stock_item_id || part.harga_modal === '' || part.harga_modal == null
             ? null
             : String(parseMoney(part.harga_modal)),
-        interval_servis_bulan: clampInterval(part.interval_servis_bulan),
+        interval_servis_bulan: partMode
+          ? 0
+          : clampInterval(part.interval_servis_bulan),
       })),
     };
   }
@@ -1932,23 +2040,50 @@
   }
 
   function validatePosForm() {
-    if (!state.selectedCustomer) {
-      toast('Pilih pelanggan terlebih dahulu.', 'warning');
-      return false;
-    }
-    if (!state.selectedUnit) {
-      toast('Pilih unit servis terlebih dahulu.', 'warning');
-      return false;
-    }
-    if (!$('#keluhanInput').value.trim()) {
-      toast('Keluhan awal wajib diisi.', 'warning');
-      $('#keluhanInput').focus();
-      return false;
-    }
-    if (!state.complaintConfirmed) {
-      toast('Simpan keluhan awal terlebih dahulu.', 'warning');
-      $('#btnSaveComplaint').focus();
-      return false;
+    if (state.posMode === 'PART') {
+      if (state.jobs.length) {
+        toast('Mode beli sparepart hanya menerima sparepart.', 'warning');
+        return false;
+      }
+      if (!state.parts.length) {
+        toast('Tambahkan minimal satu sparepart.', 'warning');
+        return false;
+      }
+      if ($('#garansiTukarAktif')?.checked) {
+        const hari = intValue($('#garansiTukarHari').value, 0);
+        if (hari < 1) {
+          toast('Isi durasi garansi penukaran minimal 1 hari.', 'warning');
+          $('#garansiTukarHari').focus();
+          return false;
+        }
+      }
+      if ($('#garansiBarangAktif')?.checked) {
+        const nilai = intValue($('#garansiBarangNilai').value, 0);
+        if (nilai < 1) {
+          toast('Isi durasi garansi barang minimal 1.', 'warning');
+          $('#garansiBarangNilai').focus();
+          return false;
+        }
+      }
+    } else {
+      if (!state.selectedCustomer) {
+        toast('Pilih pelanggan terlebih dahulu.', 'warning');
+        return false;
+      }
+      if (!state.selectedUnit) {
+        toast('Pilih unit servis terlebih dahulu.', 'warning');
+        return false;
+      }
+      if (!$('#keluhanInput').value.trim()) {
+        toast('Keluhan awal wajib diisi.', 'warning');
+        $('#keluhanInput').focus();
+        return false;
+      }
+      if (!state.complaintConfirmed) {
+        toast('Simpan keluhan awal terlebih dahulu.', 'warning');
+        $('#btnSaveComplaint').focus();
+        return false;
+      }
     }
     if (!state.jobs.length && !state.parts.length) {
       toast('Tambahkan minimal satu jasa atau sparepart.', 'warning');
@@ -2000,9 +2135,18 @@
   function buildNotaReviewHtml(preview) {
     const customer = state.selectedCustomer || {};
     const unit = state.selectedUnit || {};
+    const partMode = state.posMode === 'PART';
     const kreditMode = isKreditMode();
     const kreditTanggal = $('#rencanaTanggalInput').value;
     const jenisLabel = kreditMode ? 'Kredit' : 'Lunas';
+    const tukarAktif = partMode && Boolean($('#garansiTukarAktif')?.checked);
+    const barangAktif = partMode && Boolean($('#garansiBarangAktif')?.checked);
+    const tukarHari = Math.max(1, intValue($('#garansiTukarHari').value, 1));
+    const barangNilai = Math.max(1, intValue($('#garansiBarangNilai').value, 1));
+    const barangSatuan =
+      $('#garansiBarangSatuan').value === 'BULAN' ? 'bulan' : 'hari';
+    const customerNama = customer.nama || 'Pelanggan Umum';
+    const unitLabel = partMode ? 'Pembelian sparepart' : describeUnit(unit);
     const jobs = state.jobs.length
       ? state.jobs
           .map((job, index) =>
@@ -2024,13 +2168,13 @@
       '<div class="nota-review">' +
       '<div class="review-block"><h4 class="detail-section-title">Pelanggan &amp; unit</h4>' +
       '<div class="detail-grid">' +
-      detailItem('Nama', esc(customer.nama || '-')) +
+      detailItem('Nama', esc(customerNama)) +
       detailItem('No. HP', esc(customer.nomor_hp || '-')) +
-      detailItem('Unit', esc(describeUnit(unit))) +
+      detailItem('Unit', esc(unitLabel)) +
       '</div></div>' +
       '<div class="review-block"><h4 class="detail-section-title">Keluhan &amp; catatan</h4>' +
       '<p class="detail-text">' +
-      esc($('#keluhanInput').value.trim()) +
+      esc(partMode ? 'Pembelian sparepart saja.' : $('#keluhanInput').value.trim()) +
       '</p>' +
       ($('#catatanPengerjaan').value.trim()
         ? '<p class="tiny muted">Catatan: ' +
@@ -2038,16 +2182,20 @@
           '</p>'
         : '') +
       '</div>' +
-      '<div class="review-block"><h4 class="detail-section-title">Jasa</h4>' +
-      jobs +
-      '</div>' +
+      (partMode
+        ? ''
+        : '<div class="review-block"><h4 class="detail-section-title">Jasa</h4>' +
+          jobs +
+          '</div>') +
       '<div class="review-block"><h4 class="detail-section-title">Sparepart</h4>' +
       parts +
       '</div>' +
       '<div class="review-block"><h4 class="detail-section-title">Total</h4>' +
-      '<div class="review-total-row"><span>Total jasa</span><strong>' +
-      fmtRp(preview.biaya_jasa) +
-      '</strong></div>' +
+      (partMode
+        ? ''
+        : '<div class="review-total-row"><span>Total jasa</span><strong>' +
+          fmtRp(preview.biaya_jasa) +
+          '</strong></div>') +
       '<div class="review-total-row"><span>Total part</span><strong>' +
       fmtRp(preview.total_part) +
       '</strong></div>' +
@@ -2084,13 +2232,26 @@
           detailItem('Sisa tagihan', fmtRp(preview.sisa_bayar))
         : detailItem('Uang diterima', fmtRp(parseMoney($('#bayarInput').value))) +
           detailItem('Kembalian', fmtRp(preview.kembalian))) +
-      detailItem('Unit ditinggal', unitDitinggal ? 'Ya' : 'Tidak') +
-      detailItem('Garansi', esc(garansiAktif ? 'Aktif' : 'Tidak aktif')) +
-      (garansiAktif
-        ? detailItem('Durasi', esc(garansiBulanValue() + ' bulan'))
-        : '') +
+      (partMode
+        ? (tukarAktif
+            ? detailItem('Garansi tukar', esc(tukarHari + ' hari'))
+            : '') +
+          (barangAktif
+            ? detailItem(
+                'Garansi barang',
+                esc(barangNilai + ' ' + barangSatuan)
+              )
+            : '') +
+          (!tukarAktif && !barangAktif
+            ? detailItem('Garansi', 'Tidak aktif')
+            : '')
+        : detailItem('Unit ditinggal', unitDitinggal ? 'Ya' : 'Tidak') +
+          detailItem('Garansi', esc(garansiAktif ? 'Aktif' : 'Tidak aktif')) +
+          (garansiAktif
+            ? detailItem('Durasi', esc(garansiBulanValue() + ' bulan'))
+            : '')) +
       '</div>' +
-      (garansiAktif && $('#garansiCatatan').value.trim()
+      (garansiAktif && !partMode && $('#garansiCatatan').value.trim()
         ? '<p class="tiny muted">Catatan garansi: ' +
           esc($('#garansiCatatan').value.trim()) +
           '</p>'
@@ -4248,6 +4409,14 @@
           '<td>' +
           warrantyBadge(record) +
           '</td>' +
+          '<td>' +
+          (Number(record.retur_count) > 0
+            ? '<span class="badge amber">Retur/Ganti</span>' +
+              '<span class="cell-sub">' +
+              fmtRp(record.total_retur) +
+              '</span>'
+            : '-') +
+          '</td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
           record.id +
@@ -4407,13 +4576,20 @@
           esc(retur.alasan) +
           '</div>' +
           items +
+          (retur.ganti_nama
+            ? '<div class="cell-sub">Diganti dengan: ' +
+              esc(retur.ganti_nama) +
+              ' x' +
+              intValue(retur.ganti_jumlah, 0) +
+              '</div>'
+            : '') +
           '</div>'
         );
       })
       .join('');
     return (
       '<div class="detail-section">' +
-      '<h4 class="detail-section-title">Riwayat retur (' +
+      '<h4 class="detail-section-title">Riwayat retur / tukar (' +
       returns.length +
       ')</h4>' +
       '<div class="return-history">' +
@@ -4426,21 +4602,28 @@
     if (receipt.status === 'VOID') return '';
     const payments = state.detailPayments || [];
     const rows = payments
-      .map(
-        (payment) =>
+      .map((payment) => {
+        const label =
+          payment.jenis === 'TUKAR_TAMBAHAN'
+            ? 'Tambahan tukar'
+            : payment.jenis === 'REFUND'
+              ? 'Kembalian / refund'
+              : payment.jenis || 'Pembayaran';
+        return (
           '<div class="payment-row"><div><small>' +
           esc(fmtDateTime(payment.waktu)) +
           ' · ' +
           esc(payment.operator || '-') +
           '</small><div>' +
-          esc(payment.jenis || 'PEMBAYARAN') +
+          esc(label) +
           ' · ' +
           esc(payment.metode || '-') +
           (payment.catatan ? ' · ' + esc(payment.catatan) : '') +
           '</div></div><strong>' +
           fmtRp(payment.nominal) +
           '</strong></div>'
-      )
+        );
+      })
       .join('');
     const sisa = moneyToCents(receipt.sisa_bayar);
     const canPay = receipt.status_bayar === 'BELUM_LUNAS' && sisa > 0;
@@ -4602,11 +4785,35 @@
       '<div class="detail-grid">' +
       detailItem('Waktu servis', esc(fmtDateTime(receipt.waktu_service))) +
       detailItem('Metode bayar', metodeBadge(receipt.metode_bayar)) +
-      detailItem('Status garansi', warrantyBadge(receipt)) +
-      detailItem(
-        'Garansi sampai',
-        esc(receipt.garansi_sampai ? fmtDate(receipt.garansi_sampai) : '-')
-      ) +
+      (receipt.sparepart_only
+        ? detailItem(
+            'Garansi tukar',
+            esc(
+              receipt.garansi_tukar_aktif
+                ? receipt.garansi_tukar_hari + ' hari'
+                : 'Tidak aktif'
+            )
+          ) +
+          detailItem(
+            'Garansi barang',
+            esc(
+              receipt.garansi_barang_aktif
+                ? receipt.garansi_barang_nilai +
+                    ' ' +
+                    (receipt.garansi_barang_satuan === 'BULAN'
+                      ? 'bulan'
+                      : 'hari') +
+                    (receipt.garansi_barang_sampai
+                      ? ' · sampai ' + fmtDate(receipt.garansi_barang_sampai)
+                      : '')
+                : 'Tidak aktif'
+            )
+          )
+        : detailItem('Status garansi', warrantyBadge(receipt)) +
+          detailItem(
+            'Garansi sampai',
+            esc(receipt.garansi_sampai ? fmtDate(receipt.garansi_sampai) : '-')
+          )) +
       '</div>' +
       '<div class="detail-section">' +
       '<h4 class="detail-section-title">Pelanggan &amp; unit</h4>' +
@@ -4688,9 +4895,157 @@
       state.detailPayments = results[2] || [];
       state.detailPengerjaan = results[3] || null;
       renderRecordDetail(receipt);
+      $('#btnExchangePart').classList.toggle(
+        'hidden',
+        !(
+          receipt.sparepart_only &&
+          (receipt.parts || []).some(
+            (part) =>
+              intValue(part.jumlah, 0) - intValue(part.jumlah_retur, 0) > 0
+          )
+        )
+      );
       openModal('#recordModal');
     } catch (err) {
       toast('Detail nota gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function syncExchangeQtyMax() {
+    const select = $('#exchangePart');
+    const option = select?.options?.[select.selectedIndex];
+    const max = option ? intValue(option.dataset.max, 1) : 1;
+    const input = $('#exchangeQty');
+    if (!input) return;
+    input.max = String(Math.max(1, max));
+    if (intValue(input.value, 1) > max) input.value = String(max);
+    syncExchangeSummary();
+  }
+
+  function syncExchangeSummary() {
+    const partSelect = $('#exchangePart');
+    const partOption = partSelect?.options?.[partSelect.selectedIndex];
+    const originalPrice = partOption
+      ? parseMoney(partOption.dataset.price || 0)
+      : 0;
+    const qty = Math.max(1, intValue($('#exchangeQty').value, 1));
+    const replacementPrice = parseMoney($('#exchangePrice').value);
+    const originalValue = originalPrice * qty;
+    const replacementValue = replacementPrice * qty;
+    const diff = replacementValue - originalValue;
+    $('#exchangeOriginalValue').textContent = fmtRp(originalValue);
+    $('#exchangeReplacementValue').textContent = fmtRp(replacementValue);
+    $('#exchangeDiffLabel').textContent =
+      diff > 0 ? 'Tambahan dibayar' : diff < 0 ? 'Kembalian' : 'Selisih';
+    $('#exchangeDiffValue').textContent = fmtRp(Math.abs(diff));
+    $('#exchangeMethodRow').classList.toggle('hidden', diff <= 0);
+  }
+
+  function openExchangeModal() {
+    const receipt = state.detailRecord;
+    if (!receipt || !receipt.sparepart_only) return;
+    const parts = (receipt.parts || []).filter(
+      (part) =>
+        intValue(part.jumlah, 0) - intValue(part.jumlah_retur, 0) > 0
+    );
+    if (!parts.length) {
+      toast('Tidak ada sparepart yang bisa ditukar.', 'warning');
+      return;
+    }
+    const stock = (state.stock || []).filter(
+      (item) => intValue(item.jumlah, 0) > 0
+    );
+    if (!stock.length) {
+      toast('Stok pengganti tidak tersedia.', 'warning');
+      return;
+    }
+    $('#exchangePart').innerHTML = parts
+      .map((part) => {
+        const remaining =
+          intValue(part.jumlah, 0) - intValue(part.jumlah_retur, 0);
+        return (
+          '<option value="' +
+          part.id +
+          '" data-max="' +
+          remaining +
+          '" data-price="' +
+          Number(part.harga_satuan || 0) +
+          '">' +
+          esc(part.nama_part) +
+          ' · sisa ' +
+          remaining +
+          '</option>'
+        );
+      })
+      .join('');
+    $('#exchangeStock').innerHTML = stock
+      .map(
+        (item) =>
+          '<option value="' +
+          item.id +
+          '" data-price="' +
+          Number(item.harga_jual || 0) +
+          '">' +
+          esc(item.nama) +
+          ' · stok ' +
+          intValue(item.jumlah, 0) +
+          ' · ' +
+          fmtRp(item.harga_jual) +
+          '</option>'
+      )
+      .join('');
+    $('#exchangeQty').value = '1';
+    $('#exchangeReason').value = '';
+    $('#exchangeMetode').value = 'CASH';
+    const firstStock = stock[0];
+    $('#exchangePrice').value = String(
+      Math.round(Number(firstStock.harga_jual || 0))
+    );
+    syncExchangeQtyMax();
+    openModal('#exchangeModal');
+  }
+
+  async function submitExchange() {
+    const receipt = state.detailRecord;
+    if (!receipt) return;
+    const partId = intValue($('#exchangePart').value, 0);
+    const stockId = intValue($('#exchangeStock').value, 0);
+    const jumlah = intValue($('#exchangeQty').value, 0);
+    const hargaGanti = parseMoney($('#exchangePrice').value);
+    const alasan = $('#exchangeReason').value.trim();
+    if (!partId || !stockId || jumlah < 1) {
+      toast('Lengkapi barang dan jumlah tukar.', 'warning');
+      return;
+    }
+    if (alasan.length < 3) {
+      toast('Isi alasan tukar minimal 3 karakter.', 'warning');
+      $('#exchangeReason').focus();
+      return;
+    }
+    try {
+      await API.exchangePart(receipt.id, {
+        service_part_id: partId,
+        stock_item_id: stockId,
+        jumlah,
+        harga_ganti: String(hargaGanti),
+        bayar_tambahan: true,
+        metode: $('#exchangeMetode').value,
+        alasan,
+      });
+      closeModal('#exchangeModal');
+      toast('Tukar barang tersimpan. Stok dan selisih sudah dicatat.', 'success');
+      const [updated, returns, payments] = await Promise.all([
+        API.receipt(receipt.id),
+        API.returns(receipt.id),
+        API.payments(receipt.id),
+      ]);
+      state.detailRecord = updated;
+      state.detailReturns = returns || [];
+      state.detailPayments = payments || [];
+      renderRecordDetail(updated);
+      await loadStock();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
     }
   }
 
@@ -5495,10 +5850,34 @@
       detailItem('Waktu servis', esc(fmtDateTime(receipt.waktu_service))) +
       detailItem('Metode bayar', metodeBadge(receipt.metode_bayar)) +
       detailItem('Status bayar', paymentBadge(receipt) || '-') +
-      detailItem(
-        'Garansi sampai',
-        esc(receipt.garansi_sampai ? fmtDate(receipt.garansi_sampai) : '-')
-      ) +
+      (receipt.sparepart_only
+        ? detailItem(
+            'Garansi tukar',
+            esc(
+              receipt.garansi_tukar_aktif
+                ? receipt.garansi_tukar_hari + ' hari'
+                : 'Tidak aktif'
+            )
+          ) +
+          detailItem(
+            'Garansi barang',
+            esc(
+              receipt.garansi_barang_aktif
+                ? receipt.garansi_barang_nilai +
+                    ' ' +
+                    (receipt.garansi_barang_satuan === 'BULAN'
+                      ? 'bulan'
+                      : 'hari') +
+                    (receipt.garansi_barang_sampai
+                      ? ' · sampai ' + fmtDate(receipt.garansi_barang_sampai)
+                      : '')
+                : 'Tidak aktif'
+            )
+          )
+        : detailItem(
+            'Garansi sampai',
+            esc(receipt.garansi_sampai ? fmtDate(receipt.garansi_sampai) : '-')
+          )) +
       '</div>' +
       '<p class="detail-text"><strong>Keluhan awal</strong><br>' +
       esc(receipt.keluhan_awal || '-') +
@@ -10052,6 +10431,22 @@
       if (window.confirm('Reset seluruh isian transaksi?')) resetPosState();
     });
 
+    $$('#posModeSwitch button').forEach((button) => {
+      button.addEventListener('click', () => setPosMode(button.dataset.posMode));
+    });
+    ['#garansiTukarAktif', '#garansiBarangAktif'].forEach((selector) => {
+      $(selector)?.addEventListener('change', () => {
+        updatePartWarrantyFields();
+        invalidateNotaReview();
+      });
+    });
+    ['#garansiTukarHari', '#garansiBarangNilai', '#garansiBarangSatuan'].forEach(
+      (selector) => {
+        $(selector)?.addEventListener('input', invalidateNotaReview);
+        $(selector)?.addEventListener('change', invalidateNotaReview);
+      }
+    );
+
     $('#customerSearch').addEventListener('input', onCustomerSearchInput);
     $('#customerSearch').addEventListener('focus', () => {
       if ($('#customerResults').innerHTML.trim()) {
@@ -10370,6 +10765,25 @@
     $('#recordDismiss').addEventListener('click', () =>
       closeModal('#recordModal')
     );
+    $('#btnExchangePart').addEventListener('click', openExchangeModal);
+    $('#exchangeClose').addEventListener('click', () =>
+      closeModal('#exchangeModal')
+    );
+    $('#exchangeCancel').addEventListener('click', () =>
+      closeModal('#exchangeModal')
+    );
+    $('#exchangeSubmit').addEventListener('click', submitExchange);
+    $('#exchangePart').addEventListener('change', syncExchangeQtyMax);
+    $('#exchangeQty').addEventListener('input', syncExchangeSummary);
+    $('#exchangePrice').addEventListener('input', syncExchangeSummary);
+    $('#exchangeStock').addEventListener('change', () => {
+      const select = $('#exchangeStock');
+      const option = select?.options?.[select.selectedIndex];
+      $('#exchangePrice').value = String(
+        Math.round(Number(option?.dataset.price || 0))
+      );
+      syncExchangeSummary();
+    });
     $('#customerDetailClose').addEventListener('click', () =>
       closeModal('#customerDetailModal')
     );

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from database.models import (
     ServiceJob,
     ServicePart,
+    ServicePayment,
     ServiceRecord,
     ServiceReturn,
     ServiceReturnItem,
@@ -384,6 +385,222 @@ def create_return(
             now=moment,
         )
 
+    return retur
+
+
+def exchange_part(
+    db: Session,
+    record_id: int,
+    service_part_id: int,
+    stock_item_id: int,
+    jumlah: int,
+    reason: str,
+    operator: Operator,
+    harga_ganti: Optional[Decimal] = None,
+    bayar_tambahan: bool = True,
+    metode: str = "CASH",
+    now: Optional[datetime] = None,
+) -> ServiceReturn:
+    """Tukar sparepart: barang lama kembali ke stok, barang pengganti keluar."""
+    clean_reason = _clean_reason(reason)
+    user = operator.label
+    moment = now or datetime.now()
+    qty = int(jumlah)
+    method = (metode or "CASH").strip().upper()
+    if method not in {"CASH", "TRANSFER"}:
+        raise BusinessValidationError("Metode tambahan harus CASH atau TRANSFER.")
+    if qty < 1:
+        raise BusinessValidationError("Jumlah tukar minimal 1.")
+
+    with db.begin():
+        begin_immediate(db)
+        record = db.get(ServiceRecord, record_id)
+        if record is None:
+            raise NotFoundError("Nota servis tidak ditemukan.")
+        if record.status == "VOID":
+            raise ConflictError(
+                "Nota sudah dibatalkan (VOID); tukar tidak dapat diproses."
+            )
+        if not record.sparepart_only:
+            raise BusinessValidationError(
+                "Tukar barang hanya tersedia untuk nota sparepart."
+            )
+
+        part = db.get(ServicePart, service_part_id)
+        if part is None or part.service_record_id != record.id:
+            raise NotFoundError("Item tukar bukan bagian dari nota ini.")
+        remaining = int(part.jumlah or 0) - int(part.jumlah_retur or 0)
+        if qty > remaining:
+            raise BusinessValidationError(
+                f"Jumlah tukar {part.nama_part} melebihi sisa ({remaining})."
+            )
+
+        replacement = db.get(StockItem, stock_item_id)
+        if replacement is None:
+            raise NotFoundError("Barang pengganti tidak ditemukan.")
+
+        # Barang lama masuk kembali ke stok.
+        if part.stock_item_id is not None:
+            stock = db.get(StockItem, part.stock_item_id)
+            if stock is not None:
+                db.execute(
+                    update(StockItem)
+                    .where(StockItem.id == stock.id)
+                    .values(jumlah=StockItem.jumlah + qty)
+                    .execution_options(synchronize_session=False)
+                )
+                db.add(
+                    StockMovement(
+                        stock_item_id=stock.id,
+                        nama_item=part.nama_part,
+                        jenis="TUKAR_MASUK",
+                        jumlah=qty,
+                        alasan=f"Tukar {record.no_nota}: {clean_reason}",
+                        oleh=user,
+                        service_record_id=record.id,
+                        created_at=moment,
+                    )
+                )
+
+        part.jumlah_retur = int(part.jumlah_retur or 0) + qty
+        db.refresh(replacement)
+        if int(replacement.jumlah or 0) < qty:
+            raise BusinessValidationError(
+                f"Stok {replacement.nama} tidak cukup untuk pengganti."
+            )
+
+        harga = money(part.harga_satuan)
+        original_value = money(harga * qty)
+        try:
+            ganti_price = (
+                money(Decimal(str(harga_ganti)))
+                if harga_ganti not in (None, "")
+                else money(replacement.harga_jual)
+            )
+        except Exception as exc:
+            raise BusinessValidationError("Harga barang pengganti tidak valid.") from exc
+        if ganti_price < 0:
+            raise BusinessValidationError(
+                "Harga barang pengganti tidak boleh negatif."
+            )
+        replacement_value = money(ganti_price * qty)
+        new_part = ServicePart(
+            service_record_id=record.id,
+            stock_item_id=replacement.id,
+            nama_part=replacement.nama,
+            jumlah=qty,
+            harga_satuan=ganti_price,
+            subtotal=replacement_value,
+            harga_modal=replacement.harga_modal,
+            jumlah_retur=0,
+            interval_servis_bulan=0,
+        )
+        db.add(new_part)
+        db.flush()
+
+        db.execute(
+            update(StockItem)
+            .where(StockItem.id == replacement.id)
+            .values(jumlah=StockItem.jumlah - qty)
+            .execution_options(synchronize_session=False)
+        )
+        db.add(
+            StockMovement(
+                stock_item_id=replacement.id,
+                nama_item=replacement.nama,
+                jenis="TUKAR_KELUAR",
+                jumlah=-qty,
+                alasan=f"Tukar {record.no_nota}: {clean_reason}",
+                oleh=user,
+                service_record_id=record.id,
+                created_at=moment,
+            )
+        )
+
+        retur = ServiceReturn(
+            service_record_id=record.id,
+            alasan=clean_reason,
+            oleh=user,
+            jenis="TUKAR",
+            ganti_nama=replacement.nama,
+            ganti_jumlah=qty,
+            ganti_service_part_id=new_part.id,
+            total_nilai=original_value,
+            created_at=moment,
+        )
+        db.add(retur)
+        db.flush()
+        retur.items.append(
+            ServiceReturnItem(
+                service_return_id=retur.id,
+                service_part_id=part.id,
+                stock_item_id=part.stock_item_id,
+                nama_item=part.nama_part,
+                jumlah=qty,
+                harga_satuan=harga,
+                harga_modal=part.harga_modal,
+                subtotal=original_value,
+            )
+        )
+
+        record.total_retur = money(
+            Decimal(record.total_retur or 0) + original_value
+        )
+        record.total_retur_part = money(
+            Decimal(record.total_retur_part or 0) + original_value
+        )
+        record.total_part = money(
+            Decimal(record.total_part or 0) + replacement_value
+        )
+        record.total_servis = money(
+            Decimal(record.total_servis or 0) + replacement_value
+        )
+        record.retur_count = int(record.retur_count or 0) + 1
+        db.flush()
+
+        selisih = money(replacement_value - original_value)
+        if selisih > 0 and bayar_tambahan:
+            db.add(
+                ServicePayment(
+                    service_record_id=record.id,
+                    jenis="TUKAR_TAMBAHAN",
+                    metode=method,
+                    nominal=selisih,
+                    waktu=moment,
+                    operator=user,
+                    catatan=f"Tambahan tukar {record.no_nota}: {clean_reason}",
+                    created_at=moment,
+                )
+            )
+            record.total_dibayar = money(
+                Decimal(record.total_dibayar or 0) + selisih
+            )
+        elif selisih < 0:
+            payment_service.refund_excess(
+                db,
+                record,
+                user,
+                f"Tukar {record.no_nota}: {clean_reason}",
+                moment,
+            )
+        record.status_bayar = (
+            "LUNAS" if payment_service.record_sisa(record) <= 0 else "BELUM_LUNAS"
+        )
+        if record.status_bayar == "BELUM_LUNAS":
+            record.jenis_bayar = "KREDIT"
+        db.flush()
+
+        audit_service.record_event(
+            db,
+            operator,
+            audit_service.ACTION_RETURN,
+            audit_service.REFERENCE_SERVICE_RECORD,
+            reference_id=record.no_nota,
+            reason=f"Tukar {part.nama_part} dengan {replacement.nama}: {clean_reason}",
+            now=moment,
+        )
+
+    db.refresh(record)
     return retur
 
 

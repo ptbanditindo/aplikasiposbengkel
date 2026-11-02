@@ -125,7 +125,7 @@ class WaGateOut(CompatBase):
 
 class UnitCreate(CompatBase):
     customer_id: int = Field(..., gt=0)
-    unit_type: str = Field(..., **_pattern("^(MOBIL|RADIATOR_ONLY)$"))
+    unit_type: str = Field(..., **_pattern("^(MOBIL|RADIATOR_ONLY|SPAREPART)$"))
     nopol: Optional[str] = Field(default=None, max_length=32)
     jenis_mobil: Optional[str] = Field(default=None, max_length=255)
     tahun_mobil: Optional[int] = Field(default=None, ge=1900, le=2100)
@@ -489,9 +489,11 @@ class ServicePartInput(CompatBase):
 
 
 class CreateServiceTransactionRequest(CompatBase):
-    unit_id: int = Field(..., gt=0)
+    unit_id: Optional[int] = Field(default=None, gt=0)
+    customer_id: Optional[int] = Field(default=None, gt=0)
+    sparepart_only: bool = False
     request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
-    keluhan_awal: str = Field(..., min_length=1, max_length=2000)
+    keluhan_awal: str = Field(default="", max_length=2000)
     catatan_pengerjaan: Optional[str] = Field(default=None, max_length=2000)
     diskon: Decimal = Field(default=Decimal("0.00"), ge=0)
     metode_bayar: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
@@ -507,6 +509,13 @@ class CreateServiceTransactionRequest(CompatBase):
     garansi_bulan: int = Field(default=1, ge=1, le=120)
     garansi_sampai: Optional[date] = None
     catatan_garansi: Optional[str] = Field(default=None, max_length=1000)
+    garansi_tukar_aktif: bool = False
+    garansi_tukar_hari: int = Field(default=0, ge=0, le=3650)
+    garansi_barang_aktif: bool = False
+    garansi_barang_nilai: int = Field(default=0, ge=0, le=1200)
+    garansi_barang_satuan: str = Field(
+        default="HARI", **_pattern("^(HARI|BULAN)$")
+    )
     izinkan_stok_minus: bool = False
     jobs: List[ServiceJobInput] = Field(default_factory=list)
     parts: List[ServicePartInput] = Field(default_factory=list)
@@ -598,9 +607,22 @@ class ServiceReturnOut(ORMModel):
     service_record_id: int
     alasan: str
     oleh: str
+    jenis: str = "RETUR"
+    ganti_nama: str = ""
+    ganti_jumlah: int = 0
     total_nilai: Money
     created_at: datetime
     items: List[ServiceReturnItemOut] = Field(default_factory=list)
+
+
+class ServiceExchangeIn(CompatBase):
+    service_part_id: int = Field(..., gt=0)
+    stock_item_id: int = Field(..., gt=0)
+    jumlah: int = Field(default=1, ge=1)
+    harga_ganti: Optional[Decimal] = Field(default=None, ge=0)
+    bayar_tambahan: bool = True
+    metode: str = Field(default="CASH", **_pattern("^(CASH|TRANSFER)$"))
+    alasan: str = Field(..., min_length=3, max_length=500)
 
 
 class StockMovementOut(ORMModel):
@@ -642,6 +664,13 @@ class ServiceRecordOut(ORMModel):
     bergaransi: bool
     garansi_sampai: Optional[date] = None
     catatan_garansi: Optional[str] = None
+    sparepart_only: bool = False
+    garansi_tukar_aktif: bool = False
+    garansi_tukar_hari: int = 0
+    garansi_barang_aktif: bool = False
+    garansi_barang_nilai: int = 0
+    garansi_barang_satuan: str = "HARI"
+    garansi_barang_sampai: Optional[date] = None
     status_klaim: str
     tanggal_klaim: Optional[date] = None
     garansi_aktif: bool
@@ -977,6 +1006,13 @@ class ReceiptOut(ORMModel):
     bergaransi: bool
     garansi_sampai: Optional[date] = None
     catatan_garansi: Optional[str] = None
+    sparepart_only: bool = False
+    garansi_tukar_aktif: bool = False
+    garansi_tukar_hari: int = 0
+    garansi_barang_aktif: bool = False
+    garansi_barang_nilai: int = 0
+    garansi_barang_satuan: str = "HARI"
+    garansi_barang_sampai: Optional[date] = None
     status_klaim: str
     tanggal_klaim: Optional[date] = None
     garansi_aktif: bool

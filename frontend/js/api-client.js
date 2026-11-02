@@ -299,6 +299,11 @@
       request('/api/service-records/' + id + '/claim', { method: 'PUT' }),
     returns: (id) =>
       request('/api/service-records/' + id + '/returns'),
+    exchangePart: (id, data) =>
+      request('/api/service-records/' + id + '/exchange', {
+        method: 'POST',
+        body: data,
+      }),
 
     payments: (recordId) =>
       request('/api/service-records/' + recordId + '/payments'),

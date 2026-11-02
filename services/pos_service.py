@@ -5,7 +5,7 @@ Ref: PRD FR-POS-01 s/d FR-POS-08.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -105,26 +105,57 @@ def _create_transaction_locked(
             if existing is not None:
                 return _existing_result(existing)
 
-        unit = db.get(VehicleOrUnit, payload.unit_id)
-        if unit is None:
-            raise NotFoundError("Unit servis tidak ditemukan.")
-        if unit.archived_at is not None:
-            raise BusinessValidationError(
-                "Unit ini sudah dihapus dari daftar pelanggan."
-            )
-
+        sparepart_only = bool(getattr(payload, "sparepart_only", False))
         now = datetime.now()
+        if sparepart_only:
+            if payload.jobs:
+                raise BusinessValidationError(
+                    "Mode beli sparepart hanya menerima sparepart."
+                )
+            if not payload.parts:
+                raise BusinessValidationError(
+                    "Tambahkan minimal satu sparepart."
+                )
+            if getattr(payload, "unit_id", None):
+                unit = db.get(VehicleOrUnit, payload.unit_id)
+                if unit is None:
+                    raise NotFoundError("Unit servis tidak ditemukan.")
+                if unit.archived_at is not None:
+                    raise BusinessValidationError(
+                        "Unit ini sudah dihapus dari daftar pelanggan."
+                    )
+            else:
+                unit = customer_service.get_or_create_walkin_unit(
+                    db, getattr(payload, "customer_id", None)
+                )
+            keluhan = (
+                clean_text(payload.keluhan_awal, max_length=2000)
+                or "Pembelian sparepart"
+            )
+            # Penjualan sparepart tidak membuat label radiator.
+        else:
+            unit_id = getattr(payload, "unit_id", None)
+            if not unit_id:
+                raise BusinessValidationError("Unit servis wajib dipilih.")
+            unit = db.get(VehicleOrUnit, unit_id)
+            if unit is None:
+                raise NotFoundError("Unit servis tidak ditemukan.")
+            if unit.archived_at is not None:
+                raise BusinessValidationError(
+                    "Unit ini sudah dihapus dari daftar pelanggan."
+                )
+
+            keluhan = clean_text(payload.keluhan_awal, max_length=2000)
+            if not keluhan:
+                raise BusinessValidationError("Keluhan awal pelanggan wajib diisi.")
+            if not payload.jobs and not payload.parts:
+                raise BusinessValidationError(
+                    "Transaksi harus memiliki minimal satu jasa atau sparepart."
+                )
+
         # Nomor barang hanya untuk radiator copotan; mobil utuh tidak berlabel.
         if unit.unit_type == "RADIATOR_ONLY":
             customer_service.ensure_unit_label(db, unit, now.date())
-
-        keluhan = clean_text(payload.keluhan_awal, max_length=2000)
-        if not keluhan:
-            raise BusinessValidationError("Keluhan awal pelanggan wajib diisi.")
-        if not payload.jobs and not payload.parts:
-            raise BusinessValidationError(
-                "Transaksi harus memiliki minimal satu jasa atau sparepart."
-            )
 
         job_lines: List[Dict[str, Any]] = []
         for job in payload.jobs:
@@ -274,7 +305,56 @@ def _create_transaction_locked(
 
         garansi_sampai: date | None = None
         catatan_garansi: str | None = None
-        if payload.bergaransi:
+        garansi_tukar_aktif = False
+        garansi_tukar_hari = 0
+        garansi_barang_aktif = False
+        garansi_barang_nilai = 0
+        garansi_barang_satuan = "HARI"
+        garansi_barang_sampai: date | None = None
+        if sparepart_only:
+            garansi_tukar_aktif = bool(
+                getattr(payload, "garansi_tukar_aktif", False)
+            )
+            garansi_tukar_hari = int(
+                getattr(payload, "garansi_tukar_hari", 0) or 0
+            )
+            if garansi_tukar_aktif and garansi_tukar_hari < 1:
+                raise BusinessValidationError(
+                    "Durasi garansi penukaran minimal 1 hari."
+                )
+            if not garansi_tukar_aktif:
+                garansi_tukar_hari = 0
+
+            garansi_barang_aktif = bool(
+                getattr(payload, "garansi_barang_aktif", False)
+            )
+            garansi_barang_nilai = int(
+                getattr(payload, "garansi_barang_nilai", 0) or 0
+            )
+            garansi_barang_satuan = (
+                getattr(payload, "garansi_barang_satuan", "HARI") or "HARI"
+            ).upper()
+            if garansi_barang_satuan not in {"HARI", "BULAN"}:
+                raise BusinessValidationError(
+                    "Satuan garansi barang harus HARI atau BULAN."
+                )
+            if garansi_barang_aktif:
+                if garansi_barang_nilai < 1:
+                    raise BusinessValidationError(
+                        "Durasi garansi barang minimal 1 hari atau 1 bulan."
+                    )
+                if garansi_barang_satuan == "BULAN":
+                    garansi_barang_sampai = warranty_service.warranty_end_date(
+                        garansi_barang_nilai, None, now.date()
+                    )
+                else:
+                    garansi_barang_sampai = now.date() + timedelta(
+                        days=garansi_barang_nilai
+                    )
+                garansi_sampai = garansi_barang_sampai
+            else:
+                garansi_barang_nilai = 0
+        elif payload.bergaransi:
             custom_date = getattr(payload, "garansi_sampai", None)
             garansi_sampai = warranty_service.warranty_end_date(
                 payload.garansi_bulan, custom_date
@@ -314,9 +394,20 @@ def _create_transaction_locked(
             jatuh_tempo=jatuh_tempo,
             rencana_bayar=rencana_bayar,
             total_dibayar=money(total_dibayar),
-            bergaransi=bool(payload.bergaransi),
+            bergaransi=(
+                garansi_barang_aktif
+                if sparepart_only
+                else bool(payload.bergaransi)
+            ),
             garansi_sampai=garansi_sampai,
             catatan_garansi=catatan_garansi,
+            sparepart_only=sparepart_only,
+            garansi_tukar_aktif=garansi_tukar_aktif,
+            garansi_tukar_hari=garansi_tukar_hari,
+            garansi_barang_aktif=garansi_barang_aktif,
+            garansi_barang_nilai=garansi_barang_nilai,
+            garansi_barang_satuan=garansi_barang_satuan,
+            garansi_barang_sampai=garansi_barang_sampai,
             status_klaim="Belum claim",
         )
         db.add(record)
@@ -334,7 +425,7 @@ def _create_transaction_locked(
         db.flush()
 
         operator_label = operator.label if operator is not None else "Kasir"
-        if bool(getattr(payload, "unit_ditinggal", False)):
+        if bool(getattr(payload, "unit_ditinggal", False)) and not sparepart_only:
             marker = PengerjaanNota(
                 service_record_id=record.id,
                 unit_id=unit.id,

@@ -362,6 +362,28 @@ class ServiceRecord(Base):
     bergaransi: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     garansi_sampai: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     catatan_garansi: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Penjualan sparepart tanpa servis dan garansi khusus barang.
+    sparepart_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    garansi_tukar_aktif: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    garansi_tukar_hari: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    garansi_barang_aktif: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    garansi_barang_nilai: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    garansi_barang_satuan: Mapped[str] = mapped_column(
+        String(8), default="HARI", nullable=False
+    )
+    garansi_barang_sampai: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True
+    )
     status_klaim: Mapped[str] = mapped_column(
         String(32), default="Belum claim", nullable=False
     )
@@ -779,6 +801,18 @@ class ServiceReturn(Base):
     )
     alasan: Mapped[str] = mapped_column(Text, nullable=False)
     oleh: Mapped[str] = mapped_column(String(64), default="Kasir", nullable=False)
+    jenis: Mapped[str] = mapped_column(
+        String(16), default="RETUR", nullable=False
+    )
+    ganti_nama: Mapped[str] = mapped_column(
+        String(255), default="", nullable=False
+    )
+    ganti_jumlah: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    ganti_service_part_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("service_parts.id", ondelete="SET NULL"), nullable=True
+    )
     total_nilai: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=Decimal("0.00"), nullable=False
     )

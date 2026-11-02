@@ -12,6 +12,7 @@ from api.schemas import (
     CreateServiceReturnRequest,
     CreateServiceTransactionRequest,
     ReceiptOut,
+    ServiceExchangeIn,
     ServiceRecordOut,
     ServiceReturnOut,
     TransactionPreviewLineOut,
@@ -214,3 +215,29 @@ def list_service_returns(record_id: int, db: Session = Depends(get_db)):
         ServiceReturnOut.model_validate(retur)
         for retur in void_return_service.list_returns(db, record_id)
     ]
+
+
+@router.post(
+    "/service-records/{record_id}/exchange",
+    response_model=ServiceReturnOut,
+    status_code=201,
+)
+def exchange_service_part(
+    record_id: int,
+    payload: ServiceExchangeIn,
+    db: Session = Depends(get_db),
+    operator: Operator = Depends(require_auth),
+):
+    retur = void_return_service.exchange_part(
+        db,
+        record_id,
+        payload.service_part_id,
+        payload.stock_item_id,
+        payload.jumlah,
+        payload.alasan,
+        operator,
+        harga_ganti=payload.harga_ganti,
+        bayar_tambahan=payload.bayar_tambahan,
+        metode=payload.metode,
+    )
+    return ServiceReturnOut.model_validate(retur)

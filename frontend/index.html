@@ -229,7 +229,13 @@
             <h1>Transaksi kasir</h1>
             <p class="muted">Ubah harga deal bila perlu. Tarif master tetap.</p>
           </div>
-          <button type="button" class="btn btn-ghost" id="posReset">Kosongkan form</button>
+          <div class="page-actions">
+            <div class="segmented sm" id="posModeSwitch" role="group" aria-label="Jenis transaksi">
+              <button type="button" data-pos-mode="SERVICE" class="active">Servis</button>
+              <button type="button" data-pos-mode="PART">Beli sparepart</button>
+            </div>
+            <button type="button" class="btn btn-ghost" id="posReset">Kosongkan form</button>
+          </div>
         </div>
 
         <div class="pos-layout">
@@ -403,7 +409,7 @@
               </div>
 
               <div class="summary-rows">
-                <div class="summary-row"><span>Subtotal jasa</span><strong id="jobSubtotal">Rp 0</strong></div>
+                <div class="summary-row" id="jobSubtotalRow"><span>Subtotal jasa</span><strong id="jobSubtotal">Rp 0</strong></div>
                 <div class="summary-row"><span>Subtotal sparepart</span><strong id="partSubtotal">Rp 0</strong></div>
                 <div class="summary-row total"><span>Total nota</span><strong id="grandTotalValue">Rp 0</strong></div>
               </div>
@@ -495,7 +501,7 @@
                 <div class="checkbox-list" id="posMechanics"></div>
               </div>
 
-              <div class="field">
+              <div class="field" id="unitDitinggalField">
                 <label class="switch-row">
                   <span>Unit ditinggal</span>
                   <input type="checkbox" id="unitDitinggalAktif">
@@ -504,7 +510,7 @@
                 <small class="tiny muted">Aktifkan bila kendaraan tetap di bengkel. Dipakai untuk follow-up saat kendaraan selesai.</small>
               </div>
 
-              <div class="warranty-box">
+              <div class="warranty-box" id="serviceWarrantyBox">
                 <label class="switch-row">
                   <span>Garansi servis</span>
                   <input type="checkbox" id="garansiAktif" checked>
@@ -530,6 +536,40 @@
                     <span>Catatan garansi</span>
                     <textarea class="input textarea" id="garansiCatatan" rows="2"></textarea>
                   </label>
+                </div>
+              </div>
+
+              <div class="warranty-box hidden" id="partWarrantyBox">
+                <label class="switch-row">
+                  <span>Garansi penukaran</span>
+                  <input type="checkbox" id="garansiTukarAktif">
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <div class="hidden" id="garansiTukarFields">
+                  <label class="field">
+                    <span>Berlaku berapa hari</span>
+                    <input type="number" class="input" id="garansiTukarHari" min="1" max="3650" step="1" value="7" inputmode="numeric">
+                  </label>
+                </div>
+                <label class="switch-row">
+                  <span>Garansi barang</span>
+                  <input type="checkbox" id="garansiBarangAktif">
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <div class="hidden" id="garansiBarangFields">
+                  <div class="form-grid">
+                    <label class="field">
+                      <span>Durasi</span>
+                      <input type="number" class="input" id="garansiBarangNilai" min="1" max="1200" step="1" value="1" inputmode="numeric">
+                    </label>
+                    <label class="field">
+                      <span>Satuan</span>
+                      <select class="input" id="garansiBarangSatuan">
+                        <option value="HARI">Hari</option>
+                        <option value="BULAN" selected>Bulan</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -568,6 +608,7 @@
                   <th class="text-right">Total</th>
                   <th>Metode</th>
                   <th>Garansi</th>
+                  <th>Retur/Ganti</th>
                   <th class="text-right">Aksi</th>
                 </tr>
               </thead>
@@ -1635,6 +1676,57 @@
       <div id="recordDetail"></div>
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" id="recordDismiss">Tutup</button>
+        <button type="button" class="btn btn-outline hidden" id="btnExchangePart">Tukar barang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ EXCHANGE PART MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="exchangeModal" role="dialog" aria-modal="true" aria-labelledby="exchangeTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="exchangeTitle">Tukar sparepart</h3>
+          <p class="muted" id="exchangeSubtitle">Barang lama kembali ke stok, barang pengganti keluar.</p>
+        </div>
+        <button type="button" class="icon-btn" id="exchangeClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="form-grid">
+        <label class="field">
+          <span>Barang yang ditukar</span>
+          <select class="input" id="exchangePart"></select>
+        </label>
+        <label class="field">
+          <span>Jumlah</span>
+          <input type="number" class="input" id="exchangeQty" min="1" step="1" value="1" inputmode="numeric">
+        </label>
+        <label class="field">
+          <span>Barang pengganti</span>
+          <select class="input" id="exchangeStock"></select>
+        </label>
+        <label class="field">
+          <span>Harga barang pengganti</span>
+          <input type="text" class="input money-input" id="exchangePrice" inputmode="numeric" placeholder="Harga jual barang pengganti">
+        </label>
+        <label class="field">
+          <span>Alasan</span>
+          <input type="text" class="input" id="exchangeReason" maxlength="500" placeholder="Contoh: ukuran tidak cocok">
+        </label>
+      </div>
+      <div class="payroll-pay-summary" style="margin-top:14px">
+        <div><span>Nilai barang ditukar</span><strong id="exchangeOriginalValue">Rp 0</strong></div>
+        <div><span>Nilai barang pengganti</span><strong id="exchangeReplacementValue">Rp 0</strong></div>
+        <div><span id="exchangeDiffLabel">Selisih</span><strong id="exchangeDiffValue">Rp 0</strong></div>
+        <div class="hidden" id="exchangeMethodRow"><span>Metode tambahan</span>
+          <select class="input" id="exchangeMetode">
+            <option value="CASH">Tunai</option>
+            <option value="TRANSFER">Transfer</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="exchangeCancel">Batal</button>
+        <button type="button" class="btn btn-primary" id="exchangeSubmit">Simpan tukar</button>
       </div>
     </div>
   </div>
