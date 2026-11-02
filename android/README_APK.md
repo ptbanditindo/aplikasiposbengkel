@@ -135,16 +135,16 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
 - Ukuran: 45.215.484 byte
-- SHA-256: `778425c0c8fbfd0c369435e151268ddbf7749efeafca2de289edbbe744e4c803`
-- Paket: `com.bengkelpos.radiator`, versionName `2.5.0`, versionCode `17`,
+- SHA-256: `200760f7693a4ca041abfc4c7a5d98f71a62a9d47f5012294ee9334db1a7348b`
+- Paket: `com.bengkelpos.radiator`, versionName `2.6.0`, versionCode `18`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 383.571 byte, SHA-256
-  `ade1c0cbb8e402476efaf8c182bb6d1b8b229e1560065eace171144b9d94885a`.
-  ZIP ini memuat desain Tembaga & Grafit, tiga tema warna (navy-oranye,
-  charcoal-kuning, biru-teal) dengan mode terang/gelap, font Plus Jakarta Sans
+- Asset `assets/bengkel_backend.zip`: 387.630 byte, SHA-256
+  `13ba86cdd2d58c9bcf8733953c29aa53090ffaff177057b3da41bcfe18a32cab`.
+  ZIP ini memuat desain workbench ledger, lima tema warna (navy-oranye,
+  charcoal-kuning, biru-teal, putih, hitam) dengan mode terang/gelap, font Plus Jakarta Sans
   lokal, serta logika follow-up, supplier/reseller, karyawan, struk, dan
   estimasi laba bersih.
-- Pytest dua stack lulus 360 test. Unit test Kotlin debug lulus 154 test.
+- Pytest dua stack lulus 363 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 

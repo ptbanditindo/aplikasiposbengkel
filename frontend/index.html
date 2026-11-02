@@ -25,13 +25,26 @@
         };
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute('content', backgrounds[palette][mode]);
+        var fontSizes = {};
+        try {
+          fontSizes = JSON.parse(window.localStorage.getItem('bengkel.fontSizes') || '{}') || {};
+        } catch (error) {
+          fontSizes = {};
+        }
+        var fontScales = { sm: 0.9, md: 1, lg: 1.12 };
+        ['title', 'heading', 'body', 'small', 'nav'].forEach(function (role) {
+          var scale = fontScales[fontSizes[role]];
+          if (scale) {
+            document.documentElement.style.setProperty('--scale-' + role, String(scale));
+          }
+        });
       } catch (error) {}
     })();
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261209">
-  <link rel="stylesheet" href="/static/css/world.css?v=20261209">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261216">
+  <link rel="stylesheet" href="/static/css/world.css?v=20261216">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -241,12 +254,12 @@
         <section class="stat-section">
           <h2 class="stat-section-title">Stok perlu perhatian</h2>
           <div class="stats-grid">
-            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok menipis" data-action="open-low-stock">
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka follow up reseller untuk stok menipis" data-action="open-low-stock">
               <span class="stat-label">Stok menipis</span>
               <strong id="statLowStock">0</strong>
               <span class="stat-sub">Perlu dibeli</span>
             </article>
-            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok habis" data-action="open-stock-out">
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka follow up reseller untuk stok habis" data-action="open-stock-out">
               <span class="stat-label">Stok habis</span>
               <strong id="statStockOut">0</strong>
               <span class="stat-sub">Tidak tersedia</span>
@@ -902,6 +915,52 @@
               </button>
             </div>
           </div>
+          <div class="field">
+            <span>Ukuran teks</span>
+            <div class="form-grid font-size-grid">
+              <label class="field">
+                <span>Judul halaman</span>
+                <select class="input" data-font-role="title">
+                  <option value="sm">Kecil</option>
+                  <option value="md" selected>Normal</option>
+                  <option value="lg">Besar</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Judul bagian</span>
+                <select class="input" data-font-role="heading">
+                  <option value="sm">Kecil</option>
+                  <option value="md" selected>Normal</option>
+                  <option value="lg">Besar</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Teks isi dan tabel</span>
+                <select class="input" data-font-role="body">
+                  <option value="sm">Kecil</option>
+                  <option value="md" selected>Normal</option>
+                  <option value="lg">Besar</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Label kecil</span>
+                <select class="input" data-font-role="small">
+                  <option value="sm">Kecil</option>
+                  <option value="md" selected>Normal</option>
+                  <option value="lg">Besar</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Menu navigasi</span>
+                <select class="input" data-font-role="nav">
+                  <option value="sm">Kecil</option>
+                  <option value="md" selected>Normal</option>
+                  <option value="lg">Besar</option>
+                </select>
+              </label>
+            </div>
+            <small class="tiny muted">Atur besar kecil tiap jenis teks. Pilihan tersimpan di perangkat ini.</small>
+          </div>
         </section>
 
         <section class="card settings-collapsible" id="menuSettingsCard">
@@ -1497,7 +1556,24 @@
             <span class="stat-sub">Sudah dijadwalkan</span>
           </article>
         </div>
+        <div class="followup-result-head" id="followupResultHead">
+          <div>
+            <h2 class="followup-result-title">Hasil follow up</h2>
+            <p class="tiny muted">Dari pesan follow up garansi, servis, dan prospek yang dikirim pada periode ini.</p>
+          </div>
+          <label class="field inline">
+            <span>Periode</span>
+            <select class="input" id="followupResultPeriod">
+              <option value="all" selected>Seluruhnya</option>
+              <option value="today">Hari ini</option>
+              <option value="7d">7 hari terakhir</option>
+              <option value="30d">30 hari terakhir</option>
+              <option value="1y">1 tahun terakhir</option>
+            </select>
+          </label>
+        </div>
         <div class="stats-grid stats-grid--secondary hidden" id="followupResultGrid"></div>
+        <div class="empty-state hidden" id="followupResultEmpty">Belum ada hasil follow up pada periode ini.</div>
         <div class="stats-grid stats-grid--secondary stats-grid--followup hidden" id="followupResellerStats">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat stok menipis" data-action="open-reseller-list" data-filter="low">
             <span class="stat-label">Stok menipis</span>
@@ -1521,7 +1597,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.5.0</span>
+        <span>BengkelPOS Radiator v2.6.0</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -2748,15 +2824,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261209"></script>
-  <script src="/static/js/api-client.js?v=20261209"></script>
-  <script src="/static/js/printer-manager.js?v=20261209"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261209"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261209"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261209"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261209"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261209"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261209"></script>
-  <script src="/static/js/app.js?v=20261209"></script>
+  <script src="/static/js/native-bridge.js?v=20261216"></script>
+  <script src="/static/js/api-client.js?v=20261216"></script>
+  <script src="/static/js/printer-manager.js?v=20261216"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261216"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261216"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261216"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261216"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261216"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261216"></script>
+  <script src="/static/js/app.js?v=20261216"></script>
 </body>
 </html>

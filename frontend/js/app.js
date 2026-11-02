@@ -6113,10 +6113,14 @@
     const reseller = state.followupTab === 'reseller';
     const statsGrid = $('#followupStatsGrid');
     const resultGrid = $('#followupResultGrid');
+    const resultHead = $('#followupResultHead');
+    const resultEmpty = $('#followupResultEmpty');
     const resellerStats = $('#followupResellerStats');
     const resellerSection = $('#followupResellerSection');
     if (statsGrid) statsGrid.classList.toggle('hidden', reseller);
     if (resultGrid && reseller) resultGrid.classList.add('hidden');
+    if (resultHead) resultHead.classList.toggle('hidden', reseller);
+    if (resultEmpty && reseller) resultEmpty.classList.add('hidden');
     if (resellerStats) resellerStats.classList.toggle('hidden', !reseller);
     if (resellerSection) resellerSection.classList.add('hidden');
     const headDesc = $('#followupHeadDesc');
@@ -6166,32 +6170,67 @@
   async function loadFollowupResults() {
     const grid = $('#followupResultGrid');
     if (!grid) return;
+    const periodSelect = $('#followupResultPeriod');
+    const period = periodSelect ? periodSelect.value : 'all';
+    let startISO = null;
+    let endISO = null;
+    if (period !== 'all') {
+      endISO = todayISO();
+      startISO = toISODate(reportRangeStart(period));
+    }
+    const empty = $('#followupResultEmpty');
     try {
-      const data = await API.followupResults();
-      const cards = [
-        ['Balik lagi', data.balik_lagi],
+      const data = await API.followupResults(startISO, endISO);
+      const total = intValue(data.followup_total, 0);
+      const kembali = intValue(data.balik_lagi, 0);
+      const persen = total > 0 ? Math.round((kembali / total) * 100) : 0;
+      const cards = [];
+      if (total > 0) {
+        cards.push({
+          label: 'Jumlah follow up',
+          value: total,
+          sub: 'Pesan terkirim',
+        });
+        cards.push({
+          label: 'Kembali ke bengkel',
+          value: kembali,
+          sub: persen + '% dari follow up',
+        });
+      }
+      [
         ['Masih bagus', data.masih_bagus],
         ['Bermasalah', data.bermasalah],
         ['Menolak', data.menolak],
-      ].filter((row) => intValue(row[1], 0) > 0);
+      ].forEach((row) => {
+        if (intValue(row[1], 0) > 0) {
+          cards.push({ label: row[0], value: intValue(row[1], 0), sub: '' });
+        }
+      });
       if (!cards.length) {
         grid.innerHTML = '';
         grid.classList.add('hidden');
+        if (empty) empty.classList.remove('hidden');
         return;
       }
+      if (empty) empty.classList.add('hidden');
       grid.innerHTML = cards
         .map(
           (row) =>
             '<article class="stat-card"><span class="stat-label">' +
-            esc(row[0]) +
+            esc(row.label) +
             '</span><strong>' +
-            intValue(row[1], 0) +
-            '</strong></article>'
+            intValue(row.value, 0) +
+            '</strong>' +
+            (row.sub
+              ? '<span class="stat-sub">' + esc(row.sub) + '</span>'
+              : '') +
+            '</article>'
         )
         .join('');
       grid.classList.remove('hidden');
     } catch (err) {
       grid.classList.add('hidden');
+      if (empty) empty.classList.remove('hidden');
     }
   }
 
@@ -7622,6 +7661,16 @@
     openNotaList('Nota ' + fmtDate(date), list, { showProfit: true });
   }
 
+  async function openDashboardStockList(kind) {
+    const supplierAktif =
+      !state.config || !state.config.ops || state.config.ops.supplier_aktif !== false;
+    if (supplierAktif) {
+      openResellerList(kind);
+      return;
+    }
+    await openStockLevelModal(kind);
+  }
+
   async function openStockLevelModal(kind) {
     try {
       if (!state.stock.length) await loadStock();
@@ -7890,11 +7939,11 @@
       return;
     }
     if (action === 'open-low-stock') {
-      await openStockLevelModal('low');
+      await openDashboardStockList('low');
       return;
     }
     if (action === 'open-stock-out') {
-      await openStockLevelModal('out');
+      await openDashboardStockList('out');
       return;
     }
     if (action === 'open-pengerjaan') {
@@ -11576,6 +11625,10 @@
       loadCustomerDirectory($('#customerDirectorySearch').value.trim())
     );
     $('#btnFollowupRefresh').addEventListener('click', loadFollowupPage);
+    const followupResultPeriod = $('#followupResultPeriod');
+    if (followupResultPeriod) {
+      followupResultPeriod.addEventListener('change', loadFollowupResults);
+    }
     $('#btnAddCustomerDirectory').addEventListener('click', () =>
       openCustomerModal(false)
     );
@@ -12118,6 +12171,56 @@
     });
   }
 
+  const FONT_SIZE_KEY = 'bengkel.fontSizes';
+  const FONT_SIZE_ROLES = ['title', 'heading', 'body', 'small', 'nav'];
+  const FONT_SIZE_SCALE = { sm: 0.9, md: 1, lg: 1.12 };
+
+  function readFontSizes() {
+    try {
+      const raw = JSON.parse(
+        window.localStorage.getItem(FONT_SIZE_KEY) || '{}'
+      );
+      return raw && typeof raw === 'object' ? raw : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function applyFontSizes(sizes) {
+    const root = document.documentElement;
+    FONT_SIZE_ROLES.forEach((role) => {
+      const scale = FONT_SIZE_SCALE[sizes[role]] || 1;
+      root.style.setProperty('--scale-' + role, String(scale));
+    });
+  }
+
+  function syncFontSizeUI(sizes) {
+    $$('[data-font-role]').forEach((select) => {
+      const value = sizes[select.dataset.fontRole];
+      select.value = FONT_SIZE_SCALE[value] ? value : 'md';
+    });
+  }
+
+  function initFontSizes() {
+    const sizes = readFontSizes();
+    applyFontSizes(sizes);
+    syncFontSizeUI(sizes);
+    $$('[data-font-role]').forEach((select) => {
+      select.addEventListener('change', () => {
+        const role = select.dataset.fontRole;
+        if (!FONT_SIZE_ROLES.includes(role)) return;
+        const value = FONT_SIZE_SCALE[select.value] ? select.value : 'md';
+        sizes[role] = value;
+        applyFontSizes(sizes);
+        try {
+          window.localStorage.setItem(FONT_SIZE_KEY, JSON.stringify(sizes));
+        } catch (error) {
+          // Pilihan tetap berlaku untuk sesi ini.
+        }
+      });
+    });
+  }
+
   function initSettingsAccordion() {
     $$('#view-settings .settings-collapsible').forEach((card) => {
       const head = card.querySelector(':scope > .card-head');
@@ -12200,6 +12303,7 @@
 
   async function init() {
     initTheme();
+    initFontSizes();
     bindEvents();
     initSettingsAccordion();
     $$('.money-input').forEach(formatMoneyField);

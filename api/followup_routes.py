@@ -1,9 +1,10 @@
 """Endpoint follow-up, servis berkala, garansi, dan piutang (Tahap 13)."""
 from __future__ import annotations
 
+from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from api.deps import require_auth
@@ -150,9 +151,19 @@ def mark_pengerjaan_taken(
 
 
 @router.get("/followup/results", response_model=FollowupResultOut)
-def followup_results(db: Session = Depends(get_db)):
-    data = followup_result_service.summary(db)["counts"]
+def followup_results(
+    start: Optional[date] = Query(default=None),
+    end: Optional[date] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    if start is not None and end is not None and end < start:
+        raise HTTPException(
+            status_code=400, detail="Tanggal akhir sebelum tanggal mulai."
+        )
+    summary = followup_result_service.summary(db, start=start, end=end)
+    data = summary["counts"]
     return FollowupResultOut(
+        followup_total=summary.get("followup_total", 0),
         balik_lagi=data.get("balik_lagi", 0),
         masih_bagus=data.get("masih_bagus", 0),
         bermasalah=data.get("bermasalah", 0),

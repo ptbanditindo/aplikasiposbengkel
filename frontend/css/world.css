@@ -812,7 +812,7 @@ select.input:focus {
   box-shadow: none;
 }
 #view-dashboard .stat-section:not(:first-of-type) .stat-card.is-clickable:hover {
-  background: transparent;
+  background: var(--accent-soft);
 }
 #view-dashboard .stat-section:not(:first-of-type) .stat-card.is-clickable:hover .stat-label {
   color: var(--accent-ink);
@@ -2248,3 +2248,110 @@ body,
 .app-shell,
 .app-body { background: var(--color-bg); }
 body { color: var(--color-text); }
+
+/* Filter periode hasil follow up */
+.followup-result-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 24px 0 8px;
+}
+.followup-result-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.followup-result-head .field.inline { min-width: 190px; }
+
+@media (max-width: 640px) {
+  .followup-result-head {
+    align-items: stretch;
+    margin-top: 20px;
+  }
+  .followup-result-head .field.inline {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Ukuran teks per jenis, diatur dari Pengaturan. */
+:root {
+  --scale-title: 1;
+  --scale-heading: 1;
+  --scale-body: 1;
+  --scale-small: 1;
+  --scale-nav: 1;
+}
+
+body { font-size: calc(14px * var(--scale-body)); }
+.page-head h1 { font-size: calc(32px * var(--scale-title)); }
+.auth-title { font-size: calc(30px * var(--scale-title)); }
+.card-head h2,
+.card-head h3 { font-size: calc(20px * var(--scale-heading)); }
+.stat-section-title { font-size: calc(14px * var(--scale-heading)); }
+#view-dashboard .stat-section:not(:first-of-type) .stat-section-title {
+  font-size: calc(13px * var(--scale-heading));
+}
+.modal-head h3 { font-size: calc(22px * var(--scale-heading)); }
+.step-head h2 { font-size: calc(20px * var(--scale-heading)); }
+.followup-result-title { font-size: calc(14px * var(--scale-heading)); }
+.nav-sheet-head h2 { font-size: calc(22px * var(--scale-heading)); }
+
+.page-head p { font-size: calc(13.5px * var(--scale-body)); }
+.card-head p { font-size: calc(12.5px * var(--scale-body)); }
+.table { font-size: calc(13.5px * var(--scale-body)); }
+.input,
+.textarea,
+select.input { font-size: calc(13.5px * var(--scale-body)); }
+.btn { font-size: calc(13.5px * var(--scale-body)); }
+.btn-sm { font-size: calc(12.5px * var(--scale-body)); }
+.btn-xs { font-size: calc(12px * var(--scale-body)); }
+.btn-lg { font-size: calc(14px * var(--scale-body)); }
+.autocomplete-item { font-size: calc(13px * var(--scale-body)); }
+.step-head p { font-size: calc(12.5px * var(--scale-body)); }
+.unit-title { font-size: calc(13px * var(--scale-body)); }
+.unit-sub { font-size: calc(12px * var(--scale-body)); }
+.summary-row { font-size: calc(13px * var(--scale-body)); }
+
+.stat-label { font-size: calc(12.5px * var(--scale-small)); }
+.stat-sub,
+.tiny { font-size: calc(11.5px * var(--scale-small)); }
+.table th { font-size: calc(12px * var(--scale-small)); }
+.badge { font-size: calc(11px * var(--scale-small)); }
+.cell-sub { font-size: calc(11.5px * var(--scale-small)); }
+.detail-label,
+.folder-label,
+.section-label { font-size: calc(11px * var(--scale-small)); }
+.nav-group-label { font-size: calc(11px * var(--scale-small)); }
+.pill-count { font-size: calc(11px * var(--scale-small)); }
+.modal-head p { font-size: calc(12.5px * var(--scale-small)); }
+.empty-state { font-size: calc(12.5px * var(--scale-small)); }
+
+.nav-tab { font-size: calc(13.5px * var(--scale-nav)); }
+.mobile-nav-item { font-size: calc(10.5px * var(--scale-nav)); }
+.mobile-page-title { font-size: calc(11px * var(--scale-nav)); }
+.sheet-item { font-size: calc(13.5px * var(--scale-nav)); }
+
+@media (max-width: 980px) {
+  .page-head h1 { font-size: calc(27px * var(--scale-title)); }
+  .page-head p { font-size: calc(13px * var(--scale-body)); }
+  .auth-title { font-size: calc(26px * var(--scale-title)); }
+  .table { font-size: calc(13px * var(--scale-body)); }
+}
+
+@media (max-width: 640px) {
+  .page-head h1 { font-size: calc(24px * var(--scale-title)); }
+  .card-head h2,
+  .card-head h3 { font-size: calc(18px * var(--scale-heading)); }
+  .stat-label { font-size: calc(10.5px * var(--scale-small)); }
+  .table th { font-size: calc(10.5px * var(--scale-small)); }
+  .modal-head h3 { font-size: calc(20px * var(--scale-heading)); }
+  .btn-xs { font-size: calc(12.5px * var(--scale-body)); }
+}
+
+@media (max-width: 380px) {
+  .page-head h1 { font-size: calc(22px * var(--scale-title)); }
+}

@@ -122,6 +122,22 @@ Badge memakai latar soft dan teks ink yang disesuaikan per mode.
   adalah angka besar Ringkasan pada 1280–1439 px (27 px) agar tetap satu baris
   setelah keluarga font berubah.
 
+## Ukuran teks per jenis
+
+Pengaturan → Tampilan menyediakan lima ukuran terpisah, masing-masing
+Kecil / Normal / Besar:
+
+- Judul halaman
+- Judul bagian
+- Teks isi dan tabel
+- Label kecil
+- Menu navigasi
+
+Pilihan disimpan di `bengkel.fontSizes`, diterapkan sebagai
+`--scale-title`, `--scale-heading`, `--scale-body`, `--scale-small`, dan
+`--scale-nav` (0.9 / 1 / 1.12), lalu dipakai lewat `calc()` pada peran teks
+masing-masing. Tidak ada satu skala global.
+
 ## Struk
 
 Cetak struk memakai jendela cetak terpisah dengan teks hitam di atas putih dan

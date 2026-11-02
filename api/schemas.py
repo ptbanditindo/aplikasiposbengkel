@@ -879,6 +879,7 @@ class FollowupItemOut(CompatBase):
 
 
 class FollowupResultOut(CompatBase):
+    followup_total: int = 0
     balik_lagi: int = 0
     masih_bagus: int = 0
     bermasalah: int = 0

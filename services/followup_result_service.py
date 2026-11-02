@@ -1,7 +1,7 @@
 """Hasil follow up pelanggan dari seluruh pesan yang pernah dikirim."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func, select
@@ -15,11 +15,11 @@ from database.models import (
 )
 from services import followup_service, whatsapp_service
 
+# Hasil follow up hanya dari garansi, servis berkala, dan prospek.
+# Piutang dan pengerjaan tidak dihitung sebagai hasil follow up.
 MESSAGE_JENIS = {
     whatsapp_service.JENIS_FOLLOWUP,
     whatsapp_service.JENIS_GARANSI,
-    whatsapp_service.JENIS_PIUTANG,
-    whatsapp_service.JENIS_PENGERJAAN,
 }
 OUTCOME_BALIK = "balik_lagi"
 OUTCOME_BAGUS = "masih_bagus"
@@ -33,14 +33,28 @@ PRIORITY = {
 }
 
 
-def _latest_messages(db: Session) -> Dict[int, datetime]:
+def _latest_messages(
+    db: Session,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+) -> Dict[int, datetime]:
+    conditions = [
+        WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
+        WhatsAppLog.customer_id.is_not(None),
+        WhatsAppLog.jenis.in_(MESSAGE_JENIS),
+    ]
+    if start is not None:
+        conditions.append(
+            WhatsAppLog.created_at >= datetime.combine(start, time.min)
+        )
+    if end is not None:
+        conditions.append(
+            WhatsAppLog.created_at
+            < datetime.combine(end + timedelta(days=1), time.min)
+        )
     rows = db.execute(
         select(WhatsAppLog.customer_id, func.max(WhatsAppLog.created_at))
-        .where(
-            WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
-            WhatsAppLog.customer_id.is_not(None),
-            WhatsAppLog.jenis.in_(MESSAGE_JENIS),
-        )
+        .where(*conditions)
         .group_by(WhatsAppLog.customer_id)
     ).all()
     return {int(row[0]): row[1] for row in rows if row[0] is not None}
@@ -83,8 +97,40 @@ def _outcome_for_customer(
     return events[0][1]
 
 
-def summary(db: Session) -> Dict[str, Any]:
-    messages = _latest_messages(db)
+def _followup_count(
+    db: Session,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+) -> int:
+    conditions = [
+        WhatsAppLog.status == whatsapp_service.STATUS_OPENED,
+        WhatsAppLog.customer_id.is_not(None),
+        WhatsAppLog.jenis.in_(MESSAGE_JENIS),
+    ]
+    if start is not None:
+        conditions.append(
+            WhatsAppLog.created_at >= datetime.combine(start, time.min)
+        )
+    if end is not None:
+        conditions.append(
+            WhatsAppLog.created_at
+            < datetime.combine(end + timedelta(days=1), time.min)
+        )
+    return int(
+        db.scalar(
+            select(func.count()).select_from(WhatsAppLog).where(*conditions)
+        )
+        or 0
+    )
+
+
+def summary(
+    db: Session,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+) -> Dict[str, Any]:
+    messages = _latest_messages(db, start=start, end=end)
+    followup_total = _followup_count(db, start=start, end=end)
     counts = {
         OUTCOME_BALIK: 0,
         OUTCOME_BAGUS: 0,
@@ -92,7 +138,7 @@ def summary(db: Session) -> Dict[str, Any]:
         OUTCOME_TOLAK: 0,
     }
     if not messages:
-        return {"counts": counts, "jumlah": 0}
+        return {"counts": counts, "jumlah": 0, "followup_total": followup_total}
     customer_ids = list(messages)
     records = list(
         db.scalars(
@@ -127,4 +173,8 @@ def summary(db: Session) -> Dict[str, Any]:
         if outcome in counts:
             counts[outcome] += 1
     counts["jumlah"] = sum(counts.values())
-    return {"counts": counts, "jumlah": counts["jumlah"]}
+    return {
+        "counts": counts,
+        "jumlah": counts["jumlah"],
+        "followup_total": followup_total,
+    }

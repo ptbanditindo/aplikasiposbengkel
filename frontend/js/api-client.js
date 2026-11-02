@@ -376,7 +376,13 @@
           (excludeStatus ? '&exclude_status=' + qs(excludeStatus) : '')
       ),
     followupCounts: () => request('/api/followup/counts'),
-    followupResults: () => request('/api/followup/results'),
+    followupResults: (start, end) =>
+      request(
+        '/api/followup/results' +
+          (start && end
+            ? '?start=' + qs(start) + '&end=' + qs(end)
+            : '')
+      ),
     followupDetail: (id) => request('/api/followup/items/' + id),
     followupItem: (id, data) =>
       request('/api/followup/items/' + id + '/followup', {
