@@ -5880,7 +5880,10 @@
     body.innerHTML = current.items
       .map((item) => followupCardHtml(item, current.status))
       .join('');
-    if (empty) empty.classList.toggle('hidden', current.items.length > 0);
+    if (empty) {
+      empty.textContent = 'Tidak ada item follow-up.';
+      empty.classList.toggle('hidden', current.items.length > 0);
+    }
   }
 
   function closeFollowupList() {
@@ -5903,6 +5906,12 @@
     if (resultGrid && reseller) resultGrid.classList.add('hidden');
     if (resellerStats) resellerStats.classList.toggle('hidden', !reseller);
     if (resellerSection) resellerSection.classList.add('hidden');
+    const headDesc = $('#followupHeadDesc');
+    if (headDesc) {
+      headDesc.textContent = reseller
+        ? 'Pantau stok menipis dan habis, lalu tanyakan ke supplier.'
+        : 'Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.';
+    }
     $$('#followupTabSwitch [data-followup-tab]').forEach((button) => {
       button.classList.toggle(
         'active',
@@ -10176,19 +10185,19 @@
     const mode = filter || 'all';
     const items = state.resellerItems || [];
     const titles = {
-      low: 'Barang menipis',
-      out: 'Barang habis',
-      all: 'Total barang',
+      low: 'Stok menipis',
+      out: 'Stok habis',
+      all: 'Perlu dipasok',
     };
     const subtitles = {
-      low: 'Barang di bawah batas minimum. Pilih tindakan.',
-      out: 'Barang dengan stok nol. Pilih tindakan.',
-      all: 'Semua barang yang perlu dipasok.',
+      low: 'Barang di bawah batas minimum.',
+      out: 'Barang dengan stok kosong.',
+      all: 'Semua barang yang menipis atau habis.',
     };
     state.resellerListFilter = mode;
     $('#followupListTitle').textContent = titles[mode] || 'Follow up reseller';
     $('#followupListSubtitle').textContent =
-      subtitles[mode] || 'Pilih tindakan.';
+      subtitles[mode] || 'Pilih tindakan yang perlu dilakukan.';
     const body = $('#followupListBody');
     const empty = $('#followupListEmpty');
     const list =
@@ -10202,7 +10211,10 @@
       list.map((item) => resellerItemRowHtml(item)).join('') +
       '</div>';
     if (body) body.innerHTML = html;
-    if (empty) empty.classList.toggle('hidden', list.length > 0);
+    if (empty) {
+      empty.textContent = 'Tidak ada barang pada bagian ini.';
+      empty.classList.toggle('hidden', list.length > 0);
+    }
     openModal('#followupListModal');
   }
 
@@ -10234,19 +10246,19 @@
         stock_item_ids: itemIds,
       });
       openWaPreview({
-        judul: 'Stok supplier · ' + preview.nama,
+        judul: 'Tanyakan stok · ' + preview.nama,
         subtitle: 'Periksa pesan untuk ' + preview.nama + '.',
         nomor: preview.nomor,
         text: preview.wa_text,
         note:
-          'Membuka WhatsApp akan mencatat upaya penanyaan stok. ' +
-          'Kasir tetap menekan kirim di WhatsApp.',
+          'Membuka WhatsApp akan mencatat penanyaan stok. ' +
+          'Pesan tetap dikirim manual dari WhatsApp.',
         onOpen: async (text) => {
           await API.supplierWhatsapp(supplierId, {
             stock_item_ids: itemIds,
             pesan: text,
           });
-          toast('Pertanyaan stok tercatat.', 'success');
+          toast('Penanyaan stok tercatat.', 'success');
         },
       });
       closeModal('#supplierPickModal');
@@ -10380,7 +10392,7 @@
       closeModal('#supplierStatusModal');
       renderFollowupReseller();
       refreshResellerListIfOpen();
-      toast('Status follow up reseller disimpan.', 'success');
+      toast('Status penanyaan stok disimpan.', 'success');
     } catch (err) {
       toast(err.message, 'error', 6000);
     } finally {

@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261182">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261183">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -1340,7 +1340,7 @@
         <div class="page-head">
           <div>
             <h1>Follow up</h1>
-            <p class="muted">Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.</p>
+            <p class="muted" id="followupHeadDesc">Pengingat aktif pelanggan: piutang, prospek, servis berkala, dan garansi.</p>
           </div>
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur follow up</span><input type="checkbox" id="followupFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
@@ -1402,20 +1402,20 @@
         </div>
         <div class="stats-grid stats-grid--secondary hidden" id="followupResultGrid"></div>
         <div class="stats-grid stats-grid--secondary stats-grid--followup hidden" id="followupResellerStats">
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat barang menipis" data-action="open-reseller-list" data-filter="low">
-            <span class="stat-label">Barang menipis</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat stok menipis" data-action="open-reseller-list" data-filter="low">
+            <span class="stat-label">Stok menipis</span>
             <strong id="resellerStatLow">0</strong>
-            <span class="stat-sub">Di bawah batas minimum</span>
+            <span class="stat-sub">Perlu dibeli</span>
           </article>
-          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat barang habis" data-action="open-reseller-list" data-filter="out">
-            <span class="stat-label">Barang habis</span>
+          <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat stok habis" data-action="open-reseller-list" data-filter="out">
+            <span class="stat-label">Stok habis</span>
             <strong id="resellerStatOut">0</strong>
-            <span class="stat-sub">Stok nol</span>
+            <span class="stat-sub">Tidak tersedia</span>
           </article>
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua barang yang perlu dipasok" data-action="open-reseller-list" data-filter="all">
-            <span class="stat-label">Total barang</span>
+            <span class="stat-label">Perlu dipasok</span>
             <strong id="resellerStatItems">0</strong>
-            <span class="stat-sub">Perlu dipasok</span>
+            <span class="stat-sub">Menipis dan habis</span>
           </article>
         </div>
         <div id="followupResellerSection" class="hidden"></div>
@@ -2308,7 +2308,7 @@
     <div class="modal">
       <div class="modal-head">
         <div>
-          <h3 id="supplierStatusTitle">Status follow up reseller</h3>
+          <h3 id="supplierStatusTitle">Status penanyaan stok</h3>
           <p class="muted" id="supplierStatusSubtitle">-</p>
         </div>
         <button type="button" class="icon-btn" id="supplierStatusClose" aria-label="Tutup">&times;</button>
@@ -2321,7 +2321,7 @@
             <option value="DIPESAN">Sudah dipesan</option>
             <option value="DIKIRIM">Akan dikirim</option>
             <option value="TIDAK_TERSEDIA">Tidak tersedia</option>
-            <option value="ARSIP">Tidak perlu (sembunyikan dari daftar)</option>
+            <option value="ARSIP">Tidak perlu ditanyakan (sembunyikan)</option>
           </select>
         </label>
         <label class="field">
@@ -2636,15 +2636,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261182"></script>
-  <script src="/static/js/api-client.js?v=20261182"></script>
-  <script src="/static/js/printer-manager.js?v=20261182"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261182"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261182"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261182"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261182"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261182"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261182"></script>
-  <script src="/static/js/app.js?v=20261182"></script>
+  <script src="/static/js/native-bridge.js?v=20261183"></script>
+  <script src="/static/js/api-client.js?v=20261183"></script>
+  <script src="/static/js/printer-manager.js?v=20261183"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261183"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261183"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261183"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261183"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261183"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261183"></script>
+  <script src="/static/js/app.js?v=20261183"></script>
 </body>
 </html>
