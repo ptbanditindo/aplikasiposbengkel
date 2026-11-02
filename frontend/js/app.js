@@ -551,6 +551,7 @@
       byView.delete(view);
     });
     byView.forEach((tab) => nav.appendChild(tab));
+    refreshMobileNav();
   }
 
   function saveNavOrder() {
@@ -696,6 +697,7 @@
     if (active && active.classList.contains('menu-hidden')) {
       navigate('dashboard');
     }
+    refreshMobileNav();
   }
 
   function fillMenuSettings() {
@@ -722,15 +724,149 @@
     if (!input.checked) hidden.push(key);
     saveHiddenMenus(hidden);
     applyMenuVisibility();
+    refreshMobileNav();
+  }
+
+  /* --------------------------- Navigasi ponsel ---------------------------- */
+  const MOBILE_PRIMARY_VIEWS = ['dashboard', 'pos', 'history', 'followup'];
+  const MOBILE_MORE_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>';
+
+  function navTabFor(view) {
+    return $$('#navTabs .nav-tab').find((tab) => tab.dataset.view === view) || null;
+  }
+
+  function visibleNavTabs() {
+    return $$('#navTabs .nav-tab').filter(
+      (tab) => !tab.classList.contains('menu-hidden')
+    );
+  }
+
+  function primaryMobileViews() {
+    const visible = visibleNavTabs().map((tab) => tab.dataset.view);
+    const chosen = MOBILE_PRIMARY_VIEWS.filter((view) => visible.includes(view));
+    visible.forEach((view) => {
+      if (chosen.length >= 4) return;
+      if (!chosen.includes(view) && view !== 'settings') chosen.push(view);
+    });
+    return chosen.slice(0, 4);
+  }
+
+  function navTabIcon(tab) {
+    const svg = tab && tab.querySelector('svg');
+    return svg ? svg.outerHTML : '';
+  }
+
+  function navTabLabel(tab) {
+    return tab ? tab.textContent.trim() : 'Menu';
+  }
+
+  function renderMobileNav() {
+    const nav = $('#mobileNav');
+    if (!nav) return;
+    const active = (($('.nav-tab.active') || {}).dataset || {}).view || 'dashboard';
+    const primary = primaryMobileViews();
+    let html = primary
+      .map((view) => {
+        const tab = navTabFor(view);
+        if (!tab) return '';
+        return (
+          '<button type="button" class="mobile-nav-item' +
+          (view === active ? ' active' : '') +
+          '" data-mobile-view="' +
+          view +
+          '">' +
+          navTabIcon(tab) +
+          '<span>' +
+          esc(navTabLabel(tab)) +
+          '</span></button>'
+        );
+      })
+      .join('');
+    html +=
+      '<button type="button" class="mobile-nav-item' +
+      (primary.includes(active) ? '' : ' active') +
+      '" data-mobile-menu="1" aria-haspopup="dialog"><span aria-hidden="true">' +
+      MOBILE_MORE_ICON +
+      '</span><span>Menu</span></button>';
+    nav.innerHTML = html;
+  }
+
+  function renderMobileSheet() {
+    const grid = $('#navSheetGrid');
+    if (!grid) return;
+    const active = (($('.nav-tab.active') || {}).dataset || {}).view || '';
+    grid.innerHTML = visibleNavTabs()
+      .map((tab) => {
+        const view = tab.dataset.view;
+        return (
+          '<button type="button" class="sheet-item' +
+          (view === active ? ' active' : '') +
+          '" data-mobile-view="' +
+          view +
+          '">' +
+          navTabIcon(tab) +
+          '<span>' +
+          esc(navTabLabel(tab)) +
+          '</span></button>'
+        );
+      })
+      .join('');
+  }
+
+  function openMobileSheet() {
+    const sheet = $('#navSheet');
+    const backdrop = $('#navSheetBackdrop');
+    if (!sheet || !backdrop) return;
+    renderMobileSheet();
+    sheet.classList.remove('hidden');
+    backdrop.classList.remove('hidden');
+    document.body.classList.add('sheet-open');
+    const close = $('#navSheetClose');
+    if (close) close.focus();
+  }
+
+  function closeMobileSheet() {
+    const sheet = $('#navSheet');
+    const backdrop = $('#navSheetBackdrop');
+    if (!sheet || !backdrop) return;
+    sheet.classList.add('hidden');
+    backdrop.classList.add('hidden');
+    document.body.classList.remove('sheet-open');
+  }
+
+  function refreshMobileNav() {
+    renderMobileNav();
+    const sheet = $('#navSheet');
+    if (sheet && !sheet.classList.contains('hidden')) renderMobileSheet();
+  }
+
+  function syncMobileChrome(view) {
+    const title = $('#mobilePageTitle');
+    if (title) title.textContent = navTabLabel(navTabFor(view));
+    const primary = primaryMobileViews();
+    $$('#mobileNav [data-mobile-view]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.mobileView === view);
+    });
+    const menuButton = $('#mobileNav [data-mobile-menu]');
+    if (menuButton) menuButton.classList.toggle('active', !primary.includes(view));
+    $$('#navSheetGrid [data-mobile-view]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.mobileView === view);
+    });
   }
 
   function navigate(view) {
     $$('.nav-tab').forEach((tab) => {
-      tab.classList.toggle('active', tab.dataset.view === view);
+      const active = tab.dataset.view === view;
+      tab.classList.toggle('active', active);
+      if (active) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
     });
     $$('.view').forEach((section) => section.classList.add('hidden'));
     const target = $('#view-' + view);
     if (target) target.classList.remove('hidden');
+    closeMobileSheet();
+    syncMobileChrome(view);
     const activeTab = $('.nav-tab.active');
     if (activeTab && activeTab.scrollIntoView) {
       activeTab.scrollIntoView({
@@ -781,6 +917,8 @@
     document.title = config.bengkel.nama + ' - Kasir Bengkel';
     $('#bengkelNama').textContent = config.bengkel.nama;
     $('#bengkelTagline').textContent = config.bengkel.tagline;
+    const mobileBrand = $('#mobileBrandName');
+    if (mobileBrand) mobileBrand.textContent = config.bengkel.nama;
     $('#bankAccount').textContent =
       config.bengkel.bank_nama + ': ' + config.bengkel.no_rekening;
     $('#bankOwner').textContent = 'a/n ' + config.bengkel.atas_nama;
@@ -3479,6 +3617,23 @@
       label.textContent = 'Printer: ' + primary.name;
     }
 
+    const mobileButton = $('#mobilePrinterBtn');
+    const mobileLabel = $('#mobilePrinterLabel');
+    if (mobileButton) {
+      mobileButton.classList.toggle(
+        'connected',
+        Boolean(primary && primary.status === 'CONNECTED')
+      );
+      mobileButton.classList.toggle(
+        'connecting',
+        Boolean(primary && primary.status === 'CONNECTING')
+      );
+      mobileButton.classList.toggle('offline', !primary);
+    }
+    if (mobileLabel) {
+      mobileLabel.textContent = primary ? primary.name : 'Printer';
+    }
+
     button.title = primary
       ? 'Printer utama: ' +
         primary.name +
@@ -3589,6 +3744,8 @@
 
     const toolbar = $('#printerBtn');
     if (toolbar) toolbar.addEventListener('click', handlePrinterToolbarClick);
+    const mobilePrinter = $('#mobilePrinterBtn');
+    if (mobilePrinter) mobilePrinter.addEventListener('click', handlePrinterToolbarClick);
 
     const manager = window.printerManager;
     if (manager) {
@@ -11270,6 +11427,7 @@
     applyNavOrder();
     applyMenuVisibility();
     fillMenuSettings();
+    renderMobileNav();
     $('#menuToggleGrid').addEventListener('change', handleMenuToggleChange);
     $$('.nav-tab').forEach((tab) =>
       tab.addEventListener('click', () => {
@@ -11289,6 +11447,32 @@
       const tab = row && row.querySelector('.nav-tab');
       if (!tab) return;
       moveNavTab(tab.dataset.view, Number(moveButton.dataset.navMove));
+    });
+
+    const mobileNav = $('#mobileNav');
+    if (mobileNav) {
+      mobileNav.addEventListener('click', (event) => {
+        const viewButton = event.target.closest('[data-mobile-view]');
+        if (viewButton) {
+          navigate(viewButton.dataset.mobileView);
+          return;
+        }
+        if (event.target.closest('[data-mobile-menu]')) openMobileSheet();
+      });
+    }
+    const mobileSheetGrid = $('#navSheetGrid');
+    if (mobileSheetGrid) {
+      mobileSheetGrid.addEventListener('click', (event) => {
+        const viewButton = event.target.closest('[data-mobile-view]');
+        if (viewButton) navigate(viewButton.dataset.mobileView);
+      });
+    }
+    const sheetBackdrop = $('#navSheetBackdrop');
+    if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeMobileSheet);
+    const sheetClose = $('#navSheetClose');
+    if (sheetClose) sheetClose.addEventListener('click', closeMobileSheet);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMobileSheet();
     });
 
     $('#btnNewCustomerPos').addEventListener('click', () => openCustomerModal(true));
@@ -11784,10 +11968,22 @@
 
   /* ------------------------------ Tampilan -------------------------------- */
   const THEME_KEY = 'bengkel.theme';
-  const THEME_COLOR = { light: '#f7f7f7', dark: '#0d0d0e' };
+  const COLOR_THEME_KEY = 'bengkel.colorTheme';
+  const COLOR_THEMES = ['navy-oranye', 'charcoal-kuning', 'biru-teal'];
+  const COLOR_THEME_BG = {
+    'navy-oranye': { light: '#F1F5F9', dark: '#0B1220' },
+    'charcoal-kuning': { light: '#F4F4F5', dark: '#09090B' },
+    'biru-teal': { light: '#F1F5F9', dark: '#0B1220' },
+  };
 
   function normalizeTheme(value) {
     return String(value) === 'dark' ? 'dark' : 'light';
+  }
+
+  function normalizeColorTheme(value) {
+    return COLOR_THEMES.includes(String(value))
+      ? String(value)
+      : 'navy-oranye';
   }
 
   function storedTheme() {
@@ -11798,6 +11994,42 @@
     }
   }
 
+  function storedColorTheme() {
+    try {
+      return normalizeColorTheme(window.localStorage.getItem(COLOR_THEME_KEY));
+    } catch (error) {
+      return 'navy-oranye';
+    }
+  }
+
+  function themeTokens() {
+    return (document.documentElement.getAttribute('data-theme') || '')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  function rootThemeMode() {
+    return themeTokens().includes('dark') ? 'dark' : 'light';
+  }
+
+  function rootColorTheme() {
+    const token = themeTokens().find((item) => COLOR_THEMES.includes(item));
+    return normalizeColorTheme(token);
+  }
+
+  function applyThemeAttribute(mode, colorTheme) {
+    const tokens = [normalizeColorTheme(colorTheme)];
+    if (mode === 'dark') tokens.push('dark');
+    document.documentElement.setAttribute('data-theme', tokens.join(' '));
+  }
+
+  function syncThemeMeta(mode, colorTheme) {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return;
+    const palette = COLOR_THEME_BG[normalizeColorTheme(colorTheme)];
+    meta.setAttribute('content', palette[mode]);
+  }
+
   function syncThemeUI(theme) {
     $$('#themeSwitch button').forEach((button) => {
       const active = button.dataset.themeValue === theme;
@@ -11806,11 +12038,21 @@
     });
   }
 
-  function applyTheme(theme, persist) {
+  function syncColorThemeUI(colorTheme) {
+    $$('#colorThemePicker [data-color-theme]').forEach((button) => {
+      const active = button.dataset.colorTheme === colorTheme;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function applyTheme(theme, persist, colorThemeOverride) {
     const next = normalizeTheme(theme);
-    document.documentElement.setAttribute('data-theme', next);
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', THEME_COLOR[next]);
+    const colorTheme = normalizeColorTheme(
+      colorThemeOverride || rootColorTheme()
+    );
+    applyThemeAttribute(next, colorTheme);
+    syncThemeMeta(next, colorTheme);
     if (persist) {
       try {
         window.localStorage.setItem(THEME_KEY, next);
@@ -11827,13 +12069,34 @@
       }
     }
     syncThemeUI(next);
+    syncColorThemeUI(colorTheme);
+  }
+
+  function applyColorTheme(theme, persist) {
+    const colorTheme = normalizeColorTheme(theme);
+    const mode = rootThemeMode();
+    applyThemeAttribute(mode, colorTheme);
+    syncThemeMeta(mode, colorTheme);
+    if (persist) {
+      try {
+        window.localStorage.setItem(COLOR_THEME_KEY, colorTheme);
+      } catch (error) {
+        // Tema tetap berlaku untuk sesi ini meski penyimpanan diblokir.
+      }
+    }
+    syncColorThemeUI(colorTheme);
   }
 
   function initTheme() {
-    applyTheme(storedTheme(), false);
+    applyTheme(storedTheme(), false, storedColorTheme());
     $$('#themeSwitch button').forEach((button) => {
       button.addEventListener('click', () =>
         applyTheme(button.dataset.themeValue, true)
+      );
+    });
+    $$('#colorThemePicker [data-color-theme]').forEach((button) => {
+      button.addEventListener('click', () =>
+        applyColorTheme(button.dataset.colorTheme, true)
       );
     });
   }

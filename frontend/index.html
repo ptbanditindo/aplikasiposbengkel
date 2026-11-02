@@ -3,70 +3,90 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f7f7f7">
+  <meta name="theme-color" content="#F1F5F9">
   <script>
     (function () {
       try {
-        if (window.localStorage.getItem('bengkel.theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', '#0d0d0e');
+        var mode = window.localStorage.getItem('bengkel.theme') === 'dark' ? 'dark' : 'light';
+        var palette = window.localStorage.getItem('bengkel.colorTheme') || 'navy-oranye';
+        if (['navy-oranye', 'charcoal-kuning', 'biru-teal'].indexOf(palette) < 0) {
+          palette = 'navy-oranye';
         }
+        document.documentElement.setAttribute(
+          'data-theme',
+          palette + (mode === 'dark' ? ' dark' : '')
+        );
+        var backgrounds = {
+          'navy-oranye': { light: '#F1F5F9', dark: '#0B1220' },
+          'charcoal-kuning': { light: '#F4F4F5', dark: '#09090B' },
+          'biru-teal': { light: '#F1F5F9', dark: '#0B1220' }
+        };
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', backgrounds[palette][mode]);
       } catch (error) {}
     })();
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261192">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261199">
+  <link rel="stylesheet" href="/static/css/world.css?v=20261199">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
   <div class="auth-gate hidden" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
     <div class="auth-card">
-      <div class="auth-brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
-            <rect x="4" y="8" width="24" height="17" rx="2.5"></rect>
-            <path d="M8 11v11M12 11v11M16 11v11M20 11v11M24 11v11"></path>
-            <circle cx="16" cy="27" r="2.2"></circle>
-          </svg>
+      <aside class="auth-panel">
+        <div class="auth-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+              <rect x="4" y="8" width="24" height="17" rx="2.5"></rect>
+              <path d="M8 11v11M12 11v11M16 11v11M20 11v11M24 11v11"></path>
+              <circle cx="16" cy="27" r="2.2"></circle>
+            </svg>
+          </div>
+          <div class="auth-brand-copy">
+            <p class="auth-brand-name">BengkelPOS Radiator</p>
+            <p class="auth-brand-sub">Data bengkel tersimpan di perangkat ini</p>
+          </div>
         </div>
-        <div class="auth-brand-copy">
-          <p class="auth-brand-name">BengkelPOS Radiator</p>
-          <p class="auth-brand-sub">Data bengkel tersimpan di perangkat ini</p>
+        <p class="auth-panel-line">Kasir, stok, dan piutang dalam satu buku kerja.</p>
+        <div class="auth-panel-foot">
+          <span>Akses pemilik</span>
         </div>
+      </aside>
+
+      <div class="auth-form">
+        <section id="authSetup" class="hidden">
+          <h1 class="auth-title" id="authTitle">Buat PIN pemilik</h1>
+          <p class="muted auth-lead">PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu.</p>
+          <form id="authSetupForm" autocomplete="off">
+            <label class="field">
+              <span>PIN baru</span>
+              <input class="input" type="password" id="authSetupPin" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
+            </label>
+            <label class="field">
+              <span>Ulangi PIN</span>
+              <input class="input" type="password" id="authSetupPinConfirm" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
+            </label>
+            <p class="auth-error hidden" id="authSetupError" role="alert"></p>
+            <button type="submit" class="btn btn-primary auth-submit" id="authSetupSubmit">Simpan PIN</button>
+          </form>
+        </section>
+
+        <section id="authLogin" class="hidden">
+          <h1 class="auth-title">Masuk</h1>
+          <p class="muted auth-lead">Masukkan PIN pemilik untuk membuka bengkel.</p>
+          <form id="authLoginForm" autocomplete="off">
+            <label class="field">
+              <span>PIN</span>
+              <input class="input" type="password" id="authLoginPin" inputmode="numeric" autocomplete="current-password" maxlength="12" required>
+            </label>
+            <p class="auth-error hidden" id="authLoginError" role="alert"></p>
+            <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka aplikasi</button>
+          </form>
+          <p class="auth-help">Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.</p>
+        </section>
       </div>
-
-      <section id="authSetup" class="hidden">
-        <h1 class="auth-title" id="authTitle">Buat PIN pemilik</h1>
-        <p class="muted auth-lead">PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu.</p>
-        <form id="authSetupForm" autocomplete="off">
-          <label class="field">
-            <span>PIN baru</span>
-            <input class="input" type="password" id="authSetupPin" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
-          </label>
-          <label class="field">
-            <span>Ulangi PIN</span>
-            <input class="input" type="password" id="authSetupPinConfirm" inputmode="numeric" autocomplete="new-password" maxlength="12" required>
-          </label>
-          <p class="auth-error hidden" id="authSetupError" role="alert"></p>
-          <button type="submit" class="btn btn-primary auth-submit" id="authSetupSubmit">Simpan PIN</button>
-        </form>
-      </section>
-
-      <section id="authLogin" class="hidden">
-        <h1 class="auth-title">Masuk</h1>
-        <p class="muted auth-lead">Masukkan PIN pemilik untuk membuka bengkel.</p>
-        <form id="authLoginForm" autocomplete="off">
-          <label class="field">
-            <span>PIN</span>
-            <input class="input" type="password" id="authLoginPin" inputmode="numeric" autocomplete="current-password" maxlength="12" required>
-          </label>
-          <p class="auth-error hidden" id="authLoginError" role="alert"></p>
-          <button type="submit" class="btn btn-primary auth-submit" id="authLoginSubmit">Buka aplikasi</button>
-        </form>
-        <p class="auth-help">Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.</p>
-      </section>
     </div>
   </div>
 
@@ -149,6 +169,26 @@
       </div>
     </aside>
 
+    <header class="mobile-topbar" id="mobileTopbar">
+      <div class="mobile-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.7">
+            <rect x="4" y="8" width="24" height="17" rx="2.5"></rect>
+            <path d="M8 11v11M12 11v11M16 11v11M20 11v11M24 11v11"></path>
+            <circle cx="16" cy="27" r="2.2"></circle>
+          </svg>
+        </div>
+        <div class="mobile-brand-text">
+          <span class="mobile-brand-name" id="mobileBrandName">BengkelPOS</span>
+          <span class="mobile-page-title" id="mobilePageTitle">Ringkasan</span>
+        </div>
+      </div>
+      <button type="button" class="mobile-printer offline" id="mobilePrinterBtn" aria-label="Buka pengaturan printer">
+        <span class="status-dot" id="mobilePrinterDot"></span>
+        <span id="mobilePrinterLabel">Printer</span>
+      </button>
+    </header>
+
     <div class="app-body">
       <main class="main-area">
       <!-- ============================ DASHBOARD ============================ -->
@@ -170,7 +210,7 @@
 
         <section class="stat-section">
           <h2 class="stat-section-title">Laporan keuangan bengkel hari ini</h2>
-          <div class="stats-grid">
+          <div class="stats-grid stats-grid--money">
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
               <span class="stat-label">Unit diservis</span>
               <strong id="statUnit">0</strong>
@@ -835,6 +875,23 @@
               <button type="button" data-theme-value="dark" aria-pressed="false">Gelap</button>
             </div>
           </div>
+          <div class="field">
+            <span>Tema</span>
+            <div class="theme-picker" id="colorThemePicker" role="group" aria-label="Tema warna">
+              <button type="button" class="theme-choice" data-color-theme="navy-oranye" aria-pressed="true">
+                <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="theme-name">Navy Oranye</span>
+              </button>
+              <button type="button" class="theme-choice" data-color-theme="charcoal-kuning" aria-pressed="false">
+                <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="theme-name">Charcoal Kuning</span>
+              </button>
+              <button type="button" class="theme-choice" data-color-theme="biru-teal" aria-pressed="false">
+                <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="theme-name">Biru Teal</span>
+              </button>
+            </div>
+          </div>
         </section>
 
         <section class="card settings-collapsible" id="menuSettingsCard">
@@ -1200,7 +1257,7 @@
           </div>
         </div>
 
-        <div class="stats-grid">
+        <div class="stats-grid stats-grid--money">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat daftar pelanggan" data-action="customer-stat-customers">
             <span class="stat-label">Total pelanggan</span>
             <strong id="customerStatTotal">0</strong>
@@ -1273,7 +1330,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table table-employees">
               <thead>
                 <tr><th>Nama</th><th>Peran</th><th>Status</th><th></th></tr>
               </thead>
@@ -1297,7 +1354,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table table-debts">
               <thead>
                 <tr><th>Nama</th><th class="text-right">Nominal hutang</th><th>Status</th><th></th></tr>
               </thead>
@@ -1320,7 +1377,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table table-salary">
               <thead>
                 <tr><th>Tanggal</th><th>Karyawan</th><th>Periode</th><th>Metode</th><th class="text-right">Nominal</th><th class="text-right">Potongan hutang</th><th>Catatan</th></tr>
               </thead>
@@ -1355,7 +1412,7 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table table-suppliers">
               <thead>
                 <tr><th>Nama</th><th>WhatsApp</th><th>Barang disuplai</th><th></th></tr>
               </thead>
@@ -1454,10 +1511,21 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.4.0</span>
+        <span>BengkelPOS Radiator v2.5.0</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
+
+    <nav class="mobile-nav" id="mobileNav" aria-label="Navigasi utama"></nav>
+
+    <div class="nav-sheet-backdrop hidden" id="navSheetBackdrop"></div>
+    <section class="nav-sheet hidden" id="navSheet" role="dialog" aria-modal="true" aria-labelledby="navSheetTitle">
+      <div class="nav-sheet-head">
+        <h2 id="navSheetTitle">Menu</h2>
+        <button type="button" class="icon-btn" id="navSheetClose" aria-label="Tutup menu">&times;</button>
+      </div>
+      <div class="nav-sheet-grid" id="navSheetGrid"></div>
+    </section>
   </div>
 
   <!-- ============================ CUSTOMER MODAL ============================ -->
@@ -2670,15 +2738,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261192"></script>
-  <script src="/static/js/api-client.js?v=20261192"></script>
-  <script src="/static/js/printer-manager.js?v=20261192"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261192"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261192"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261192"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261192"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261192"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261192"></script>
-  <script src="/static/js/app.js?v=20261192"></script>
+  <script src="/static/js/native-bridge.js?v=20261199"></script>
+  <script src="/static/js/api-client.js?v=20261199"></script>
+  <script src="/static/js/printer-manager.js?v=20261199"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261199"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261199"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261199"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261199"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261199"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261199"></script>
+  <script src="/static/js/app.js?v=20261199"></script>
 </body>
 </html>

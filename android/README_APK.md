@@ -134,21 +134,17 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.166.332 byte
-- SHA-256: `9836d873af0b5c2337c13588f05ce9aa8ef169265be66afcce7a9902b697771c`
-- Paket: `com.bengkelpos.radiator`, versionName `2.4.0`, versionCode `16`,
+- Ukuran: 45.215.484 byte
+- SHA-256: `778425c0c8fbfd0c369435e151268ddbf7749efeafca2de289edbbe744e4c803`
+- Paket: `com.bengkelpos.radiator`, versionName `2.5.0`, versionCode `17`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 344.407 byte, SHA-256
-  `877fe45715ec8f78592bf2c16ac07868bb45b52b81922f59961493015e4686e1`.
-  ZIP ini memuat logika follow-up Tahap 1-5: penanda pengerjaan, status
-  pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
-  servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,
-  prioritas, penggabungan pesan, varian template, dan sembilan kartu Follow up.
-  Build ini juga memuat total hutang, stok menipis/habis, batas minimum per
-  item, supplier/reseller dengan pemilih barang, hasil follow up, nomor nota
-  angka, karyawan dengan komisi/gaji, pengaturan struk, estimasi laba bersih
-  setelah komisi, serta sakelar fitur karyawan/supplier.
-- Pytest dua stack lulus 338 test. Unit test Kotlin debug lulus 154 test.
+- Asset `assets/bengkel_backend.zip`: 383.571 byte, SHA-256
+  `ade1c0cbb8e402476efaf8c182bb6d1b8b229e1560065eace171144b9d94885a`.
+  ZIP ini memuat desain Tembaga & Grafit, tiga tema warna (navy-oranye,
+  charcoal-kuning, biru-teal) dengan mode terang/gelap, font Plus Jakarta Sans
+  lokal, serta logika follow-up, supplier/reseller, karyawan, struk, dan
+  estimasi laba bersih.
+- Pytest dua stack lulus 360 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 
