@@ -101,10 +101,17 @@ with SessionLocal() as db:
         stok[nama] = row
 
     for key, value in {
-        "ops.prospek_hari": "7",
         "ops.cooldown_hari": "7",
-        "ops.garansi_akan_habis_hari": "7",
-        "ops.servis_berkala_awal_hari": "14",
+        "ops.garansi_akan_habis_hari": "14",
+        "ops.servis_berkala_awal_hari": "30",
+        "ops.prospek_hari_1": "30",
+        "ops.prospek_hari_2": "90",
+        "ops.prospek_hari_3": "180",
+        "ops.piutang_maks_pengingat": "2",
+        "ops.maks_tidak_merespons": "2",
+        "ops.jeda_prospek_servis_hari": "14",
+        "ops.followup_jam_mulai": "09:00",
+        "ops.followup_jam_selesai": "19:00",
     }.items():
         db.add(AppSetting(key=key, value=value))
 

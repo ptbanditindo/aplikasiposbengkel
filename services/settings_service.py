@@ -142,7 +142,6 @@ RECEIPT_FIELDS = (
 
 OPS_PREFIX = "ops."
 OPS_INT_KEYS = {
-    "prospek_hari": (1, 365, 7),
     "cooldown_hari": (0, 90, 7),
     "garansi_akan_habis_hari": (1, 90, 7),
     "servis_berkala_awal_hari": (1, 90, 14),
