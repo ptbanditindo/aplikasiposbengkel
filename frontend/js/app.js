@@ -8366,7 +8366,7 @@
   /* ------------------------------ Karyawan -------------------------------- */
   async function loadEmployees() {
     try {
-      state.employees = await API.employees(true);
+      state.employees = await API.employees(false);
       renderEmployees();
       populateEmployeeOptions();
     } catch (err) {
@@ -8377,8 +8377,15 @@
   function renderEmployees() {
     const body = $('#employeeBody');
     if (!body) return;
+    const activeCount = state.employees.filter((row) => row.aktif).length;
+    const archivedCount = state.employees.length - activeCount;
     const summary = $('#employeeSummary');
-    if (summary) summary.textContent = state.employees.length + ' karyawan aktif';
+    if (summary) {
+      summary.textContent =
+        activeCount +
+        ' karyawan aktif' +
+        (archivedCount ? ' · ' + archivedCount + ' diarsip' : '');
+    }
     if (!state.employees.length) {
       body.innerHTML = '';
       $('#employeeEmpty').classList.remove('hidden');
@@ -8399,16 +8406,26 @@
           esc(employee.nama) +
           '</button></td><td>' +
           esc(peranLabel[employee.peran] || employee.peran) +
-          '</td><td class="row-actions">' +
-          '<button type="button" class="btn btn-outline btn-xs" data-action="employee-perf" data-id="' +
-          employee.id +
-          '">Performa</button>' +
+          '</td><td><span class="badge ' +
+          (employee.aktif ? 'green' : 'gray') +
+          '">' +
+          (employee.aktif ? 'Aktif' : 'Nonaktif') +
+          '</span></td><td class="row-actions">' +
+          (employee.aktif
+            ? '<button type="button" class="btn btn-outline btn-xs" data-action="employee-perf" data-id="' +
+              employee.id +
+              '">Performa</button>'
+            : '') +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-employee" data-id="' +
           employee.id +
           '">Edit</button>' +
-          '<button type="button" class="btn btn-ghost btn-xs" data-action="archive-employee" data-id="' +
-          employee.id +
-          '">Arsipkan</button>' +
+          (employee.aktif
+            ? '<button type="button" class="btn btn-ghost btn-xs" data-action="archive-employee" data-id="' +
+              employee.id +
+              '">Arsipkan</button>'
+            : '<button type="button" class="btn btn-outline btn-xs" data-action="reactivate-employee" data-id="' +
+              employee.id +
+              '">Aktifkan kembali</button>') +
           '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-employee" data-id="' +
           employee.id +
           '">Hapus</button>' +
@@ -8646,12 +8663,17 @@
       row('Catatan', employee.catatan || '-') +
       '</div>' +
       '<div class="row-actions" style="margin-top:14px">' +
-      '<button type="button" class="btn btn-outline btn-sm" data-action="employee-perf" data-id="' +
-      employee.id + '">Performa</button>' +
+      (employee.aktif
+        ? '<button type="button" class="btn btn-outline btn-sm" data-action="employee-perf" data-id="' +
+          employee.id + '">Performa</button>'
+        : '') +
       '<button type="button" class="btn btn-outline btn-sm" data-action="edit-employee" data-id="' +
       employee.id + '">Edit</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-employee" data-id="' +
-      employee.id + '">Arsipkan</button>' +
+      (employee.aktif
+        ? '<button type="button" class="btn btn-ghost btn-sm" data-action="archive-employee" data-id="' +
+          employee.id + '">Arsipkan</button>'
+        : '<button type="button" class="btn btn-outline btn-sm" data-action="reactivate-employee" data-id="' +
+          employee.id + '">Aktifkan kembali</button>') +
       '<button type="button" class="btn btn-ghost btn-sm" data-action="delete-employee" data-id="' +
       employee.id + '">Hapus</button>' +
       '</div>';
@@ -8734,7 +8756,9 @@
   }
 
   async function reactivateEmployee(id) {
-    const employee = state.archivedEmployees.find((row) => row.id === id);
+    const employee =
+      (state.archivedEmployees || []).find((row) => row.id === id) ||
+      state.employees.find((row) => row.id === id);
     if (!employee) return;
     if (
       !window.confirm(
