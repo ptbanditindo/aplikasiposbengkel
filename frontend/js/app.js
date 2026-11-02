@@ -7613,10 +7613,6 @@
       await openEmployeePerformance(id);
       return;
     }
-    if (action === 'salary-history-all') {
-      openSalaryHistoryModal();
-      return;
-    }
     if (action === 'debt-detail') {
       openDebtDetail(id);
       return;
@@ -7628,10 +7624,6 @@
     }
     if (action === 'delete-debt') {
       await deleteEmployeeDebt(id);
-      return;
-    }
-    if (action === 'employee-perf-load') {
-      await loadEmployeePerformance();
       return;
     }
     if (action === 'employee-perf-detail') {
