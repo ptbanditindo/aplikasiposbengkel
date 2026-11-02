@@ -257,6 +257,11 @@
   /* ------------------------------ State ---------------------------------- */
   const state = {
     config: null,
+    entitlement: { plan: 'free', premium: false },
+    stores: [],
+    storeActive: '',
+    storeSwitching: false,
+    followupQuota: null,
     selectedCustomer: null,
     customerResults: [],
     units: [],
@@ -845,7 +850,14 @@
     const grid = $('#navSheetGrid');
     if (!grid) return;
     const active = (($('.nav-tab.active') || {}).dataset || {}).view || '';
-    grid.innerHTML = visibleNavTabs()
+    const storeName = activeStoreName();
+    let html =
+      '<button type="button" class="sheet-item sheet-item-store" data-open-store="1">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16M6 9V5h12v4M5 9v10h14V9"></path><path d="M10 13h4"></path></svg>' +
+      '<span>Ganti toko<span class="sheet-item-sub">' +
+      esc(storeName) +
+      '</span></span></button>';
+    html += visibleNavTabs()
       .map((tab) => {
         const view = tab.dataset.view;
         return (
@@ -861,6 +873,7 @@
         );
       })
       .join('');
+    grid.innerHTML = html;
   }
 
   function openMobileSheet() {
@@ -892,7 +905,7 @@
 
   function syncMobileChrome(view) {
     const title = $('#mobilePageTitle');
-    if (title) title.textContent = navTabLabel(navTabFor(view));
+    if (title) title.textContent = storeAddress();
     const primary = primaryMobileViews();
     $$('#mobileNav [data-mobile-view]').forEach((button) => {
       button.classList.toggle('active', button.dataset.mobileView === view);
@@ -958,16 +971,130 @@
   }
 
   /* ------------------------------ Config ---------------------------------- */
+  function isPremium() {
+    return !!(state.entitlement && state.entitlement.premium);
+  }
+
+  function activeStoreName() {
+    if (!state.stores.length) return 'Toko utama';
+    const aktif = state.stores.find((store) => store.aktif);
+    return (aktif && aktif.nama) || state.stores[0].nama || 'Toko utama';
+  }
+
+  function storeAddress() {
+    const alamat = ((state.config && state.config.bengkel && state.config.bengkel.alamat) || '').trim();
+    return alamat || 'Alamat belum diisi';
+  }
+
+  function renderStoreSwitcher() {
+    const nameEl = $('#storeActiveName');
+    if (nameEl) nameEl.textContent = activeStoreName();
+  }
+
+  function applyEntitlementVisibility() {
+    const premium = isPremium();
+    const employeeLock = $('#employeePlanLock');
+    if (employeeLock) employeeLock.classList.toggle('hidden', premium);
+    const supplierLock = $('#supplierPlanLock');
+    if (supplierLock) supplierLock.classList.toggle('hidden', premium);
+    const addEmployee = $('#btnAddEmployee');
+    if (addEmployee) addEmployee.disabled = !premium;
+    const addSupplier = $('#btnAddSupplier');
+    if (addSupplier) addSupplier.disabled = !premium;
+    const addDebt = $('#btnAddDebt');
+    if (addDebt) addDebt.disabled = !premium;
+  }
+
+  function renderPlanCard() {
+    const badge = $('#planBadge');
+    const list = $('#planFeatures');
+    if (!badge || !list) return;
+    const premium = isPremium();
+    badge.textContent = premium ? 'Premium' : 'Gratis';
+    badge.classList.toggle('green', premium);
+    badge.classList.toggle('gray', !premium);
+    const features = premium
+      ? [
+          'Toko tanpa batas dengan data terpisah.',
+          'Karyawan, Supplier, dan Follow up tanpa kuota.',
+          'Backup otomatis lokal dan Telegram.',
+        ]
+      : [
+          'Satu toko, kasir, stok, laporan, dan backup manual.',
+          '20 kredit WhatsApp untuk Follow up.',
+          'Karyawan, Supplier, dan multi-toko terkunci.',
+        ];
+    list.innerHTML = features.map((text) => '<li>' + esc(text) + '</li>').join('');
+  }
+
+  function renderFollowupQuota() {
+    const banner = $('#followupQuotaBanner');
+    if (!banner) return;
+    const quota = state.followupQuota;
+    if (isPremium() || !quota || quota.batas == null) {
+      banner.classList.add('hidden');
+      banner.classList.remove('is-warning', 'is-locked');
+      return;
+    }
+    banner.classList.remove('hidden');
+    banner.classList.toggle('is-locked', !!quota.terkunci);
+    banner.classList.toggle('is-warning', !quota.terkunci && quota.sisa <= 5);
+    const title = $('#followupQuotaTitle');
+    const detail = $('#followupQuotaDetail');
+    if (quota.terkunci) {
+      if (title) title.textContent = 'Kuota Follow up habis';
+      if (detail) detail.textContent = '20 kredit WhatsApp sudah terpakai. Fitur Follow up terkunci sampai berlangganan premium.';
+      return;
+    }
+    if (title) title.textContent = 'Kuota Follow up';
+    if (detail) {
+      detail.textContent =
+        quota.sisa +
+        ' dari ' +
+        quota.batas +
+        ' kredit WhatsApp tersisa. Satu kredit terpakai saat tautan WhatsApp dibuka.';
+    }
+  }
+
+  function applyQuotaFromResponse(result) {
+    if (result && result.kuota) {
+      state.followupQuota = result.kuota;
+      renderFollowupQuota();
+    }
+  }
+
+  async function refreshFollowupQuota() {
+    try {
+      const quota = await API.followupQuota();
+      state.followupQuota = quota;
+      renderFollowupQuota();
+    } catch (err) {
+      /* kuota tidak menghalangi pemakaian aplikasi */
+    }
+  }
+
+  function handlePlanError(err) {
+    if (!err) return;
+    if (err.code === 'followup_quota_habis') refreshFollowupQuota();
+  }
+
   function applyConfig() {
     const config = state.config;
     if (!config) return;
 
+    state.entitlement = config.entitlement || { plan: 'free', premium: false };
+    state.stores = config.stores || [];
+    state.storeActive = config.store_aktif || '';
+    state.followupQuota = config.kuota_followup || null;
+
     syncFeatureToggles();
     document.title = config.bengkel.nama + ' - Kasir Bengkel';
     $('#bengkelNama').textContent = config.bengkel.nama;
-    $('#bengkelTagline').textContent = config.bengkel.tagline;
+    $('#bengkelTagline').textContent = storeAddress();
     const mobileBrand = $('#mobileBrandName');
     if (mobileBrand) mobileBrand.textContent = config.bengkel.nama;
+    const mobileTitle = $('#mobilePageTitle');
+    if (mobileTitle) mobileTitle.textContent = storeAddress();
     $('#bankAccount').textContent =
       config.bengkel.bank_nama + ': ' + config.bengkel.no_rekening;
     $('#bankOwner').textContent = 'a/n ' + config.bengkel.atas_nama;
@@ -980,6 +1107,182 @@
     fillSettingsForm();
     fillOpsForm();
     fillTelegramForm();
+    renderStoreSwitcher();
+    renderPlanCard();
+    renderFollowupQuota();
+    applyEntitlementVisibility();
+    applyMenuVisibility();
+  }
+
+  /* ------------------------------- Toko ----------------------------------- */
+  const STORE_ICON =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16M6 9V5h12v4M5 9v10h14V9"></path><path d="M10 13h4"></path></svg>';
+
+  function setStoreAddForm(open) {
+    const form = $('#storeAddForm');
+    if (!form) return;
+    form.classList.toggle('hidden', !open);
+    const errorEl = $('#storeAddError');
+    if (errorEl) errorEl.textContent = '';
+    const toggle = $('#storeAddToggle');
+    if (!open) {
+      const nameEl = $('#storeAddName');
+      const addressEl = $('#storeAddAddress');
+      if (nameEl) nameEl.value = '';
+      if (addressEl) addressEl.value = '';
+      if (toggle) toggle.classList.toggle('hidden', !isPremium());
+      return;
+    }
+    if (toggle) toggle.classList.add('hidden');
+    const nameEl = $('#storeAddName');
+    const addressEl = $('#storeAddAddress');
+    if (nameEl) nameEl.value = '';
+    if (addressEl) addressEl.value = '';
+    setTimeout(() => {
+      if (nameEl) nameEl.focus();
+    }, 60);
+  }
+
+  function renderStoreList() {
+    const list = $('#storeList');
+    if (!list) return;
+    const premium = isPremium();
+    const stores = (state.stores || []).filter((store) => premium || store.aktif);
+    list.innerHTML = stores
+      .map((store) => {
+        const alamat = (store.alamat || '').trim() || 'Alamat belum diisi';
+        const body =
+          '<span class="store-row-main"><strong>' +
+          esc(store.nama) +
+          '</strong><span class="store-row-address">' +
+          esc(alamat) +
+          '</span></span>';
+        if (store.aktif) {
+          return (
+            '<div class="store-row is-active">' +
+            '<span class="store-row-icon">' +
+            STORE_ICON +
+            '</span>' +
+            body +
+            '<span class="badge green">Aktif</span></div>'
+          );
+        }
+        return (
+          '<button type="button" class="store-row" data-store-activate="' +
+          esc(store.store_id) +
+          '">' +
+          '<span class="store-row-icon">' +
+          STORE_ICON +
+          '</span>' +
+          body +
+          '<span class="store-row-action">Pilih</span></button>'
+        );
+      })
+      .join('');
+    const empty = $('#storeListEmpty');
+    if (empty) empty.classList.toggle('hidden', stores.length > 0);
+    const addToggle = $('#storeAddToggle');
+    if (addToggle) addToggle.classList.toggle('hidden', !premium);
+    const note = $('#storePlanNote');
+    if (note) {
+      note.textContent = premium
+        ? 'Toko baru memakai database kosong.'
+        : 'Paket gratis memakai satu toko.';
+    }
+    if (!premium) setStoreAddForm(false);
+  }
+
+  async function openStoreSwitcher() {
+    closeMobileSheet();
+    setStoreAddForm(false);
+    renderStoreList();
+    openModal('#storeModal');
+    try {
+      const result = await API.stores();
+      if (result && result.entitlement) state.entitlement = result.entitlement;
+      if (result && Array.isArray(result.toko)) state.stores = result.toko;
+      if (result && result.aktif) state.storeActive = result.aktif;
+      renderStoreList();
+      renderStoreSwitcher();
+      renderPlanCard();
+      renderFollowupQuota();
+      applyEntitlementVisibility();
+    } catch (err) {
+      toast('Daftar toko gagal dimuat. Menampilkan data tersimpan.', 'warning', 6000);
+    }
+  }
+
+  function closeStoreSwitcher() {
+    setStoreAddForm(false);
+    closeModal('#storeModal');
+  }
+
+  async function activateStoreFromModal(storeId) {
+    if (state.storeSwitching) return;
+    const store = (state.stores || []).find((row) => row.store_id === storeId);
+    if (!store || store.aktif) return;
+    const unsaved =
+      !!state.selectedCustomer || state.jobs.length > 0 || state.parts.length > 0;
+    const pesan =
+      'Ganti ke toko "' +
+      store.nama +
+      '"?' +
+      (unsaved ? '\n\nTransaksi yang belum disimpan akan dikosongkan.' : '');
+    if (!window.confirm(pesan)) return;
+    state.storeSwitching = true;
+    const button = $(
+      '#storeList [data-store-activate="' + storeId + '"]'
+    );
+    setBusy(button, true, 'Berpindah...');
+    try {
+      await API.activateStore(storeId);
+      closeStoreSwitcher();
+      toast('Toko aktif: ' + store.nama + '.', 'success');
+      await startApp();
+      navigate('dashboard');
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.storeSwitching = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function saveNewStore() {
+    const nameEl = $('#storeAddName');
+    const addressEl = $('#storeAddAddress');
+    const errorEl = $('#storeAddError');
+    const nama = nameEl ? nameEl.value.trim() : '';
+    if (nama.length < 2) {
+      if (errorEl) errorEl.textContent = 'Nama toko minimal 2 karakter.';
+      if (nameEl) nameEl.focus();
+      return;
+    }
+    const button = $('#storeAddSave');
+    if (errorEl) errorEl.textContent = '';
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      await API.createStore({
+        nama: nama,
+        alamat: addressEl ? addressEl.value.trim() : '',
+      });
+      const result = await API.stores();
+      if (result && Array.isArray(result.toko)) state.stores = result.toko;
+      setStoreAddForm(false);
+      renderStoreList();
+      renderStoreSwitcher();
+      toast(
+        'Toko "' + nama + '" dibuat. Pilih untuk mulai memakainya.',
+        'success',
+        6000
+      );
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message;
+      else toast(err.message, 'error', 7000);
+      handlePlanError(err);
+    } finally {
+      setBusy(button, false);
+    }
   }
 
   function renderComplaintChips() {
@@ -6462,6 +6765,8 @@
       state.followupTab = 'customer';
     }
     const reseller = state.followupTab === 'reseller';
+    renderFollowupQuota();
+    if (!isPremium()) refreshFollowupQuota();
     const statsGrid = $('#followupStatsGrid');
     const resultGrid = $('#followupResultGrid');
     const resultHead = $('#followupResultHead');
@@ -6970,6 +7275,23 @@
       );
       return;
     }
+    if (!isPremium()) {
+      try {
+        const quota = state.followupQuota || (await API.followupQuota());
+        state.followupQuota = quota;
+        renderFollowupQuota();
+        if (quota.terkunci || (quota.sisa != null && quota.sisa <= 0)) {
+          toast(
+            'Kuota Follow up gratis sudah habis. Data lama tetap dapat dibaca; fitur Follow up terkunci sampai berlangganan premium.',
+            'warning',
+            9000
+          );
+          return;
+        }
+      } catch (err) {
+        /* server tetap memeriksa kuota saat follow-up dicatat */
+      }
+    }
     const detailOpen = !$('#followupModal').classList.contains('hidden');
     const listOpen = !$('#followupListModal').classList.contains('hidden');
     openWaPreview({
@@ -6980,7 +7302,16 @@
       text: detail.pesan || '',
       note: 'Membuka WhatsApp akan mencatat upaya follow-up. Kasir tetap menekan kirim di WhatsApp.',
       onOpen: async (text) => {
-        await API.followupItem(id, { status: 'DIBUKA', pesan: text });
+        try {
+          const result = await API.followupItem(id, {
+            status: 'DIBUKA',
+            pesan: text,
+          });
+          applyQuotaFromResponse(result);
+        } catch (err) {
+          handlePlanError(err);
+          throw err;
+        }
         toast('Follow-up tercatat.', 'success');
         if (detailOpen) await openFollowupDetail(id);
         if (listOpen) await loadFollowupList();
@@ -7637,12 +7968,14 @@
     setBusy(button, true, 'Membuka...');
     try {
       const result = await API.remindReceivable(recordId);
+      applyQuotaFromResponse(result);
       const opened = await openExternalLink(result.link);
       if (opened) {
         toast('Pengingat dibuka di WhatsApp. Tekan kirim untuk mengirim pesan.', 'success');
       }
       await loadReceivables();
     } catch (err) {
+      handlePlanError(err);
       toast(err.message, 'error', 7000);
     } finally {
       setBusy(button, false);
@@ -7658,6 +7991,7 @@
     setBusy(button, true, 'Membuka...');
     try {
       const result = await API.remindCustomerReceivables(customerId);
+      applyQuotaFromResponse(result);
       const opened = await openExternalLink(result.link);
       if (opened) {
         toast(
@@ -7667,6 +8001,7 @@
       }
       await loadReceivables();
     } catch (err) {
+      handlePlanError(err);
       toast(err.message, 'error', 7000);
     } finally {
       setBusy(button, false);
@@ -12304,9 +12639,41 @@
     const mobileSheetGrid = $('#navSheetGrid');
     if (mobileSheetGrid) {
       mobileSheetGrid.addEventListener('click', (event) => {
+        if (event.target.closest('[data-open-store]')) {
+          closeMobileSheet();
+          openStoreSwitcher();
+          return;
+        }
         const viewButton = event.target.closest('[data-mobile-view]');
         if (viewButton) navigate(viewButton.dataset.mobileView);
       });
+    }
+    const storeSwitchBtn = $('#storeSwitchBtn');
+    if (storeSwitchBtn) storeSwitchBtn.addEventListener('click', openStoreSwitcher);
+    const storeModalClose = $('#storeModalClose');
+    if (storeModalClose) storeModalClose.addEventListener('click', closeStoreSwitcher);
+    const storeModalDismiss = $('#storeModalDismiss');
+    if (storeModalDismiss) storeModalDismiss.addEventListener('click', closeStoreSwitcher);
+    const storeList = $('#storeList');
+    if (storeList) {
+      storeList.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-store-activate]');
+        if (button) activateStoreFromModal(button.dataset.storeActivate);
+      });
+    }
+    const storeAddToggle = $('#storeAddToggle');
+    if (storeAddToggle) {
+      storeAddToggle.addEventListener('click', () => setStoreAddForm(true));
+    }
+    const storeAddCancel = $('#storeAddCancel');
+    if (storeAddCancel) {
+      storeAddCancel.addEventListener('click', () => setStoreAddForm(false));
+    }
+    const storeAddSave = $('#storeAddSave');
+    if (storeAddSave) storeAddSave.addEventListener('click', saveNewStore);
+    const quotaUpgrade = $('#followupQuotaUpgrade');
+    if (quotaUpgrade) {
+      quotaUpgrade.addEventListener('click', () => navigate('settings'));
     }
     const sheetBackdrop = $('#navSheetBackdrop');
     if (sheetBackdrop) sheetBackdrop.addEventListener('click', closeMobileSheet);

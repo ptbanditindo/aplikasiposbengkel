@@ -1,6 +1,7 @@
 # Rencana Multi-Toko dan Fitur Premium — PusatkuPOS
 
-Status: **rencana aktif — belum diimplementasikan**. 2026-11-03.
+Status: **rencana aktif**. Fase 1 web sudah dibangun; status dan riwayat ada di
+`STATUS_MULTI_TOKO_PEMANTAPAN.md`. 2026-11-03.
 
 Produk target: **PusatkuPOS (Flutter)**. Aplikasi 2.7.0 yang berjalan sekarang
 tetap **BengkelPOS Radiator** (web) dan **menerima fitur ini lebih dulu** sebagai
@@ -20,6 +21,9 @@ Pengujian tidak dicantumkan di sini. Seluruh skenario uji ada di
   dilakukan di sana, lalu bagian lain cukup menyesuaikan rujukannya.
 - Tabel tier memakai `K-xx` sebagai rujukan; sel tabel sengaja pendek dan tidak
   mengulang penjelasan.
+- **Rencana hanya memuat pekerjaan yang belum ada kodenya.** Jika kode sudah
+  dibuat, hapus item itu dari dokumen ini. Status dan riwayat pengerjaan dicatat
+  di `STATUS_MULTI_TOKO_PEMANTAPAN.md`.
 
 ## Keputusan (sumber kebenaran)
 
@@ -34,9 +38,9 @@ Pengujian tidak dicantumkan di sini. Seluruh skenario uji ada di
   sekali di Dart setelah spesifikasi protokol dan test vector selesai.
 - Web berjalan **loopback-only** (`validate_runtime`). Batas itu tidak boleh
   dilonggarkan untuk multi-device; multi-device diuji di Dart.
-- Status web 2.7.0: scanner HID, empat kategori unit, stok masuk, opname, dan
-  laporan kelompok part sudah ada; render barcode/QR pada label dan nota masih
-  ditunda.
+- **Fokus implementasi saat ini hanya web.** APK/Android dan paket platform lain
+  belum dikerjakan sampai kode web stabil dan pilot lulus. Status fitur yang
+  sudah ada dicatat di `STATUS_MULTI_TOKO_PEMANTAPAN.md`.
 - iOS bukan target tahap ini; aturan App Store hanya disiapkan agar port nanti
   tidak merombak arsitektur.
 
@@ -887,55 +891,44 @@ Premium (satu tier)
 
 ## Urutan pekerjaan
 
-Keputusan produk tidak diulang di sini; rujuk `## Keputusan`. Urutan disusun dari
-pekerjaan termudah ke tersulit, lalu disesuaikan dengan dependensi. Estimasi
-adalah perkiraan kasar untuk satu pengembang setelah prasyarat selesai.
+Fase disusun dari mudah ke sulit. Dependensi yang tidak bisa ditawar tetap menjadi
+gerbang: pilot sebelum akun/lisensi, dan spesifikasi protokol sebelum kode sync.
+Estimasi adalah perkiraan kasar untuk satu pengembang setelah prasyarat selesai.
+**Fokus saat ini adalah pemantapan web dan pilot; APK/Android dan paket platform
+lain belum dikerjakan sampai kode web stabil dan pilot lulus.**
 
-Implementasi pertama di **web 2.7.0 (BengkelPOS Radiator)** hanya untuk pekerjaan
-1–4. Setelah pilot, port Flutter dan premium dibangun di Dart. Sync dan kripto
-tidak ditulis dua kali: spesifikasi protokol dan test vector diselesaikan lebih
-dulu, lalu diimplementasikan sekali di Dart.
+| Fase | Pekerjaan | Kanal | Kesulitan | Estimasi | Prasyarat |
+| --- | --- | --- | --- | --- | --- |
+| G | **Pilot 1–3 bengkel nyata** | Web | **Gerbang** | 2–4 minggu | Pemantapan web |
+| 2 | Port Flutter inti + ukur ukuran (fondasi wajib; APK/Android belum) | Dart | Sedang–Sulit | 30–45 hari | Pilot |
+| 3 | Akun owner + Google + secure storage; akun karyawan + peran/izin/password/PIN + login lokal hub; lisensi + Play Billing + hitung mundur + ID owner + registrasi/pencabutan perangkat | Dart | Sedang–Sulit | 21–32 hari | Fase 2 |
+| 4 | Backup manual/otomatis lokal/Telegram/semua toko + restore; rilis premium tahap hub + QA | Dart | Sulit | 15–25 hari | Fase 3 |
+| 5 | Spesifikasi protokol sync/kripto + test vector | Dokumen | Sulit | 8–12 hari | Fase 4 |
+| 6 | Sync multi-device + E2E + kunci + antrean + snapshot + batching + notifikasi | Dart | Sangat sulit | 40–60 hari | Fase 5 |
+| 7 | Perangkat karyawan + aplikasi owner thin client | Dart | Sangat sulit | 20–30 hari | Fase 6 |
+| 8 | LAN/hub lokal (opsional) | Dart | Sangat sulit | TBD | Keputusan baru |
 
-| Urutan | Pekerjaan | Kanal | Kesulitan | Prioritas | Estimasi | Prasyarat |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | Header nama bengkel + alamat | Web | Mudah | P0 | 1–2 hari | Tidak ada |
-| 2 | Registry toko + `database_id` + folder + database kosong per toko | Web | Mudah–Sedang | P0 | 3–5 hari | Lapisan data web |
-| 3 | Ganti toko di Menu + izin peran + konfirmasi | Web | Sedang | P0 | 2–4 hari | Registry |
-| 4 | Gating + kuota Follow up lokal dengan entitlement stub | Web | Sedang | P0 | 4–6 hari | Registry |
-| 5 | **Pilot 1–3 bengkel nyata** | Web | **Gerbang** | P0 | 2–4 minggu | 1–4 |
-| 6 | Spesifikasi protokol sync/kripto + test vector | Dokumen | Sulit | P0 | 8–12 hari | Pilot lulus |
-| 7 | Port Flutter + ukur ukuran aplikasi | Dart | Sulit | P0 | 30–45 hari | 6 |
-| 8 | Akun owner + Google + secure storage | Dart | Sedang–Sulit | P0 | 8–12 hari | 7 |
-| 9 | Akun karyawan + peran + izin + password/PIN + login lokal hub | Dart | Sedang | P0 | 5–8 hari | 8 |
-| 10 | Lisensi + Play Billing + hitung mundur + ID owner + registrasi/pencabutan perangkat | Dart | Sedang–Sulit | P0 | 8–12 hari | 8 |
-| 11 | Backup manual/otomatis lokal/Telegram/semua toko + restore | Dart | Sulit | P0 | 10–15 hari | 2, 7 |
-| 12 | **Rilis premium tahap hub** + QA | Dart | Gerbang | P0 | 5–10 hari | 8–11 |
-| 13 | Premium: multi-device sync + E2E + kunci + antrean + snapshot + batching + notifikasi | Dart | Sangat sulit | P1 | 40–60 hari | 6, 12 |
-| 14 | Premium: perangkat karyawan + aplikasi owner thin client | Dart | Sulit–Sangat sulit | P1 | 20–30 hari | 13 |
-| 15 | LAN/hub lokal (opsional) | Dart | Sangat sulit | P2 | TBD | Keputusan terpisah |
-
-Perkiraan kasar satu pengembang: **premium tahap hub sekitar 80–130 hari** dan
-**sinkronisasi/perangkat sekitar 60–90 hari**; total **140–220 hari kerja** di
-luar pilot 2–4 minggu, desain, QA lanjutan, dan buffer. Estimasi ini menggantikan
-angka 58–89 hari yang terlalu optimistis, terutama untuk pekerjaan 13.
+Perkiraan kasar satu pengembang: **premium tahap hub dan spesifikasi protokol
+(Fase 2–5) sekitar 80–130 hari** dan **sinkronisasi/perangkat (Fase 6–7) sekitar
+60–90 hari**; total **140–220 hari kerja** di luar pilot 2–4 minggu, desain, QA
+lanjutan, dan buffer.
 
 Catatan urutan:
 
-- Pekerjaan 1–4 tidak membutuhkan API relay; web tetap loopback-only.
-- **Pilot adalah gerbang wajib** sebelum pekerjaan 6 dan seterusnya. Jika pilot
-  gagal, perbaiki inti dan jangan mulai akun, lisensi, atau relay.
-- Pekerjaan 6 menulis protokol, format pesan, urutan HLC, tanda tangan, wrapped
-  key, snapshot, dan test vector. Tidak ada implementasi Python untuk sync/kripto.
-- Pekerjaan 7 mengukur ukuran Flutter lebih dulu; paket aset hanya jika perlu
-  (K-17).
-- Pekerjaan 8–12 adalah premium tahap hub: satu perangkat owner, multi-toko,
-  karyawan shift di hub, lisensi, dan backup. Relay dan perangkat karyawan
-  menyusul di tahap premium berikutnya, tetapi tier yang dijual tetap satu.
-- Pekerjaan 13–14 melengkapi premium dengan sync dan perangkat karyawan; tidak
-  ada tier baru.
-- Pekerjaan 15 tidak dikerjakan kecuali ada keputusan baru dan uji terpisah.
+- **Pilot adalah gerbang wajib** sebelum Fase 2 dan seterusnya. Jika pilot gagal,
+  perbaiki inti dan jangan mulai akun, lisensi, atau relay.
+- Fase 2 adalah fondasi lintas platform, bukan fitur premium. Port inti dan ukur
+  dulu; paket APK/Android belum dikejar sampai hasilnya stabil (K-17).
+- Fase 3–4 adalah premium tahap hub: satu perangkat owner, multi-toko, karyawan
+  shift di hub, lisensi, dan backup. Relay dan perangkat karyawan menyusul, tetapi
+  tier yang dijual tetap satu.
+- Fase 5 menulis protokol, format pesan, urutan HLC, tanda tangan, wrapped key,
+  snapshot, dan test vector. Tidak ada implementasi Python untuk sync/kripto.
+- Fase 6–7 melengkapi premium dengan sync dan perangkat karyawan; tidak ada tier
+  baru.
+- Fase 8 tidak dikerjakan kecuali ada keputusan baru dan uji terpisah.
 
-Urutan wajib: registry dan isolasi sebelum ganti toko; pilot sebelum akun/lisensi;
+Urutan wajib: pilot sebelum akun/lisensi;
 spesifikasi protokol sebelum kode sync/kripto Dart; port Flutter dan ukuran
 sebelum rilis premium tahap hub; backup satu toko stabil sebelum backup semua
 toko; sync lulus uji sebelum perangkat karyawan; tidak ada rilis UI kosong.

@@ -14,6 +14,7 @@ from api.schemas import (
     FollowupDetailOut,
     FollowupItemOut,
     FollowupListOut,
+    FollowupQuotaOut,
     FollowupResultOut,
     FollowupStatusIn,
     PengerjaanDetailOut,
@@ -28,6 +29,7 @@ from api.schemas import (
 )
 from database.session import get_db
 from services import (
+    followup_quota_service,
     followup_result_service,
     followup_service,
     pengerjaan_service,
@@ -69,6 +71,11 @@ def list_followup_items(
 @router.get("/followup/counts", response_model=FollowupCountsOut)
 def followup_counts(db: Session = Depends(get_db)):
     return FollowupCountsOut(**followup_service.counts(db))
+
+
+@router.get("/followup/quota", response_model=FollowupQuotaOut)
+def followup_quota(db: Session = Depends(get_db)):
+    return FollowupQuotaOut(**followup_quota_service.status(db))
 
 
 @router.get("/pengerjaan", response_model=PengerjaanListOut)
@@ -186,6 +193,7 @@ def record_followup(
     db: Session = Depends(get_db),
     operator: Operator = Depends(require_auth),
 ):
+    followup_quota_service.ensure_available(db)
     result = followup_service.follow_up(
         db,
         item_id,
@@ -194,12 +202,18 @@ def record_followup(
         catatan=payload.catatan,
         pesan=payload.pesan,
     )
+    kuota = (
+        followup_quota_service.consume(db)
+        if result.get("link")
+        else followup_quota_service.status(db)
+    )
     return FollowupActionResultOut(
         item=_item_out(db, result["item"]),
         wa_text=result["wa_text"],
         link=result["link"],
         peringatan=getattr(result["log"], "peringatan", ""),
         log=WhatsAppLogOut.model_validate(result["log"]),
+        kuota=FollowupQuotaOut(**kuota),
     )
 
 

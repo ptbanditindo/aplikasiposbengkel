@@ -48,6 +48,7 @@ class Settings:
     app_install_token: str
 
     database_url: str
+    entitlement_plan: str
 
     bengkel_nama: str
     bengkel_tagline: str
@@ -95,6 +96,13 @@ def load_settings() -> Settings:
         database_url=os.getenv(
             "DATABASE_URL", "sqlite:///./data/bengkel_radiator.db"
         ).strip(),
+        # Stub lokal Fase 1: nilai sebenarnya nanti berasal dari lisensi.
+        entitlement_plan=(
+            os.getenv("ENTITLEMENT_PLAN", "free").strip().lower()
+            if os.getenv("ENTITLEMENT_PLAN", "free").strip().lower()
+            in {"free", "premium"}
+            else "free"
+        ),
         bengkel_nama=os.getenv("BENGKEL_NAMA", "BENGKEL RADIATOR").strip(),
         bengkel_tagline=os.getenv(
             "BENGKEL_TAGLINE", "Spesialis Servis, Korok & Las Radiator"

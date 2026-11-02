@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from api.schemas import AuthStatusOut, PinRequest
 from config import settings
-from database.session import get_db
+from database.session import get_primary_db
 from services import auth_service
 from services.auth_service import Operator
 
@@ -59,7 +59,7 @@ def _attach_session(response: Response, db: Session, operator: Operator) -> None
 
 
 @router.get("/status", response_model=AuthStatusOut)
-def auth_status(request: Request, db: Session = Depends(get_db)):
+def auth_status(request: Request, db: Session = Depends(get_primary_db)):
     return _status_payload(db, request)
 
 
@@ -67,7 +67,7 @@ def auth_status(request: Request, db: Session = Depends(get_db)):
 def setup_pin(
     payload: PinRequest,
     response: Response,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_primary_db),
 ):
     _require_session_mode()
     auth_service.setup_pin(db, payload.pin)
@@ -79,7 +79,7 @@ def setup_pin(
 def login(
     payload: PinRequest,
     response: Response,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_primary_db),
 ):
     _require_session_mode()
     operator = auth_service.verify_pin(db, payload.pin)

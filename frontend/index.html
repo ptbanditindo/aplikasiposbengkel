@@ -43,8 +43,8 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261218">
-  <link rel="stylesheet" href="/static/css/world.css?v=20261218">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261103">
+  <link rel="stylesheet" href="/static/css/world.css?v=20261103">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -117,11 +117,19 @@
         </div>
         <div class="brand-copy">
           <p class="brand-name" id="bengkelNama">BengkelPOS Radiator</p>
-          <p class="brand-tagline" id="bengkelTagline">Kasir dan servis radiator</p>
+          <p class="brand-tagline" id="bengkelTagline">Alamat belum diisi</p>
         </div>
       </div>
 
       <div class="nav-shell">
+        <button type="button" class="store-switch" id="storeSwitchBtn" aria-haspopup="dialog" title="Ganti toko">
+          <svg class="store-switch-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16M6 9V5h12v4M5 9v10h14V9"></path><path d="M10 13h4"></path></svg>
+          <span class="store-switch-copy">
+            <span class="store-switch-label">Ganti toko</span>
+            <span class="store-switch-name" id="storeActiveName">Toko utama</span>
+          </span>
+          <svg class="store-switch-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg>
+        </button>
         <nav class="nav-tabs" id="navTabs" aria-label="Navigasi utama">
         <p class="nav-group-label">Operasional</p>
         <button type="button" class="nav-tab active" data-view="dashboard">
@@ -935,6 +943,17 @@
           </div>
         </div>
 
+        <section class="card" id="planCard">
+          <div class="card-head">
+            <div>
+              <h2>Paket aplikasi</h2>
+              <p class="muted">Gratis seumur hidup untuk satu toko. Premium membuka karyawan, Supplier, multi-toko, dan backup otomatis.</p>
+            </div>
+            <span class="badge" id="planBadge">Gratis</span>
+          </div>
+          <ul class="plan-features" id="planFeatures"></ul>
+        </section>
+
         <section class="card settings-collapsible" id="appearanceCard">
           <div class="card-head">
             <div>
@@ -1465,6 +1484,7 @@
           <div>
             <h1>Karyawan</h1>
             <p class="muted">Atur mekanik dan kasir: peran, komisi atau gaji, hutang, dan riwayat pembayaran.</p>
+            <p class="plan-lock-note hidden" id="employeePlanLock">Paket gratis: daftar karyawan tetap bisa dibaca, tetapi tambah dan ubah data terkunci.</p>
           </div>
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur karyawan</span><input type="checkbox" id="employeeFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
@@ -1554,6 +1574,7 @@
           <div>
             <h1>Supplier</h1>
             <p class="muted">Toko penyedia sparepart. Atur barang yang disuplai; arsipkan supplier yang tidak dipakai.</p>
+            <p class="plan-lock-note hidden" id="supplierPlanLock">Paket gratis: daftar supplier tetap bisa dibaca, tetapi tambah dan ubah data terkunci.</p>
           </div>
           <div class="page-actions">
             <label class="switch-row feature-switch"><span>Fitur supplier</span><input type="checkbox" id="supplierFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
@@ -1593,6 +1614,14 @@
             <label class="switch-row feature-switch"><span>Fitur follow up</span><input type="checkbox" id="followupFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
             <button type="button" class="btn btn-ghost" id="btnFollowupRefresh">Muat ulang</button>
           </div>
+        </div>
+
+        <div class="quota-banner hidden" id="followupQuotaBanner">
+          <div class="quota-banner-text">
+            <strong id="followupQuotaTitle">Kuota Follow up</strong>
+            <span id="followupQuotaDetail">20 kredit WhatsApp tersisa.</span>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="followupQuotaUpgrade">Lihat paket</button>
         </div>
 
         <div class="segmented" id="followupTabSwitch" aria-label="Jenis follow up">
@@ -2815,6 +2844,44 @@
     </div>
   </div>
 
+  <!-- ============================ STORE MODAL ============================ -->
+  <div class="modal-backdrop hidden" id="storeModal" role="dialog" aria-modal="true" aria-labelledby="storeModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="storeModalTitle">Ganti toko</h3>
+          <p class="muted" id="storeModalSubtitle">Pilih toko yang sedang dipakai.</p>
+        </div>
+        <button type="button" class="icon-btn" id="storeModalClose" aria-label="Tutup">&times;</button>
+      </div>
+
+      <div class="store-list" id="storeList"></div>
+      <p class="empty-state hidden" id="storeListEmpty">Belum ada toko.</p>
+
+      <div class="store-add hidden" id="storeAddForm">
+        <label class="field">
+          <span>Nama toko</span>
+          <input class="input" id="storeAddName" maxlength="255" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Alamat</span>
+          <input class="input" id="storeAddAddress" maxlength="500" autocomplete="off">
+        </label>
+        <p class="field-error" id="storeAddError"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="storeAddCancel">Batal</button>
+          <button type="button" class="btn btn-primary" id="storeAddSave">Simpan toko</button>
+        </div>
+      </div>
+
+      <div class="modal-actions store-modal-foot">
+        <button type="button" class="btn btn-outline" id="storeAddToggle">Tambah toko</button>
+        <span class="tiny muted" id="storePlanNote"></span>
+        <button type="button" class="btn btn-ghost" id="storeModalDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================ FOLLOW-UP LIST MODAL ============================ -->
   <div class="modal-backdrop hidden" id="followupListModal" role="dialog" aria-modal="true" aria-labelledby="followupListTitle">
     <div class="modal modal-wide">
@@ -2995,15 +3062,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261218"></script>
-  <script src="/static/js/api-client.js?v=20261218"></script>
-  <script src="/static/js/printer-manager.js?v=20261218"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261218"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261218"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261218"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261218"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261218"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261218"></script>
-  <script src="/static/js/app.js?v=20261218"></script>
+  <script src="/static/js/native-bridge.js?v=20261103"></script>
+  <script src="/static/js/api-client.js?v=20261103"></script>
+  <script src="/static/js/printer-manager.js?v=20261103"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261103"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261103"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261103"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261103"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261103"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261103"></script>
+  <script src="/static/js/app.js?v=20261103"></script>
 </body>
 </html>

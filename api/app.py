@@ -22,6 +22,7 @@ from api import (
     report_routes,
     settings_routes,
     stock_routes,
+    store_routes,
     supplier_routes,
     whatsapp_routes,
 )
@@ -30,21 +31,30 @@ from api.schemas import (
     BackupStatusOut,
     BengkelInfoOut,
     ConfigOut,
+    EntitlementOut,
+    FollowupQuotaOut,
     OpsSettingsOut,
     PrinterInfoOut,
     ReceiptSettingsOut,
+    StoreOut,
     TelegramInfoOut,
 )
 from api.security import UNSAFE_METHODS, allowed_origins, host_header_allowed
 from config import BASE_DIR, effective_app_port, settings, validate_runtime
-from database.seed import seed_defaults
-from database.session import SessionLocal, get_db, init_db
-from services import settings_service, telegram_backup_service
+from database.session import get_db
+from services import (
+    entitlement_service,
+    followup_quota_service,
+    settings_service,
+    store_service,
+    telegram_backup_service,
+)
 from services.maintenance import HEALTH_PATH, RESTORE_PATH, gate
 from services.errors import (
     AuthenticationError,
     ConflictError,
     DomainError,
+    FeatureLockedError,
     InsufficientStockError,
     NotFoundError,
     RateLimitError,
@@ -67,9 +77,7 @@ KELUHAN_PRESETS = [
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    init_db()
-    with SessionLocal() as db:
-        seed_defaults(db)
+    store_service.ensure_startup_state()
     scheduler = None
     if settings.app_env != "test" and settings.backup_scheduler != "workmanager":
         scheduler = asyncio.create_task(telegram_backup_service.scheduler_loop())
@@ -176,6 +184,13 @@ def create_app() -> FastAPI:
             headers={"Retry-After": str(exc.retry_after)},
         )
 
+    @app.exception_handler(FeatureLockedError)
+    async def _feature_locked(_request: Request, exc: FeatureLockedError):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "code": exc.code},
+        )
+
     @app.exception_handler(InsufficientStockError)
     async def _insufficient_stock(_request: Request, exc: InsufficientStockError):
         return JSONResponse(
@@ -208,6 +223,7 @@ def create_app() -> FastAPI:
     app.include_router(supplier_routes.router, prefix=api_prefix)
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
+    app.include_router(store_routes.router, prefix=api_prefix)
     app.include_router(printer_routes.router, prefix=api_prefix)
     app.include_router(audit_routes.router, prefix=api_prefix)
 
@@ -223,6 +239,7 @@ def create_app() -> FastAPI:
     )
     def app_config(db: Session = Depends(get_db)):
         telegram_config = settings_service.get_telegram_config(db)
+        stores = store_service.list_stores()
         return ConfigOut(
             version=APP_VERSION,
             bengkel=BengkelInfoOut(**settings_service.get_bengkel_info(db)),
@@ -243,6 +260,12 @@ def create_app() -> FastAPI:
             keluhan_presets=KELUHAN_PRESETS,
             ops=OpsSettingsOut(**settings_service.get_ops_settings(db)),
             receipt=ReceiptSettingsOut(**settings_service.get_receipt_settings(db)),
+            entitlement=EntitlementOut(**stores["entitlement"]),
+            stores=[StoreOut(**row) for row in stores["toko"]],
+            store_aktif=stores["aktif"],
+            kuota_followup=FollowupQuotaOut(
+                **followup_quota_service.status(db)
+            ),
         )
 
     if FRONTEND_DIR.exists():

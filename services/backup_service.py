@@ -158,12 +158,12 @@ def _ensure_free_space(source: Path) -> None:
 
 
 def database_file_path() -> Path:
-    from database.session import engine
+    from database.session import active_database_path
 
-    database = engine.url.database
-    if not database or not str(database).endswith(".db"):
+    target = active_database_path()
+    if not str(target).endswith(".db"):
         raise BusinessValidationError("Backup hanya tersedia untuk basis data SQLite.")
-    return Path(database)
+    return target
 
 
 def _redact_secrets(path: Path) -> None:
@@ -358,6 +358,7 @@ def restore_backup(file_path: Path) -> None:
     from database import session as db_session
 
     target = database_file_path()
+    bind = db_session.active_engine()
 
     safety = None
     if target.exists():
@@ -386,9 +387,9 @@ def restore_backup(file_path: Path) -> None:
     auth_snapshot = _read_settings(target, AUTH_ROLLBACK_KEYS)
 
     try:
-        db_session.engine.dispose()
+        bind.dispose()
         os.replace(str(staged), str(target))
-        db_session.init_db()
+        db_session.init_db(bind=bind)
     except Exception as exc:
         staged.unlink(missing_ok=True)
         logger.exception("Restore gagal; mengembalikan database lama")
@@ -400,10 +401,10 @@ def restore_backup(file_path: Path) -> None:
 
         rollback = target.with_name(target.name + ".restore.rollback")
         try:
-            db_session.engine.dispose()
+            bind.dispose()
             shutil.copy2(safety, rollback)
             os.replace(str(rollback), str(target))
-            db_session.init_db()
+            db_session.init_db(bind=bind)
             # Salinan pengaman diredaksi, jadi kredensial pengguna dikembalikan
             # dari snapshot memori agar PIN/sesi tetap berlaku setelah gagal.
             _write_settings(target, auth_snapshot)
@@ -423,10 +424,10 @@ def restore_backup(file_path: Path) -> None:
         ) from exc
 
     from database.seed import mark_seed_done
-    from services import auth_service, settings_service
+    from services import auth_service, settings_service, store_service
 
     # Restore harus menyalin kondisi backup apa adanya: tanpa seed ulang.
-    with db_session.SessionLocal() as db:
+    with db_session.store_session(bind) as db:
         mark_seed_done(db)
 
         # Backup tidak membawa hash PIN/sesi; pastikan status terkunci yang
@@ -443,5 +444,6 @@ def restore_backup(file_path: Path) -> None:
             "" if config["bot_token"] and config["chat_id"] else "1",
         )
         db.commit()
+        store_service.sync_registry_identity(db)
 
     prune_backups()

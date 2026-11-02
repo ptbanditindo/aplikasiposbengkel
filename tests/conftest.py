@@ -22,6 +22,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["APP_HOST"] = "127.0.0.1"
 os.environ["APP_PORT"] = "8000"
 os.environ["AUTH_MODE"] = "session-pin"
+os.environ["ENTITLEMENT_PLAN"] = "premium"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["BACKUP_DIR"] = str(TEST_BACKUP_DIR)
 os.environ["PRINTER_CONFIG_PATH"] = str(TEST_PRINTER_CONFIG)
@@ -45,8 +46,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from api.app import app  # noqa: E402
 from database.base import Base  # noqa: E402
 from database.seed import seed_defaults  # noqa: E402
-from database.session import SessionLocal, engine  # noqa: E402
-from services import settings_service  # noqa: E402
+from database.session import SessionLocal, engine, reset_store_state_for_tests  # noqa: E402
+from services import settings_service, store_service  # noqa: E402
 
 BASE_URL = "http://127.0.0.1:8000"
 TEST_PIN = "2468"
@@ -68,12 +69,14 @@ def anon_client():
 @pytest.fixture(autouse=True)
 def reset_database(client):
     """Skema bersih + seed standar + PIN pemilik untuk setiap skenario uji."""
+    reset_store_state_for_tests()
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     if TEST_PRINTER_CONFIG.exists():
         TEST_PRINTER_CONFIG.unlink()
     with SessionLocal() as db:
         seed_defaults(db)
+        store_service.ensure_database_id(db)
         settings_service.update_ops_settings(
             db,
             {"followup_jam_mulai": "00:00", "followup_jam_selesai": "23:59"},

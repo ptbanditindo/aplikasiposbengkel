@@ -35,6 +35,14 @@ class RateLimitError(DomainError):
         )
 
 
+class FeatureLockedError(DomainError):
+    """Aksi premium atau kuota yang sedang terkunci."""
+
+    def __init__(self, message: str, code: str = "feature_locked"):
+        self.code = code
+        super().__init__(message)
+
+
 class PaymentError(BusinessValidationError):
     """Nominal pembayaran tidak valid."""
 

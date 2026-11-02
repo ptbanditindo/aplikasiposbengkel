@@ -3,11 +3,12 @@
   'use strict';
 
   class ApiError extends Error {
-    constructor(message, status, detail) {
+    constructor(message, status, detail, code) {
       super(message);
       this.name = 'ApiError';
       this.status = status;
       this.detail = detail;
+      this.code = code || '';
     }
   }
 
@@ -92,14 +93,16 @@
 
     if (!response.ok) {
       let detail = null;
+      let code = '';
       try {
         const data = await response.json();
         detail = data ? data.detail : null;
+        code = data ? data.code : '';
       } catch (err) {
         detail = null;
       }
       const message = messageFor(response.status, detail);
-      throw new ApiError(message, response.status, detail);
+      throw new ApiError(message, response.status, detail, code);
     }
 
     try {
@@ -424,6 +427,13 @@
 
     updateBengkel: (data) =>
       request('/api/settings/bengkel', { method: 'PUT', body: data }),
+
+    stores: () => request('/api/stores'),
+    createStore: (data) =>
+      request('/api/stores', { method: 'POST', body: data }),
+    activateStore: (storeId) =>
+      request('/api/stores/' + qs(storeId) + '/activate', { method: 'POST' }),
+    followupQuota: () => request('/api/followup/quota'),
 
     printerConfig: () => request('/api/printer/config'),
     updatePrinterConfig: (data) =>

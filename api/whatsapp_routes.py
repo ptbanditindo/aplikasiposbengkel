@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from api.deps import require_auth
 from api.schemas import (
+    FollowupQuotaOut,
     WaGateOut,
     WhatsAppAttemptIn,
     WhatsAppAttemptOut,
@@ -15,7 +16,7 @@ from api.schemas import (
 )
 from database.models import ServiceRecord
 from database.session import get_db
-from services import contact_gate_service, whatsapp_service
+from services import contact_gate_service, followup_quota_service, whatsapp_service
 from services.auth_service import Operator
 from services.errors import NotFoundError
 
@@ -62,8 +63,14 @@ def remind_receivable(
     db: Session = Depends(get_db),
     operator: Operator = Depends(require_auth),
 ):
+    followup_quota_service.ensure_available(db)
     log, wa_text, link = whatsapp_service.remind_receivable(
         db, record_id, operator
+    )
+    kuota = (
+        followup_quota_service.consume(db)
+        if link
+        else followup_quota_service.status(db)
     )
     return WhatsAppAttemptOut(
         status=log.status,
@@ -72,6 +79,7 @@ def remind_receivable(
         wa_text=wa_text,
         peringatan=getattr(log, "peringatan", ""),
         log=WhatsAppLogOut.model_validate(log),
+        kuota=FollowupQuotaOut(**kuota),
     )
 
 
@@ -85,8 +93,14 @@ def remind_customer(
     db: Session = Depends(get_db),
     operator: Operator = Depends(require_auth),
 ):
+    followup_quota_service.ensure_available(db)
     log, wa_text, link = whatsapp_service.remind_customer_receivables(
         db, customer_id, operator
+    )
+    kuota = (
+        followup_quota_service.consume(db)
+        if link
+        else followup_quota_service.status(db)
     )
     return WhatsAppAttemptOut(
         status=log.status,
@@ -95,6 +109,7 @@ def remind_customer(
         wa_text=wa_text,
         peringatan=getattr(log, "peringatan", ""),
         log=WhatsAppLogOut.model_validate(log),
+        kuota=FollowupQuotaOut(**kuota),
     )
 
 

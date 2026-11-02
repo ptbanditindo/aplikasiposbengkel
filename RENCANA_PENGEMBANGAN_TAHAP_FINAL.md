@@ -1,6 +1,8 @@
 # Rencana Pengembangan Tahap Final — PusatkuPOS
 
-Status: **final** — 2026-11-03. Belum diimplementasikan.
+Status: **final** — 2026-11-03. Belum diimplementasikan. **Fokus implementasi
+saat ini hanya web; APK/Android dan paket platform lain belum dikerjakan sampai
+kode web stabil dan pilot lulus.**
 
 ## Identitas produk
 
@@ -25,6 +27,11 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 
 ## Keputusan final
 
+- **Fokus implementasi:** web lebih dulu. APK/Android dan paket platform lain
+  belum dikerjakan sampai kode web stabil dan pilot lulus.
+- **Rencana hanya memuat pekerjaan yang belum ada kodenya.** Item yang sudah
+  dibuat dihapus dari dokumen rencana; status dan riwayatnya dicatat di
+  [`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md).
 - **Sumber kebenaran produk:** aturan tier, kuota, akun, izin, backup, lisensi,
   perangkat, relay, kunci, privasi, harga, dan distribusi ditetapkan sebagai
   `K-01`–`K-22` di `RENCANA_MULTI_TOKO_PREMIUM.md`. Dokumen ini tidak mengulang
@@ -32,12 +39,12 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 - **Teknologi:** Flutter + Dart untuk UI dan logika bisnis.
 - **Database lokal:** SQLite melalui drift/FFI; satu sumber kebenaran lokal di
   semua platform; `database_id` mengikuti K-05.
-- **Distribusi:** rilis pertama memakai satu AAB Android, satu installer Windows,
-  dan satu aplikasi macOS. Ukuran diukur lebih dulu; paket aset statis opsional
-  hanya jika pengukuran membuktikan perlu (K-17). Tidak ada paket layout,
-  server-driven UI, dex/JAR/so, atau self-update.
-- **Paket platform:** AAB Android lewat Play (APK sideload penuh/split),
-  installer EXE Windows, `.app`/`.dmg` macOS.
+- **Distribusi (tahap Flutter, setelah web stabil):** rilis pertama memakai satu
+  AAB Android, satu installer Windows, dan satu aplikasi macOS. Ukuran diukur
+  lebih dulu; paket aset statis opsional hanya jika pengukuran membuktikan perlu
+  (K-17). Tidak ada paket layout, server-driven UI, dex/JAR/so, atau self-update.
+- **Paket platform (tahap Flutter):** AAB Android lewat Play (APK sideload
+  penuh/split), installer EXE Windows, `.app`/`.dmg` macOS.
 - **Tanpa Python:** backend Python tidak ikut ke paket baru. Aplikasi lama
   diarsipkan setelah Flutter stabil (K-19); data lamanya tidak wajib
   dimigrasikan.
@@ -93,6 +100,8 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   backup (K-10).
 
 ## Platform
+
+Target akhir; paket platform belum dikerjakan selama fokus web.
 
 | Platform | Paket | Catatan |
 | --- | --- | --- |
@@ -153,7 +162,7 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
 
 1. **Web 2.7.0 + pilot:** selesaikan header, registry, ganti toko, dan gating
    lokal; jalankan pilot 1–3 bengkel nyata selama 2–4 minggu. Jangan mulai akun,
-   lisensi, atau relay sebelum pilot lulus (K-01).
+   lisensi, relay, atau APK/Android sebelum pilot lulus dan web stabil (K-01).
 2. **Fondasi Flutter:** struktur proyek, SQLite, model data, uang decimal, shell
    modular, dan kerangka tes lintas platform.
 3. **Spesifikasi protokol:** HLC, tanda tangan, wrapped key, snapshot, replay
@@ -166,7 +175,8 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
    void, dan garansi.
 7. **Backup dan restore (P0):** backup lokal, restore staging, rollback, dan
    checksum.
-8. **Android:** PIN, printer, folder backup, WorkManager, AAB lewat Play.
+8. **Android/APK (setelah web dan port inti stabil):** PIN, printer, folder
+   backup, WorkManager, AAB lewat Play.
 9. **Windows EXE:** printer, file backup, installer, dan paket aset opsional.
 10. **Mac:** `.app`/`.dmg`, printer, signing, notarization.
 11. **Premium hub:** langganan, satu perangkat owner, multi-toko, karyawan shift

@@ -90,6 +90,41 @@ else:  # Pydantic v1
         return {"regex": regex}
 
 
+# --- PAKET, TOKO, DAN KUOTA (FASE 1 WEB) ---
+class EntitlementOut(CompatBase):
+    plan: str = "free"
+    premium: bool = False
+
+
+class StoreOut(CompatBase):
+    store_id: str
+    database_id: str = ""
+    nama: str
+    alamat: str = ""
+    aktif: bool = False
+    tersedia: bool = True
+
+
+class StoreListOut(CompatBase):
+    aktif: str
+    toko: List[StoreOut] = Field(default_factory=list)
+    entitlement: EntitlementOut = Field(default_factory=EntitlementOut)
+
+
+class StoreCreate(StrictBase):
+    nama: str = Field(..., min_length=2, max_length=255)
+    alamat: Optional[str] = Field(default=None, max_length=500)
+
+
+class FollowupQuotaOut(CompatBase):
+    plan: str
+    database_id: str
+    batas: Optional[int] = None
+    terpakai: int = 0
+    sisa: Optional[int] = None
+    terkunci: bool = False
+
+
 # --- CUSTOMER & UNIT ---
 class CustomerCreate(CompatBase):
     nama: str = Field(..., min_length=2, max_length=255)
@@ -115,6 +150,7 @@ class CustomerContactIn(StrictBase):
 class WaLinkOut(CompatBase):
     link: str
     peringatan: str = ""
+    kuota: Optional[FollowupQuotaOut] = None
 
 
 class WaGateOut(CompatBase):
@@ -859,6 +895,7 @@ class WhatsAppAttemptOut(CompatBase):
     wa_text: str = ""
     peringatan: str = ""
     log: WhatsAppLogOut
+    kuota: Optional[FollowupQuotaOut] = None
 
 
 # --- FOLLOW-UP TAHAP 13 ---
@@ -1015,6 +1052,7 @@ class FollowupActionResultOut(CompatBase):
     link: str = ""
     peringatan: str = ""
     log: WhatsAppLogOut
+    kuota: Optional[FollowupQuotaOut] = None
 
 
 class FollowupStatusIn(StrictBase):
@@ -1467,6 +1505,10 @@ class ConfigOut(CompatBase):
     keluhan_presets: List[str]
     ops: OpsSettingsOut = Field(default_factory=OpsSettingsOut)
     receipt: ReceiptSettingsOut = Field(default_factory=ReceiptSettingsOut)
+    entitlement: EntitlementOut = Field(default_factory=EntitlementOut)
+    stores: List[StoreOut] = Field(default_factory=list)
+    store_aktif: str = ""
+    kuota_followup: Optional[FollowupQuotaOut] = None
 
 
 class PinRequest(CompatBase):

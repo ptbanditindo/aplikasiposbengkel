@@ -1,29 +1,33 @@
 # Rencana Pemantapan
 
-Status: **siap dimulai — fitur web 2.7.0 sudah dibangun; multi-toko/premium
-belum dibangun dan diuji setelah implementasi**. 2026-11-03.
+Status: **rencana uji aktif** — 2026-11-03. Status implementasi dan riwayat
+pengerjaan ada di
+[`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md).
 
 Dokumen ini menampung pekerjaan pemantapan yang **tidak dikerjakan** selama fase
-pengembangan fitur. Fitur web 2.7.0 sudah dibangun; pengujian dilakukan di fase
-ini. Seluruh skenario uji multi-toko dan premium ada di bagian 7 dan baru
-dijalankan setelah fiturnya dibangun. Aturan produk tidak ditulis ulang di sini;
-rujukannya adalah `K-xx` pada bagian **Keputusan (sumber kebenaran)** di
+pengembangan fitur. Pengujian fitur web 2.7.0 dilakukan di fase ini. Seluruh
+skenario uji multi-toko dan premium ada di bagian 7 dan baru dijalankan setelah
+fiturnya dibangun. Aturan produk tidak ditulis ulang di sini; rujukannya adalah
+`K-xx` pada bagian **Keputusan (sumber kebenaran)** di
 `RENCANA_MULTI_TOKO_PREMIUM.md`.
 
-## Status fitur web 2.7.0
+Rencana implementasi hanya memuat pekerjaan yang belum ada kodenya. Jika kode
+sudah dibuat, item itu dihapus dari rencana dan statusnya dicatat di
+[`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md). Dokumen ini
+tetap memuat skenario uji untuk fitur yang sudah ada.
 
-- **Sudah dibangun:** scanner HID, empat kategori unit, stok masuk, opname, dan
-  laporan kelompok part.
-- **Ditunda:** render barcode/QR pada label dan nota.
-- **Belum dibangun:** multi-toko, premium, akun/login, lisensi, relay, dan
-  manajemen kunci.
-- Versi acuan adalah **2.7.0**; tidak ada versi 2.8.0 yang terpasang.
+## Status implementasi
+
+Status fitur dan riwayat pengerjaan ada di
+[`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md). Versi acuan
+web adalah **2.7.0**; tidak ada versi 2.8.0 yang terpasang.
 
 ## Posisi
 
 - Tidak ada uji pemantapan selama fase build fitur.
 - Uji pemantapan dilakukan setelah fitur web selesai, dalam satu fase.
-- APK, Android, printer fisik, dan perangkat fisik ditunda.
+- APK, Android, printer fisik, dan perangkat fisik ditunda sampai kode web
+  stabil; fokus saat ini hanya web.
 - Tidak ada data pengguna nyata; backup/restore tetap diuji dengan database
   dummy sebagai **P0**.
 - Database baru boleh dibuat dari nol; tidak ada kewajiban kompatibilitas.

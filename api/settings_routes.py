@@ -17,7 +17,7 @@ from api.schemas import (
     TelegramSettingsIn,
 )
 from database.session import get_db
-from services import settings_service, telegram_backup_service
+from services import settings_service, store_service, telegram_backup_service
 
 router = APIRouter(tags=["Pengaturan"], dependencies=[Depends(require_owner)])
 
@@ -62,6 +62,7 @@ def update_receipt(payload: ReceiptSettingsIn, db: Session = Depends(get_db)):
 )
 def update_bengkel(payload: BengkelInfoIn, db: Session = Depends(get_db)):
     info = settings_service.update_bengkel_info(db, payload.model_dump())
+    store_service.sync_registry_identity(db)
     return BengkelInfoOut(**info)
 
 

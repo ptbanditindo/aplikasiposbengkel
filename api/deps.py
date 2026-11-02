@@ -14,7 +14,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from config import settings
 from database.session import SessionLocal
-from services import auth_service
+from services import auth_service, entitlement_service
 from services.auth_service import Operator
 
 INSTALL_TOKEN_HEADER = "X-Install-Token"
@@ -43,6 +43,7 @@ def require_auth(request: Request) -> Operator:
                 detail="Silakan masuk dengan PIN pemilik terlebih dahulu.",
                 headers={"WWW-Authenticate": "Session"},
             )
+        entitlement_service.guard_request(request.method, request.url.path)
         return operator
 
     if mode == "install-token":
@@ -55,6 +56,7 @@ def require_auth(request: Request) -> Operator:
             )
         # APK adalah perangkat milik bengkel; token acak per instalasi menjadi
         # principal pemilik dengan hak pengelolaan yang sama.
+        entitlement_service.guard_request(request.method, request.url.path)
         return auth_service.OWNER
 
     raise HTTPException(
