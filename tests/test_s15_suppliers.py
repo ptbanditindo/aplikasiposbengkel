@@ -77,13 +77,16 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     assert response.status_code == 200, response.text
     body = response.json()
     text = body["wa_text"].lower()
-    assert "pengelola supplier preview" in text
+    assert "kepada" in text
+    assert "supplier preview" in text
     assert "barang preview" in text
     assert "10 buah" in text
     assert "sisa" not in text
     assert "minimum" not in text
     assert "harga per satuan" in text
     assert "pengiriman" in text
+    assert body["wa_text"].startswith("=" * 32)
+    assert "- barang preview\n  10 buah" in text
     assert body["items"][0]["stock_item_id"] == item["id"]
     assert body["items"][0]["nama"] == "Barang Preview"
     assert body["items"][0]["jumlah"] == 10
@@ -98,7 +101,7 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     assert custom.status_code == 200, custom.text
     custom_body = custom.json()
     assert custom_body["items"][0]["jumlah"] == 3
-    assert "(3 buah)" in custom_body["wa_text"].lower()
+    assert "- barang preview\n  3 buah" in custom_body["wa_text"].lower()
     from database.session import SessionLocal
 
     with SessionLocal() as db:
@@ -286,5 +289,5 @@ def test_preview_supplier_jumlah_per_barang(client):
     assert qty_by_item[first["id"]] == 4
     assert qty_by_item[second["id"]] == 7
     text = body["wa_text"].lower()
-    assert "barang qty a (4 buah)" in text
-    assert "barang qty b (7 buah)" in text
+    assert "- barang qty a\n  4 buah" in text
+    assert "- barang qty b\n  7 buah" in text

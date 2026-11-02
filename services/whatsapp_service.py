@@ -207,31 +207,43 @@ def supplier_wa_text(
     jumlah_map: Optional[Dict[int, int]] = None,
     default_jumlah: int = 1,
 ) -> str:
-    """Pesan formal untuk menanyakan ketersediaan stok ke supplier/reseller."""
-    nama = (supplier.nama or "").strip()
-    sapaan = f"Bapak/Ibu pengelola {nama}," if nama else "Bapak/Ibu pengelola,"
-    bengkel_nama = (bengkel.get("nama") or "").strip()
-    perkenalan = (
-        f"Perkenalkan, kami dari {bengkel_nama}."
-        if bengkel_nama
-        else "Perkenalkan, kami dari bengkel kami."
-    )
+    """Pesan penanyaan stok ke supplier, rapi mengikuti pola struk WhatsApp."""
+    width = 32
+    nama_bengkel = (bengkel.get("nama") or "").strip() or "BENGKEL"
+    tagline = (bengkel.get("tagline") or "").strip()
+    kontak = (bengkel.get("wa") or bengkel.get("telepon") or "").strip()
+    supplier_nama = (supplier.nama or "").strip() or "-"
     qty_map = jumlah_map or {}
     fallback_qty = max(1, int(default_jumlah or 1))
-    rows = []
+
+    lines = ["=" * width, nama_bengkel]
+    if tagline:
+        lines.append(tagline)
+    if kontak and kontak != "-":
+        lines.append(f"Telp/WA: {kontak}")
+    lines.append("=" * width)
+    lines.append(f"{'Kepada':<8} : {supplier_nama}")
+    lines.append(f"{'Perihal':<8} : Penanyaan ketersediaan stok")
+    lines.append("-" * width)
+    lines.append("BARANG DITANYAKAN:")
     for item in items:
         qty = int(qty_map.get(item.get("id"), fallback_qty) or fallback_qty)
         qty = min(max(qty, 1), 10000)
-        rows.append(f"- {item.get('nama') or '-'} ({qty} buah)")
-    body = (
-        f"{sapaan}\n\n{perkenalan} Kami ingin menanyakan ketersediaan "
-        "barang berikut:\n"
-        + "\n".join(rows)
-        + "\n\nMohon informasikan apakah jumlah tersebut tersedia, "
-        "harga per satuan, dan perkiraan waktu pengiriman. "
-        "Terima kasih atas perhatiannya."
+        lines.append(f"- {item.get('nama') or '-'}")
+        lines.append(f"  {qty} buah")
+    lines.extend(
+        [
+            "-" * width,
+            "Mohon informasikan:",
+            "- Ketersediaan stok",
+            "- Harga per satuan",
+            "- Perkiraan waktu pengiriman",
+            "-" * width,
+            "Terima kasih atas perhatiannya.",
+            "=" * width,
+        ]
     )
-    return body
+    return "\n".join(lines)
 
 
 def log_supplier_attempt(
