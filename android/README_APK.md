@@ -134,12 +134,12 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.431.716 byte
-- SHA-256: `38922b4f1d763d422b9b75597650a717ecd5e122f0bc24e2eebc07e520bc0300`
-- Paket: `com.bengkelpos.radiator`, versionName `2.3.2`, versionCode `14`,
+- Ukuran: 45.166.332 byte
+- SHA-256: `9836d873af0b5c2337c13588f05ce9aa8ef169265be66afcce7a9902b697771c`
+- Paket: `com.bengkelpos.radiator`, versionName `2.4.0`, versionCode `16`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 302.754 byte, SHA-256
-  `8c5e1bba74b89c851348baac821e81df6de9ecc20c16ea3a758620235cc7db23`.
+- Asset `assets/bengkel_backend.zip`: 344.407 byte, SHA-256
+  `877fe45715ec8f78592bf2c16ac07868bb45b52b81922f59961493015e4686e1`.
   ZIP ini memuat logika follow-up Tahap 1-5: penanda pengerjaan, status
   pengerjaan dan riwayatnya, item per unit/baris/nota, jadwal prospek/garansi/
   servis/piutang, cadence piutang, gerbang pesan pusat, DNC, batas pesan,

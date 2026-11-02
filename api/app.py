@@ -51,7 +51,7 @@ from services.errors import (
 )
 
 FRONTEND_DIR = BASE_DIR / "frontend"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.4.0"
 
 KELUHAN_PRESETS = [
     "Overheat / panas berlebih",
