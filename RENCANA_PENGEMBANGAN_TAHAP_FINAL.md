@@ -1,6 +1,14 @@
-# Rencana Pengembangan Tahap Final
+# Rencana Pengembangan Tahap Final — PusatkuPOS
 
 Status: **final** — 2026-11-03. Belum diimplementasikan.
+
+## Identitas produk
+
+- Nama produk baru: **PusatkuPOS**.
+- Nama ini dipakai untuk aplikasi Flutter Android, Windows EXE, dan Mac.
+- Aplikasi 2.7.0 yang berjalan sekarang tetap **BengkelPOS Radiator**.
+- Package Android, nama database, dan format backup aplikasi lama tidak diubah
+  pada tahap ini agar update dan data pengguna tetap aman.
 
 ## Tujuan
 
@@ -20,9 +28,14 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   semua platform.
 - **Paket:** APK/AAB Android, installer EXE Windows, `.app`/`.dmg` macOS.
 - **Tanpa Python:** backend Python tidak ikut ke paket baru. Versi lama hanya
-  menjadi acuan perilaku dan migrasi data.
+  menjadi acuan perilaku; data lamanya tidak wajib dimigrasikan.
+- **Data awal:** belum ada konsumen. Data dummy/pengembangan boleh dimulai
+  ulang; migrasi data lama bukan syarat rilis.
 - **Gratis:** satu perangkat, lokal penuh, tanpa panggilan API.
-- **Premium:** sinkronisasi API dan multi-device; tetap offline-first.
+- **Premium:** modul Karyawan, Supplier, Follow up, semua tombol WhatsApp, dan
+  backup otomatis; tetap satu perangkat dan offline-first.
+- **Ditunda:** sinkronisasi API, multi-device, hub/LAN, dan aplikasi
+  owner/karyawan. Semua itu tahap jauh, bukan premium awal.
 - **Apple:** target tahap ini macOS. iOS bukan target tahap ini.
 
 ## Arsitektur
@@ -53,13 +66,15 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 
 - Tidak ada panggilan API di jalur simpan nota, stok, pembayaran, atau struk.
 - Semua data inti tersedia setelah aplikasi dibuka tanpa internet.
-- Sinkronisasi premium berjalan di latar belakang; status “belum tersinkron”
-  terlihat dan dapat dicoba ulang.
-- Free tidak memanggil API developer. Premium hanya mengaktifkan sync,
-  multi-device, owner, dan fitur cloud.
+- Premium awal tetap lokal dan satu perangkat. Sinkronisasi API, multi-device,
+  hub/LAN, dan aplikasi owner/karyawan ditunda ke tahap jauh.
+- Free tidak memanggil API developer. Premium hanya memanggil API untuk akun,
+  lisensi, atau kuota—bukan untuk menyimpan nota.
+- Bila sinkronisasi diaktifkan nanti, status “belum tersinkron” terlihat dan
+  dapat dicoba ulang.
 - Backup lokal dan restore harus tetap berfungsi tanpa akun dan tanpa internet.
-- Jam transaksi memakai waktu lokal; saat sync, waktu server dipakai untuk
-  urutan perubahan.
+- Jam transaksi memakai waktu lokal; bila sync diaktifkan nanti, waktu server
+  dipakai untuk urutan perubahan.
 
 ## Ruang lingkup MVP
 
@@ -69,10 +84,10 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 4. Backup lokal, restore, dan format database/Excel/CSV.
 5. PIN/keamanan lokal dan pengaturan bengkel.
 6. Printer pada Android dan Windows; Mac menyusul di tahap Mac.
-7. Migrasi database APK/desktop lama.
-8. Uji parity uang, stok, nomor nota, retur, dan laporan dengan versi Python.
-9. Fitur lanjutan—follow-up, supplier, karyawan, komisi—setelah inti stabil.
-10. Premium sync dan multi-device setelah versi lokal stabil.
+7. Uji parity uang, stok, nomor nota, retur, dan laporan dengan versi Python.
+8. Fitur lanjutan—follow-up, supplier, karyawan, komisi—setelah inti stabil.
+9. Premium lokal: lisensi, gating modul, kuota WA, dan backup otomatis.
+10. Sync API, multi-device, owner/karyawan app: **ditunda**.
 
 ## Tahapan
 
@@ -81,21 +96,20 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 2. **Inti kasir:** pelanggan, unit, jasa, sparepart, pembayaran, nota, struk.
 3. **Stok dan laporan:** pergerakan stok, ringkasan, laporan, retur, void,
    garansi.
-4. **Backup dan migrasi:** backup lokal, restore, impor database APK/desktop
-   lama, rollback.
+4. **Backup dan restore:** backup lokal, restore, dan rollback pengujian.
 5. **Android:** PIN, printer, folder backup, WorkManager, APK per ABI/AAB.
 6. **Windows EXE:** printer, file backup, installer, dan update.
 7. **Mac:** `.app`/`.dmg`, printer, signing, notarization.
-8. **Premium:** lisensi, outbox, API sync, multi-device, owner/karyawan.
-9. **Uji akhir:** matriks Android/Windows/Mac, offline, migrasi, dan parity.
+8. **Premium lokal:** lisensi, gating modul, kuota WA, dan backup otomatis.
+   Sync API, multi-device, owner/karyawan app ditunda.
+9. **Uji akhir:** matriks Android/Windows/Mac, offline, backup/restore, dan
+   parity.
 
-## Migrasi dan keamanan data
+## Backup dan keamanan data
 
-- Backup database lama wajib dibuat sebelum impor.
-- Impor harus mempertahankan pelanggan, unit, nota, pembayaran, stok, retur,
-  pengaturan, dan riwayat.
-- Migrasi harus dapat diulang dan gagal dengan aman tanpa merusak database
-  lama.
+- Belum ada konsumen; data dummy/pengembangan boleh direset. Backup tetap
+  dibuat sebelum menghapus atau mengubah data uji secara besar.
+- Backup lokal dan restore harus aman dan dapat diuji tanpa cloud.
 - PIN disimpan di penyimpanan aman platform; token premium tidak pernah masuk
   database biasa.
 - Data cloud premium dienkripsi dan dipisahkan per tenant.
@@ -106,9 +120,8 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 - Printer dan file picker berbeda di tiap platform; adapter tidak bisa
   disamakan mentah-mentah.
 - macOS membutuhkan mesin Mac, Xcode, signing, dan notarization.
-- Multi-device premium tetap rawan konflik jika beberapa perangkat menulis
-  transaksi saat offline; aturan konflik harus selesai sebelum fitur itu
-  dirilis.
+- Multi-device premium rawan konflik jika beberapa perangkat menulis transaksi
+  saat offline; aturan konflik harus selesai sebelum fitur itu nanti dirilis.
 - APK/EXE/Mac akan lebih kecil dari versi Python, tetapi bukan “tanpa kode”;
   ukuran tetap bergantung pada dependensi dan aset.
 
@@ -116,6 +129,6 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 
 - iOS.
 - Web sebagai target aplikasi.
-- Multi-device gratis.
+- Multi-device (ditunda).
 - Sinkronisasi cloud sebagai syarat transaksi.
 - Mempertahankan Python/Chaquopy di paket baru.

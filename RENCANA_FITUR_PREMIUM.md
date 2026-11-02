@@ -1,6 +1,8 @@
-# Rencana Pengembangan Fitur Premium
+# Rencana Pengembangan Fitur Premium PusatkuPOS
 
 Status: **rencana aktif — belum diimplementasikan**. 2026-11-03.
+
+Produk: **PusatkuPOS**. Aplikasi 2.7.0 saat ini tetap **BengkelPOS Radiator**.
 
 ## Ringkasan keputusan
 
@@ -123,7 +125,9 @@ Aplikasi Flutter (Android/Windows/Mac)
 - **Client:** Flutter + SQLite.
 - **API:** FastAPI + PostgreSQL; Python hanya di server, tidak masuk paket
   aplikasi.
-- **Auth:** akun pemilik, undangan karyawan, token perangkat.
+- **Auth:** login tanpa akun untuk pemakaian lokal, Google untuk akun premium,
+  undangan karyawan, token perangkat, dan sign out per perangkat. Sign out
+  menghentikan sync di perangkat itu tanpa menghapus data lokal.
 - **Kuota:** dicatat lokal dan disinkronkan ke server saat online; server
   menjadi acuan untuk mencegah reset.
 - **Lisensi:** masa tenggang offline; kegagalan API tidak mengunci kasir lokal.
@@ -186,7 +190,6 @@ Aplikasi Flutter (Android/Windows/Mac)
 
 - Harga paket premium dan apakah sekali bayar atau langganan.
 - Batas perangkat untuk akun premium.
-- Apakah pengguna lama mendapat grandfathered access atau masa transisi.
 - Apakah data Karyawan/Supplier/Follow up lama tetap bisa dibaca/diekspor saat
   fitur terkunci.
 - Kapan kuota disinkronkan ke server dan bagaimana perilaku saat offline lama.
