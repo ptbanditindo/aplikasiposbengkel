@@ -36,6 +36,7 @@ from database.models import (  # noqa: E402
     ServicePart,
     ServicePayment,
     ServiceRecord,
+    ServiceRecordCommission,
     ServiceRecordMechanic,
     EmployeeDebt,
     SalaryPayment,
@@ -44,6 +45,7 @@ from database.models import (  # noqa: E402
     StockItem,
     StockMovement,
     Supplier,
+    SupplierFollowup,
     SupplierItem,
     VehicleOrUnit,
 )
@@ -162,6 +164,7 @@ with SessionLocal() as db:
         "ops.piutang_jeda_hari": "14",
         "ops.piutang_maks_pengingat": "3",
         "ops.stok_minimum_default": "3",
+        "ops.supplier_tanya_jumlah": "10",
     }.items():
         db.add(AppSetting(key=key, value=value))
 
@@ -888,7 +891,10 @@ with SessionLocal() as db:
             supplier_jaya,
             ["Oli Mesin 10W-40", "Coolant Radiator", "Tutup Radiator", "Selang Radiator"],
         ),
-        (supplier_sentra, ["Tangki Radiator Avanza", "Kipas Radiator"]),
+        (
+            supplier_sentra,
+            ["Tangki Radiator Avanza", "Kipas Radiator", "Selang Radiator"],
+        ),
     ):
         for nama in names:
             item = stok.get(nama)
@@ -899,6 +905,37 @@ with SessionLocal() as db:
                         stock_item_id=item.id,
                     )
                 )
+    db.flush()
+
+    # Status follow up reseller per supplier + barang (semua status demo).
+    db.add_all(
+        [
+            SupplierFollowup(
+                supplier_id=supplier_jaya.id,
+                stock_item_id=stok["Selang Radiator"].id,
+                status="DIPESAN",
+                catatan="Pesan 10 buah, menunggu konfirmasi.",
+            ),
+            SupplierFollowup(
+                supplier_id=supplier_sentra.id,
+                stock_item_id=stok["Selang Radiator"].id,
+                status="ARSIP",
+                catatan="Tidak perlu ditanyakan lagi.",
+            ),
+            SupplierFollowup(
+                supplier_id=supplier_jaya.id,
+                stock_item_id=stok["Tutup Radiator"].id,
+                status="TIDAK_TERSEDIA",
+                catatan="Stok kosong di supplier.",
+            ),
+            SupplierFollowup(
+                supplier_id=supplier_sentra.id,
+                stock_item_id=stok["Kipas Radiator"].id,
+                status="DIKIRIM",
+                catatan="Dikirim besok pagi.",
+            ),
+        ]
+    )
 
     # Karyawan demo untuk penugasan, performa, dan komisi.
     andi = Employee(
@@ -1049,6 +1086,16 @@ with SessionLocal() as db:
                 )
             )
 
+    # Komisi manual per nota (menggantikan hitungan persen untuk nota itu).
+    if sample_records:
+        db.add(
+            ServiceRecordCommission(
+                service_record_id=sample_records[0].id,
+                employee_id=andi.id,
+                nominal=Decimal("25000.00"),
+            )
+        )
+
     db.commit()
 
     sync_items(db, today=today)
@@ -1163,6 +1210,12 @@ with SessionLocal() as db:
         db.query(ServicePayment).count(),
         "| Retur:",
         db.query(ServiceReturn).count(),
+    )
+    print(
+        "Status reseller:",
+        db.query(SupplierFollowup).count(),
+        "| Komisi manual:",
+        db.query(ServiceRecordCommission).count(),
     )
     print(
         "Stok:",
