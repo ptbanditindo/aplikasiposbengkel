@@ -1352,14 +1352,18 @@
         fmtRp(stock.harga_jual);
     }
     if (intervalHint) {
-      const interval = clampInterval(stock.interval_servis_bulan);
-      intervalHint.textContent =
-        interval > 0
-          ? 'Servis berkala: ' +
-            interval +
-            ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
-          : 'Sparepart ini tanpa interval servis berkala.';
-      intervalHint.classList.remove('hidden');
+      if (state.posMode === 'PART') {
+        intervalHint.classList.add('hidden');
+      } else {
+        const interval = clampInterval(stock.interval_servis_bulan);
+        intervalHint.textContent =
+          interval > 0
+            ? 'Servis berkala: ' +
+              interval +
+              ' bulan. Nilai di baris nota boleh diubah untuk nota ini saja.'
+            : 'Sparepart ini tanpa interval servis berkala.';
+        intervalHint.classList.remove('hidden');
+      }
     }
   }
 
@@ -1847,6 +1851,7 @@
       element.classList.toggle('hidden', partMode);
     });
     $('#jobSubtotalRow')?.classList.toggle('hidden', partMode);
+    if (partMode) $('#partIntervalHint')?.classList.add('hidden');
     if ($('#customerSearch')) {
       $('#customerSearch').placeholder = partMode
         ? 'Cari pelanggan (opsional)'
