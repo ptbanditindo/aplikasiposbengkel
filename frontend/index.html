@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261169">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261170">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -86,7 +86,8 @@
         </div>
       </div>
 
-      <nav class="nav-tabs" id="navTabs" aria-label="Navigasi utama">
+      <div class="nav-shell">
+        <nav class="nav-tabs" id="navTabs" aria-label="Navigasi utama">
         <p class="nav-group-label">Operasional</p>
         <button type="button" class="nav-tab active" data-view="dashboard">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"></path><path d="M5 10v10h14V10"></path></svg>
@@ -132,8 +133,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>
           Pengaturan
         </button>
+        </nav>
         <button type="button" class="nav-order-toggle" id="navOrderToggle">Atur menu</button>
-      </nav>
+      </div>
 
       <div class="sidebar-foot">
         <button type="button" class="printer-pill offline" id="printerBtn" title="Buka pengaturan printer">
@@ -830,6 +832,17 @@
               <button type="button" data-theme-value="dark" aria-pressed="false">Gelap</button>
             </div>
           </div>
+        </section>
+
+        <section class="card settings-collapsible" id="menuSettingsCard">
+          <div class="card-head">
+            <div>
+              <h2>Menu navigasi</h2>
+              <p class="muted">Pilih menu yang ditampilkan. Ringkasan, Kasir, dan Pengaturan selalu tampil.</p>
+            </div>
+          </div>
+          <div class="form-grid" id="menuToggleGrid"></div>
+          <p class="tiny muted">Menu yang dimatikan tidak hilang — bisa ditampilkan lagi kapan saja. Pilihan tersimpan di perangkat ini.</p>
         </section>
 
         <form class="card settings-collapsible" id="settingsForm">
@@ -2595,15 +2608,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261169"></script>
-  <script src="/static/js/api-client.js?v=20261169"></script>
-  <script src="/static/js/printer-manager.js?v=20261169"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261169"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261169"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261169"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261169"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261169"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261169"></script>
-  <script src="/static/js/app.js?v=20261169"></script>
+  <script src="/static/js/native-bridge.js?v=20261170"></script>
+  <script src="/static/js/api-client.js?v=20261170"></script>
+  <script src="/static/js/printer-manager.js?v=20261170"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261170"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261170"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261170"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261170"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261170"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261170"></script>
+  <script src="/static/js/app.js?v=20261170"></script>
 </body>
 </html>

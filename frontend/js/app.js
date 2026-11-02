@@ -529,8 +529,7 @@
 
   function applyNavOrder() {
     const nav = $('#navTabs');
-    const toggle = $('#navOrderToggle');
-    if (!nav || !toggle) return;
+    if (!nav) return;
     let saved = [];
     try {
       saved = JSON.parse(window.localStorage.getItem(NAV_ORDER_KEY) || '[]');
@@ -543,10 +542,10 @@
     saved.forEach((view) => {
       const tab = byView.get(view);
       if (!tab) return;
-      nav.insertBefore(tab, toggle);
+      nav.appendChild(tab);
       byView.delete(view);
     });
-    byView.forEach((tab) => nav.insertBefore(tab, toggle));
+    byView.forEach((tab) => nav.appendChild(tab));
   }
 
   function saveNavOrder() {
@@ -561,10 +560,12 @@
   function refreshNavMoveButtons() {
     const units = navMoveUnits();
     units.forEach((unit, index) => {
-      const up = unit.querySelector('[data-nav-move="-1"]');
-      const down = unit.querySelector('[data-nav-move="1"]');
-      if (up) up.disabled = index === 0;
-      if (down) down.disabled = index === units.length - 1;
+      unit.querySelectorAll('[data-nav-move="-1"]').forEach((button) => {
+        button.disabled = index === 0;
+      });
+      unit.querySelectorAll('[data-nav-move="1"]').forEach((button) => {
+        button.disabled = index === units.length - 1;
+      });
     });
   }
 
@@ -601,8 +602,14 @@
         const move = document.createElement('span');
         move.className = 'nav-move';
         move.innerHTML =
+          '<span class="nav-move-group nav-move-v">' +
+          '<button type="button" data-nav-move="-1" aria-label="Geser naik">\u2191</button>' +
+          '<button type="button" data-nav-move="1" aria-label="Geser turun">\u2193</button>' +
+          '</span>' +
+          '<span class="nav-move-group nav-move-h">' +
           '<button type="button" data-nav-move="-1" aria-label="Geser ke kiri">\u2190</button>' +
-          '<button type="button" data-nav-move="1" aria-label="Geser ke kanan">\u2192</button>';
+          '<button type="button" data-nav-move="1" aria-label="Geser ke kanan">\u2192</button>' +
+          '</span>';
         row.appendChild(move);
       });
       refreshNavMoveButtons();
@@ -617,6 +624,98 @@
       toggle.textContent = enabled ? 'Selesai atur menu' : 'Atur menu';
       toggle.classList.toggle('active', enabled);
     }
+  }
+
+  /* ------------------------- Tampil / sembunyi menu ------------------------ */
+  const MENU_HIDDEN_KEY = 'bengkel.menuHidden';
+
+  const MENU_TOGGLE_FIELDS = [
+    ['history', 'Riwayat servis'],
+    ['customers', 'Pelanggan'],
+    ['employees', 'Karyawan'],
+    ['suppliers', 'Supplier'],
+    ['followup', 'Follow up'],
+    ['reseller', 'Tab Follow up Reseller'],
+    ['stock', 'Stok'],
+    ['jasa', 'Jasa'],
+    ['report', 'Laporan'],
+  ];
+
+  function hiddenMenus() {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(MENU_HIDDEN_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function isMenuHidden(key) {
+    return hiddenMenus().includes(key);
+  }
+
+  function saveHiddenMenus(list) {
+    try {
+      window.localStorage.setItem(MENU_HIDDEN_KEY, JSON.stringify(list));
+    } catch (err) {
+      /* penyimpanan lokal tidak tersedia */
+    }
+  }
+
+  function applyMenuVisibility() {
+    const hidden = hiddenMenus();
+    $$('.nav-tab').forEach((tab) => {
+      const view = tab.dataset.view;
+      if (NAV_FIXED_VIEWS.includes(view) || view === 'settings') {
+        tab.classList.remove('menu-hidden');
+        return;
+      }
+      tab.classList.toggle('menu-hidden', hidden.includes(view));
+    });
+    const supplierAktif =
+      !state.config ||
+      !state.config.ops ||
+      state.config.ops.supplier_aktif !== false;
+    const resellerTab = $('#followupTabSwitch [data-followup-tab="reseller"]');
+    if (resellerTab) {
+      resellerTab.classList.toggle(
+        'hidden',
+        !supplierAktif || hidden.includes('reseller')
+      );
+    }
+    if (hidden.includes('reseller') && state.followupTab === 'reseller') {
+      state.followupTab = 'customer';
+    }
+    const active = $('.nav-tab.active');
+    if (active && active.classList.contains('menu-hidden')) {
+      navigate('dashboard');
+    }
+  }
+
+  function fillMenuSettings() {
+    const grid = $('#menuToggleGrid');
+    if (!grid) return;
+    const hidden = hiddenMenus();
+    grid.innerHTML = MENU_TOGGLE_FIELDS.map(
+      ([key, label]) =>
+        '<label class="switch-row"><span>' +
+        esc(label) +
+        '</span><input type="checkbox" data-menu-toggle="' +
+        key +
+        '"' +
+        (hidden.includes(key) ? '' : ' checked') +
+        '><span class="switch-ui" aria-hidden="true"></span></label>'
+    ).join('');
+  }
+
+  function handleMenuToggleChange(event) {
+    const input = event.target.closest('[data-menu-toggle]');
+    if (!input) return;
+    const key = input.dataset.menuToggle;
+    const hidden = hiddenMenus().filter((row) => row !== key);
+    if (!input.checked) hidden.push(key);
+    saveHiddenMenus(hidden);
+    applyMenuVisibility();
   }
 
   function navigate(view) {
@@ -5787,7 +5886,7 @@
   async function loadFollowupPage() {
     const supplierAktif =
       !state.config || !state.config.ops || state.config.ops.supplier_aktif !== false;
-    if (state.followupTab === 'reseller' && !supplierAktif) {
+    if (state.followupTab === 'reseller' && (!supplierAktif || isMenuHidden('reseller'))) {
       state.followupTab = 'customer';
     }
     const reseller = state.followupTab === 'reseller';
@@ -10077,7 +10176,12 @@
     if (!employeeAktif) $('#payrollAlert')?.classList.add('hidden');
     $('#stockSupplierField')?.classList.toggle('hidden', !supplierAktif);
     const resellerTab = $('#followupTabSwitch [data-followup-tab="reseller"]');
-    if (resellerTab) resellerTab.classList.toggle('hidden', !supplierAktif);
+    if (resellerTab) {
+      resellerTab.classList.toggle(
+        'hidden',
+        !supplierAktif || isMenuHidden('reseller')
+      );
+    }
     if ($('#btnAddEmployee')) $('#btnAddEmployee').disabled = !employeeAktif;
     if ($('#btnEmployeeArchive')) $('#btnEmployeeArchive').disabled = !employeeAktif;
     if ($('#btnAddDebt')) $('#btnAddDebt').disabled = !employeeAktif;
@@ -10784,6 +10888,9 @@
   /* ------------------------------- Bindings ------------------------------- */
   function bindEvents() {
     applyNavOrder();
+    applyMenuVisibility();
+    fillMenuSettings();
+    $('#menuToggleGrid').addEventListener('change', handleMenuToggleChange);
     $$('.nav-tab').forEach((tab) =>
       tab.addEventListener('click', () => {
         if (state.navEdit) return;

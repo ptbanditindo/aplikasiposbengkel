@@ -256,12 +256,19 @@ button { color: inherit; touch-action: manipulation; }
 .brand-tagline { display: none; }
 
 /* ------------------------------- Nav ------------------------------------ */
+.nav-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
 .nav-tabs {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
+.nav-tab.menu-hidden { display: none; }
 
 .nav-group-label {
   padding: 0 10px 8px;
@@ -304,26 +311,28 @@ button { color: inherit; touch-action: manipulation; }
 .nav-tab.active svg { color: var(--text); }
 
 .nav-order-toggle {
-  margin-top: 8px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 30px;
   padding: 0 10px;
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
 }
 .nav-order-toggle:hover { background: var(--raised); color: var(--text); }
-.nav-order-toggle.active { border-style: solid; border-color: var(--text); color: var(--text); }
+.nav-order-toggle.active { border-color: var(--text); background: var(--active); color: var(--text); }
 
 .nav-order-row { display: flex; align-items: center; gap: 4px; }
 .nav-order-row .nav-tab { flex: 1 1 auto; min-width: 0; }
 .nav-move { display: flex; flex: none; gap: 2px; }
+.nav-move-group { display: flex; gap: 2px; }
+.nav-move-h { display: none; }
 .nav-move button {
   display: inline-flex;
   align-items: center;
@@ -334,7 +343,7 @@ button { color: inherit; touch-action: manipulation; }
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
@@ -1897,12 +1906,18 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   .clock { display: none; }
   .sidebar-note { display: none; }
 
-  .nav-tabs {
+  .nav-shell {
     grid-area: nav;
     flex-direction: row;
-    gap: 2px;
+    align-items: center;
+    gap: 10px;
     margin: 0 -16px;
     padding: 0 16px 8px;
+  }
+  .nav-tabs {
+    flex: 1 1 auto;
+    flex-direction: row;
+    gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -1910,7 +1925,9 @@ input[type="date"].input, input[type="number"].input { cursor: text; }
   .nav-group-label { display: none; }
   .nav-tab { width: auto; height: 40px; padding: 0 12px; }
   .nav-tab.active { background: transparent; border-radius: 0; box-shadow: inset 0 -2px 0 var(--text); }
-  .nav-order-toggle { margin-top: 0; height: 40px; flex: none; }
+  .nav-order-toggle { flex: none; height: 40px; }
+  .nav-move-v { display: none; }
+  .nav-move-h { display: flex; }
 
   .btn { height: 40px; }
   .btn-xs { height: 32px; }
