@@ -31,11 +31,16 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   menjadi acuan perilaku; data lamanya tidak wajib dimigrasikan.
 - **Data awal:** belum ada konsumen. Data dummy/pengembangan boleh dimulai
   ulang; migrasi data lama bukan syarat rilis.
+- **Skema database:** dirancang baru untuk PusatkuPOS; tidak ada kewajiban
+  kompatibilitas dengan database 2.x.
 - **Gratis:** satu perangkat, lokal penuh, tanpa panggilan API.
 - **Premium:** modul Karyawan, Supplier, Follow up, semua tombol WhatsApp, dan
   backup otomatis; tetap satu perangkat dan offline-first.
 - **Ditunda:** sinkronisasi API, multi-device, hub/LAN, dan aplikasi
   owner/karyawan. Semua itu tahap jauh, bukan premium awal.
+- **Rencana terpisah:** multi-toko, login, header toko, fitur premium, dan
+  backup semua toko ada di `RENCANA_MULTI_TOKO_PREMIUM.md`; pengujiannya ada di
+  `RENCANA_PEMANTAPAN.md`.
 - **Apple:** target tahap ini macOS. iOS bukan target tahap ini.
 
 ## Arsitektur
