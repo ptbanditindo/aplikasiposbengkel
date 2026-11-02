@@ -6,535 +6,675 @@ Produk target: **PusatkuPOS (Flutter)**. Aplikasi 2.7.0 yang berjalan sekarang
 tetap **BengkelPOS Radiator** (web) dan **menerima fitur ini lebih dulu** sebagai
 kanal uji web; setelah perilakunya teruji, fitur dibawa ke PusatkuPOS Flutter.
 
-Dokumen ini menggabungkan rencana multi-toko dan fitur premium. Pengujian tidak
-dicantumkan di sini; seluruh skenario uji ada di `RENCANA_PEMANTAPAN.md` dan baru
-dijalankan setelah fiturnya dibangun.
+Pengujian tidak dicantumkan di sini. Seluruh skenario uji ada di
+`RENCANA_PEMANTAPAN.md` dan baru dijalankan setelah fiturnya dibangun.
 
-## Ringkasan keputusan
+## Cara membaca dokumen
 
-- **Premium:** Karyawan, Supplier, Follow up, semua tombol WhatsApp, backup
-  otomatis, dan multi-toko.
-- **Trial:** hanya fitur Follow up; 20 klik WhatsApp total per database, tanpa
-  batas waktu. Database yang sama tidak bisa mengulang trial; database baru
-  mendapat ID baru dan trial baru.
-- **Kuota:** 1 klik WhatsApp = 1 kuota. Kuota dipotong saat tombol/link `wa.me`
-  dibuka, bukan saat pesan benar-benar terkirim.
-- **Setelah trial:** premium membuka pesan unlimited dan seluruh fitur premium.
-- **Gratis:** lokal penuh, satu perangkat, satu toko, tanpa panggilan API data,
-  dan **tanpa iklan sama sekali** walaupun perangkat terhubung internet.
-- **Multi-toko adalah fitur premium.** Pengguna gratis tetap satu toko dan tidak
-  melihat tombol tambah toko.
-- **Login Google wajib untuk pemilik multi-toko.** Karyawan memakai akun yang
-  dibuat pemilik dan tidak wajib punya akun Google.
-- **Tidak ada batas jumlah toko** untuk akun premium.
-- **ID owner unik:** setiap pemilik memiliki ID unik global yang dibuat sekali
-  dan tidak pernah sama dengan pemilik lain. ID ini mengikat lisensi, kuota,
-  toko, perangkat, dan routing relay, serta menjadi pembeda username karyawan
-  antar pemilik.
-- **Login karyawan tanpa Google:** akun karyawan dibuat pemilik; form login
-  memakai tiga kolom: ID owner, username, dan password.
-- **Peran + izin tambahan:** setiap karyawan punya peran dasar (mis. Kasir), dan
-  pemilik dapat menambah izin per karyawan (mis. Budi kasir + stok opname).
-  Izin bersifat aditif, tercatat, diperiksa di lapisan data, dan tidak membuka
-  akses khusus pemilik.
-- **ID database unik:** setiap database punya `database_id` unik yang hanya
-  dipakai mencatat pemakaian trial. ID ini tidak mengikat pemilik, perangkat,
-  atau lisensi, dan tidak membatasi siapa yang boleh membuka database.
-- **VPS tidak menyimpan data bengkel.** API hanya menjadi relay pertukaran data
-  antar perangkat/karyawan; tidak ada database tenant, salinan, atau retensi di
-  server.
-- **Dua aplikasi:** aplikasi utama memuat core logic dan dipakai owner tanpa
-  karyawan serta karyawan; aplikasi owner terpisah tanpa core logic hanya untuk
-  ringkasan, laporan, dan akun karyawan.
-- **Distribusi modular:** paket dasar berisi shell dan seluruh logika fitur
-  (login, SQLite, sync, printer, backup, izin, pengelola paket resource). Paket
-  resource per peran—layout, aset, label, konfigurasi tampilan—diunduh saat
-  login pertama. Android memakai Play Asset Delivery; iOS masa depan memakai
-  unduhan aset/On-Demand Resources; Windows memakai paket resource bertanda
-  tangan. Tidak ada dex/JAR/so atau self-update, dan paket tidak boleh menambah
-  fitur yang tidak ada di shell.
-- **Premium awal** berfokus pada fitur lokal dan multi-toko. Sinkronisasi API,
-  multi-device, mode karyawan, dan aplikasi owner terpisah adalah tahap premium
-  lanjutan.
-- **Multi-device adalah hak premium.** Setelah relay aktif, satu pemilik premium
-  dapat memakai lebih dari satu perangkat dengan ID owner yang sama, sesuai
-  batas perangkat paketnya. Gratis dan trial tetap satu perangkat.
-- **Premium dijual sebagai langganan bulanan, bukan sekali bayar.** Harga dan
-  daftar paket final ditentukan saat implementasi; arah awal: paket
-  Rp10.000/bulan maksimal 2 perangkat. Setiap paket punya batas login perangkat
-  sendiri; batas dapat diubah lewat rilis aplikasi, bukan diatur pengguna.
-- **Data fitur terkunci tetap dapat dibaca dan diekspor.** Saat fitur Karyawan,
-  Supplier, atau Follow up terkunci karena paket berakhir atau turun paket, data
-  lama tetap terlihat dan dapat diekspor; yang diblokir hanya tambah/ubah data
-  dan aksi premium. Data tidak dihapus.
-- **Lisensi diverifikasi dengan token dan hitung mundur di perangkat.** Saat
-  offline lama, aplikasi memakai token bertanda tangan dan sisa masa aktif
-  lokal; VPS tetap tidak menyimpan data bengkel. Jika paket habis saat ada delta
-  pending, aplikasi mengirim delta itu lebih dulu saat online, lalu berhenti
-  mengirim sampai langganan aktif kembali.
-- **ID owner:** 8 karakter acak (minimum 7), huruf kecil dan angka tanpa karakter
-  ambigu (`0`, `1`, `l`, `o`), unik global dan tidak berurutan. ID ditampilkan
-  sebagai kartu teks + tombol salin + QR untuk dibagikan ke karyawan; QR hanya
-  berisi ID owner, bukan rahasia.
-- **Password karyawan:** dibuat pemilik atau otomatis lewat **tombol acak**
-  berbentuk ikon putar/bulat, minimal 8 karakter, wajib berbeda dari semua
-  karyawan lain di owner yang sama, dan diganti saat login pertama. Tombol yang
-  sama dipakai untuk reset. Ada **tombol salin semua** untuk mengirim ID owner +
-  username + password sekaligus; password hanya tampil sekali. Tidak ada
-  kedaluwarsa otomatis; pemilik dapat mereset kapan saja. PIN 6 digit diatur
-  karyawan sendiri; jika lupa, pemilik mereset PIN dan karyawan membuat PIN baru.
-- **Aplikasi Python lama disimpan.** Setelah Flutter stabil, aplikasi lama tidak
-  dihapus: diarsipkan, tidak diberi fitur baru, dan tetap menjadi acuan/rollback.
-- **Relay tidak harus langsung.** Jika internet mati, delta tetap disimpan di
-  outbox perangkat dengan status pending; saat online, antrean dikirim
-  berurutan. VPS tidak menyimpan delta tersebut.
-- **Banyak akun dan penulisan offline.** Satu owner dapat memiliki banyak akun
-  karyawan, misalnya 100 akun. Masing-masing dapat mencatat riwayat dan menambah
-  stok saat offline; data diurutkan dan digabung saat perangkat kembali online.
-- **Pending jangka panjang wajib diberitahukan.** Antrean tidak kedaluwarsa
-  walau internet mati berbulan-bulan; aplikasi wajib menampilkan banner dan
-  notifikasi sistem selama masih ada data pending.
+- **`## Keputusan (sumber kebenaran)` adalah satu-satunya tempat aturan produk
+  ditetapkan.** Setiap keputusan punya ID `K-xx`.
+- Bagian lain hanya **implementasi dan rujukan**: cara layar bekerja, urutan
+  pekerjaan, risiko, dan kriteria penerimaan. Bagian itu tidak boleh menetapkan
+  ulang angka, batas, atau kebijakan.
+- Jika ada pertentangan, **bagian Keputusan yang menang**. Perbaikan aturan hanya
+  dilakukan di sana, lalu bagian lain cukup menyesuaikan rujukannya.
+- Tabel tier memakai `K-xx` sebagai rujukan; sel tabel sengaja pendek dan tidak
+  mengulang penjelasan.
 
-## Batas gratis, trial, dan premium
+## Keputusan (sumber kebenaran)
 
-| Area | Gratis | Trial | Premium |
+### K-01 — Produk dan kanal uji
+
+- Target produk adalah **PusatkuPOS Flutter** untuk Android, Windows, dan macOS.
+- **Web 2.7.0 (BengkelPOS Radiator) adalah kanal implementasi dan uji pertama
+  untuk lingkup terbatas:** header, registry, ganti toko, isolasi data, dan
+  gating/kuota dengan entitlement stub.
+- **Web tidak membuktikan** akun Google, Play Billing, secure storage/Keystore,
+  notifikasi sistem, kunci perangkat, relay, E2E, atau LAN. Bagian itu ditulis
+  sekali di Dart setelah spesifikasi protokol dan test vector selesai.
+- Web berjalan **loopback-only** (`validate_runtime`). Batas itu tidak boleh
+  dilonggarkan untuk multi-device; multi-device diuji di Dart.
+- Status web 2.7.0: scanner HID, empat kategori unit, stok masuk, opname, dan
+  laporan kelompok part sudah ada; render barcode/QR pada label dan nota masih
+  ditunda.
+- iOS bukan target tahap ini; aturan App Store hanya disiapkan agar port nanti
+  tidak merombak arsitektur.
+
+### K-02 — Model aplikasi
+
+- **Aplikasi utama** memuat seluruh core logic dan dipakai karyawan serta owner
+  yang tidak punya karyawan.
+- **Premium:** karyawan dapat memakai **hub yang sama secara bergiliran** atau
+  perangkat karyawan sendiri. Perangkat karyawan mengikuti K-12.
+- **Di gratis, pengguna adalah owner tunggal**; mode karyawan dan akun karyawan
+  baru ada setelah premium aktif (K-03, K-07).
+- **Aplikasi owner terpisah** adalah thin client premium: tanpa core logic, tanpa
+  database transaksi lokal, dan tanpa replika data bengkel. Ia hanya menyimpan
+  cache ringkasan/laporan bertanda tangan yang pernah diterima, menampilkan
+  badge data basi saat offline, dan tidak dapat menghitung ulang atau
+  bertransaksi (K-21).
+- Manajemen akun, izin, lisensi, dan perangkat di aplikasi owner membutuhkan
+  internet. Jika hub hilang, pemulihan hanya lewat backup lokal di perangkat
+  core; cache aplikasi owner bukan cadangan.
+
+### K-03 — Tier gratis dan premium
+
+- **Gratis seumur hidup, tanpa batas waktu.** Aplikasi berjalan lokal seperti
+  biasa, **boleh login Google** (opsional; K-07), satu toko tanpa tombol tambah
+  toko (K-09), tanpa karyawan, tanpa Supplier, tanpa iklan, tanpa panggilan API
+  data, dan **tanpa backup otomatis** (backup manual mengikuti K-10). Gratis
+  tidak mendaftarkan perangkat dan tidak memiliki penegakan slot (K-12).
+- **Baik tanpa akun maupun login Google, pengguna gratis berperan sebagai
+  owner.** Kasir, ringkasan, stok, laporan, dan fitur inti terbuka; yang terkunci
+  adalah akun karyawan dan multi-toko (serta fitur premium lain).
+- **Follow up gratis dibatasi 20 kredit WhatsApp per `database_id`** (K-04).
+  Fitur premium lain tetap terkunci; kredit tidak menambah batas waktu gratis.
+- **Premium** adalah satu tier berlangganan yang memuat: multi-toko tanpa batas
+  (K-09), akun karyawan untuk shift di hub maupun perangkat karyawan (K-07,
+  K-12), Supplier/Follow up/WA (K-04), backup otomatis dan Telegram serta semua
+  toko (K-10), lisensi (K-11), perangkat owner sesuai paket, sinkronisasi relay,
+  aplikasi owner thin client, dan manajemen kunci (K-21, K-22). Tidak ada
+  pembagian premium v1/v2.
+- Saat fitur terkunci karena paket berakhir atau turun paket, **data lama tetap
+  dapat dibaca dan diekspor**; hanya tambah/ubah data dan aksi premium yang
+  diblokir. Data tidak dihapus.
+
+### K-04 — Follow up gratis dan kuota WhatsApp
+
+- Follow up gratis dapat dimulai sebagai **profil/database lokal** tanpa akun
+  dan tanpa login. Login Google opsional kapan saja (K-07); tanpa login aplikasi
+  tidak menghubungi server.
+- **Gratis tidak dibatasi waktu.** Satu-satunya fitur premium yang terbuka adalah
+  Follow up, dengan kuota **20 kredit WhatsApp per `database_id`**. Kredit habis
+  berarti Follow up terkunci sampai berlangganan.
+- Satu kredit dihitung saat tautan `wa.me` dibuka, bukan saat pesan terkirim.
+  Kredit tidak dikembalikan jika pengguna membatalkan atau pesan gagal.
+- Database yang sama tidak dapat mengulang kuota. Database baru mendapat ID baru
+  dan 20 kredit baru. Tidak ada pengikat perangkat atau akun.
+- Kuota bersifat monoton per `database_id` dan **hanya disimpan lokal**: restore
+  atau salin file membawa counter yang sama.
+- **Tidak ada sinkronisasi kuota ke server.** Gratis tanpa login tidak memanggil
+  API sama sekali; salinan file yang membawa counter dianggap risiko yang
+  diterima.
+- Pengguna gratis yang **memilih login** hanya memanggil API autentikasi, bukan
+  API data, relay, atau registrasi perangkat (K-07, K-12, K-16). Tanpa login,
+  aplikasi tetap tidak menghubungi server.
+
+### K-05 — ID database
+
+- Setiap database memiliki `database_id` unik (UUIDv7/ULID) yang dibuat saat
+  database dibuat dan ikut di file serta backup.
+- ID ini **hanya untuk pencatatan kuota**. Ia tidak mengikat owner,
+  perangkat, lisensi, atau siapa pun yang boleh membuka database.
+- File database yang sama dapat dibuka user/perangkat lain dan membawa status
+  kuota yang sama.
+
+### K-06 — ID owner
+
+- **ID owner hanya diterbitkan untuk akun premium.** Gratis memakai login Google
+  tanpa ID owner dan tanpa registrasi perangkat (K-07, K-12).
+- ID owner adalah **8 karakter acak (minimum 7)**, huruf kecil dan angka, tanpa
+  karakter ambigu `0`, `1`, `l`, dan `o`. ID tidak berurutan dan tidak berubah
+  setelah dibuat.
+- ID diterbitkan saat premium aktif dan dipakai untuk **login karyawan dari
+  perangkat sendiri** serta aplikasi owner. Di hub, karyawan login dengan
+  username + password tanpa mengetik ID owner karena perangkat sudah terikat
+  pada akun.
+- ID ditampilkan sebagai kartu teks + tombol salin + **QR yang hanya berisi ID**.
+- ID owner bukan rahasia. Login karyawan tetap membutuhkan username dan
+  password, dengan rate limit dan lockout.
+
+### K-07 — Akun, login, peran, dan izin tambahan
+
+- **Login Google bersifat opsional untuk gratis dan wajib untuk premium.**
+  Mode tanpa login tetap ada untuk pengguna gratis yang tidak mau akun; aplikasi
+  memakai PIN perangkat dan tidak menghubungi server. Premium wajib login karena
+  lisensi, perangkat, dan sinkronisasi harus dapat diverifikasi.
+- **Gratis boleh login kapan saja; login tidak wajib.** Layar login menjelaskan
+  manfaatnya: **upgrade mulus tanpa pindah data atau membuat akun baru** dan
+  **pemulihan lisensi di perangkat baru setelah membeli**. Login tidak menambah
+  batas perangkat atau fitur apa pun untuk gratis.
+- Login gratis **tidak mendaftarkan perangkat dan tidak menerbitkan ID owner**.
+  Server hanya memproses autentikasi; data bengkel tetap lokal dan tidak ada
+  penegakan slot untuk gratis (K-12, K-13).
+- **Login Google tidak mengubah peran:** gratis tetap owner tunggal. Tidak ada
+  akun karyawan di gratis; akun karyawan baru dibuat setelah premium aktif.
+- Akun karyawan adalah fitur premium dan dibuat pemilik: username, password,
+  **satu peran dasar**, toko yang ditugaskan, dan **izin tambahan opsional**.
+  Username hanya wajib unik di dalam satu owner.
+- **Login karyawan di hub tidak memakai ID owner dan tidak membutuhkan
+  internet:** username + password + PIN diverifikasi lokal di perangkat owner.
+  **Login dari perangkat karyawan memakai tiga kolom: ID owner + username +
+  password**, tanpa Google; login pertama online, lalu PIN dapat dipakai offline.
+- Peran dasar menentukan menu dan aksi minimum. Izin tambahan bersifat aditif
+  per akun, tidak mengubah peran dasar, tidak otomatis berlaku ke karyawan lain,
+  dan tidak mengubah aturan penulis uang.
+- Contoh: Budi berperan Kasir dan diberi izin tambahan opname; Budi dapat
+  membuka opname, sedangkan kasir lain tanpa izin ditolak.
+- **Akses khusus pemilik tidak dapat diberikan** lewat izin tambahan: kelola
+  akun/perangkat, lisensi/langganan, tambah/hapus toko, ubah tarif komisi/gaji,
+  dan hapus data.
+- Nota, pembayaran, dan retur mengikuti **flag hub perangkat** (K-12), bukan
+  status owner atau karyawan. Karyawan kasir boleh menulis uang hanya saat login
+  di perangkat owner ber-flag hub; owner di perangkat non-hub tidak boleh. Izin
+  tambahan tidak memberi hak menulis uang.
+- Izin diperiksa di UI **dan** lapisan data/izin. Permintaan langsung yang tidak
+  diizinkan tetap ditolak.
+- **Sumber kebenaran akun dan izin karyawan adalah hub.** Hub memverifikasi
+  login lokal tanpa server. Saat perangkat karyawan didaftarkan, salinan akun
+  bertanda tangan dikirim ke server agar login pertama dari perangkat itu dapat
+  diverifikasi; server tidak menerima data bengkel. Perangkat offline memakai
+  izin terakhir yang sah sampai sinkronisasi berikutnya; pemilik dapat mencabut
+  perangkat untuk menghentikan akses.
+- Setiap perubahan izin diaudit: siapa, kapan, dan sebelum/sesudah. Riwayat
+  tersedia di hub dan, untuk premium, di aplikasi owner.
+- Jika izin tambahan bertabrakan dengan fitur yang terkunci paket, **paket tetap
+  menang**.
+
+### K-08 — Password dan PIN karyawan
+
+- Password minimal 8 karakter. Pemilik boleh mengetik atau memakai **tombol acak
+  berikon putar/bulat** yang mengisi 10–12 karakter (huruf besar/kecil dan
+  angka, tanpa karakter ambigu).
+- **Tidak ada aturan password harus berbeda antar karyawan.** Aturan itu
+  membocorkan pemakaian password lain dan memaksa pemeriksaan ke semua hash.
+  Keamanan berasal dari password acak, hash per pengguna, dan kewajiban ganti.
+- Password awal wajib diganti saat login pertama; tidak ada kedaluwarsa
+  otomatis; pemilik dapat mereset kapan saja.
+- Password disimpan sebagai hash (Argon2id/bcrypt) dengan salt per pengguna,
+  tidak pernah sebagai teks biasa di database.
+- Password hanya ditampilkan sekali di dialog pembuatan/reset. Jika pemilik
+  lupa, gunakan tombol acak untuk reset; password lama langsung tidak berlaku.
+- **Tombol salin semua** menyalin teks siap kirim: ID owner (untuk login dari
+  perangkat karyawan), username, password, peran, toko, dan catatan ganti
+  password. Login di hub cukup memakai username + password. Teks tidak memuat
+  PIN, token, atau data bengkel. Tombol hanya aktif selama password baru masih
+  tampil.
+- PIN 6 digit diatur karyawan sendiri, tidak sama dengan password. Jika lupa,
+  pemilik mereset PIN dan karyawan membuat PIN baru.
+- Pesan login gagal bersifat umum; percobaan dibatasi per username di hub dan
+  per kombinasi ID owner + username pada perangkat karyawan.
+
+### K-09 — Multi-toko
+
+- Multi-toko adalah fitur premium dengan **jumlah toko tanpa batas**.
+- Premium menjalankan semua toko di **hub** dan menyinkronkannya ke perangkat
+  owner lain serta perangkat karyawan yang ditugaskan (K-12, K-21).
+- Setiap toko memiliki database SQLite sendiri dan terdaftar di registry toko;
+  data tidak boleh tercampur.
+- Pengguna gratis hanya punya satu toko dan tidak melihat tombol tambah toko.
+- Ganti toko berada di dalam panel Menu, di atas Ringkasan. Hanya pemilik yang
+  dapat menambah toko; karyawan hanya melihat toko yang ditugaskan.
+- Toko baru memakai database kosong, bukan salinan toko lain.
+- Ganti toko dan toko yang datanya tersedia harus bekerja offline setelah login
+  awal.
+
+### K-10 — Backup dan restore
+
+- **Backup manual gratis untuk semua tier; backup otomatis hanya premium.**
+  Backup lokal terjadwal, backup Telegram/remote, dan arsip semua toko adalah
+  fitur premium.
+- Backup/restore adalah **jaring pengaman P0**, bukan fitur opsional; pengujiannya
+  tetap dilakukan walau belum ada pengguna nyata.
+- Premium menambah **backup otomatis lokal terjadwal**, **backup Telegram/remote**,
+  dan **arsip semua toko**. Backup manual satu toko tetap tersedia untuk pengguna
+  gratis, termasuk saat fitur premium terkunci.
+- Backup semua toko memakai satu arsip dengan manifest (ID database, ID toko,
+  nama, alamat, toko aktif, dan ID owner bila akun premium sudah punya),
+  seluruh database, versi skema, dan versi aplikasi; setiap database dan manifest
+  memiliki checksum.
+- Restore bersifat all-or-nothing dengan staging; jika satu bagian gagal, data
+  lama dikembalikan. Restore tidak menolak database berdasarkan ID owner atau
+  `database_id`.
+- Backup menyertakan data fitur yang terkunci dan **outbox pending**, tetapi
+  tidak menyertakan PIN, token, atau rahasia perangkat.
+- Tidak ada backup ke VPS. Telegram hanya diunggah ke chat pengguna jika fitur
+  itu diaktifkan. Google Drive tidak dipakai.
+- Backup lokal dan restore harus tetap berfungsi tanpa akun dan tanpa internet.
+
+### K-11 — Lisensi dan pembayaran
+
+- Premium dijual sebagai **langganan bulanan**, bukan sekali bayar. Harga dan
+  paket mengikuti K-20; isi premium mengikuti K-21.
+- Premium mencakup **perangkat owner sesuai paket** (contoh arah 2 perangkat
+  owner) dan perangkat karyawan terdaftar yang tidak dihitung dalam batas owner
+  (K-12).
+- Server menerbitkan token bertanda tangan berisi masa aktif dan batas perangkat
+  owner (K-12). Saat offline, aplikasi memakai hitung mundur lokal.
+- Jam perangkat yang dimundurkan tidak boleh memperpanjang masa aktif; koreksi
+  dilakukan saat online.
+- Saat langganan berakhir: fitur premium terkunci, kasir dan data lokal tetap
+  jalan, data lama tetap dibaca/diekspor. Jika ada delta pending, delta dikirim
+  lebih dulu saat online, lalu pengiriman berhenti sampai aktif kembali.
+- Android memakai Google Play Billing untuk langganan, termasuk restore,
+  acknowledge, perpanjangan, dan pembatalan. Tidak ada tautan pembayaran digital
+  eksternal yang melanggar kebijakan Play.
+- Windows/macOS memakai penyedia yang dipilih pada tahap lisensi. Refund,
+  pembatalan, atau chargeback tidak boleh menghapus data lokal.
+
+### K-12 — Perangkat, hub, dan hak menulis uang
+
+- **Perangkat hanya didaftarkan saat berlangganan premium.** Gratis tidak
+  mendaftarkan perangkat dan tidak punya penegakan slot. Dua perangkat gratis
+  dengan database terpisah tidak dapat dilarang; berbagi data antar perangkat
+  itu membutuhkan relay premium.
+- **Batas perangkat paket hanya menghitung perangkat owner**, termasuk hub.
+  Premium: sesuai paket (contoh arah 2 perangkat owner). Perangkat karyawan
+  terdaftar tidak dihitung dalam batas owner.
+- **Perangkat karyawan hanya ada di premium.** Perangkat itu terdaftar pada akun
+  karyawan aktif, dapat dicabut, dan **tidak boleh menjadi hub atau menulis
+  nota, pembayaran, dan retur**.
+- **Hak menulis uang menempel pada flag hub per toko, bukan status owner atau
+  karyawan.** Karyawan dengan peran kasir yang login di perangkat owner ber-flag
+  hub boleh menulis uang; owner yang login di perangkat non-hub tidak boleh.
+- Setiap toko memiliki **tepat satu hub uang aktif**. Satu perangkat owner boleh
+  menjadi hub untuk beberapa toko; dua perangkat tidak boleh menjadi hub untuk
+  toko yang sama.
+- **Hanya owner yang dapat memindahkan flag hub, dan hanya saat online.**
+  Perpindahan normal menunggu hub lama mengonfirmasi; owner dapat memaksa setelah
+  autentikasi ulang dengan peringatan. Delta uang dari hub lama yang belum
+  terkirim setelah perpindahan dikarantina dan tidak diterapkan otomatis.
+- **Perangkat hilang atau rusak:** owner login Google di perangkat baru, lalu
+  mencabut perangkat lama dari aplikasi atau halaman akun web. Slot lama bebas
+  dan perangkat baru dapat didaftarkan. Token lama langsung tidak berlaku;
+  perangkat lama berhenti menerima delta saat kembali online. Data yang sudah
+  diunduh ke perangkat lama tidak dapat dihapus dari jarak jauh.
+- **Pelepasan slot mandiri dibatasi maksimal satu kali per 72 jam** agar slot
+  tidak dipinjamkan bergantian. Percobaan berikutnya ditolak sampai jendela
+  waktu lewat; dukungan hanya memverifikasi akun dan tidak melewati batas ini.
+- Setiap perangkat terdaftar memiliki ID perangkat, kunci publik, ikatan
+  owner/karyawan, toko yang ditugaskan, waktu terakhir online, dan waktu
+  pencabutan.
+- Menyalin database atau token tidak menambah slot. Token terikat perangkat;
+  penegakan offline memakai daftar perangkat dan hitung mundur terakhir.
+- Perangkat owner non-hub dan perangkat karyawan dapat menulis stok sebagai
+  delta sesuai izin, tetapi tidak menulis uang.
+
+### K-13 — Relay dan penanganan data (premium)
+
+- Relay adalah bagian dari premium; instalasi satu perangkat tetap dapat bekerja
+  tanpa relay, tetapi lisensi tetap diverifikasi.
+- Server **tidak menyimpan data bengkel yang dapat dibaca**: tidak ada database
+  tenant, nota/pelanggan/stok plaintext, atau backup di VPS.
+- Server menyimpan metadata akun, lisensi, perangkat, kunci publik, wrapped
+  store key, dan **antrean amplop delta terenkripsi end-to-end** untuk penerima
+  yang sedang offline. Kunci privat hanya ada di perangkat; server tidak dapat
+  membaca isi amplop atau wrapped key. **Tidak ada metadata kuota di server**
+  (K-04).
+- Amplop dihapus setelah semua penerima terdaftar mengonfirmasi atau setelah
+  **TTL default 90 hari**. TTL adalah parameter operasional dan wajib
+  didokumentasikan.
+- Setelah TTL, penerima harus mengambil **snapshot terenkripsi dari hub yang
+  online** atau memulihkan backup lokal. Server bukan sumber pemulihan.
+- Perangkat owner kedua mengambil snapshot awal dari hub lewat relay terenkripsi
+  saat hub online, atau dari backup lokal. Server tidak menyediakan snapshot
+  plaintext.
+- Outbox pengirim menyimpan delta sampai server mengonfirmasi; antrean server
+  bukan backup dan tidak menggantikan outbox.
+- API hanya relay. Free tier tidak memanggil API data.
+- Metadata dan amplop tetap data pribadi; retensi dan penghapusan mengikuti
+  K-18.
+
+### K-14 — Sinkronisasi dan konflik (premium)
+
+- Sinkronisasi adalah bagian dari premium; perangkat yang tidak terhubung tetap
+  bekerja offline dengan outbox lokal.
+- Setiap perangkat memiliki outbox lokal dengan status pending, retry, batching,
+  dan idempotency. API mati tidak menghentikan kasir.
+- Urutan lokal memakai nomor urut perangkat yang selalu naik. Urutan antar
+  perangkat memakai jam logis (HLC) dan ID perangkat; jam dinding hanya untuk
+  tampilan.
+- Uang memakai satu hub per toko (K-12). Stok digabung sebagai delta
+  append-only; opname atau koreksi stok absolut yang bertabrakan ditandai
+  konflik, bukan ditimpa.
+- Banyak akun (mis. 100) dapat mencatat riwayat dan menambah stok saat offline;
+  data digabung setelah online. Status data belum lengkap sampai semua perangkat
+  terdaftar mengirim pending dan menerima pembaruan.
+- Selama pending ada, aplikasi wajib menampilkan banner, badge, dan notifikasi
+  sistem berkala. Notifikasi tidak dapat dimatikan permanen; pengguna hanya
+  dapat menunda.
+- Pengiriman ulang tidak boleh menggandakan nota atau stok.
+
+### K-15 — Keamanan delta dan izin (premium)
+
+- Kunci perangkat, tanda tangan delta, dan verifikasi penerima adalah bagian dari
+  premium (K-22).
+- Setiap perangkat membuat pasangan kunci saat registrasi. Kunci privat disimpan
+  di penyimpanan aman perangkat; kunci publik didaftarkan ke server dan
+  penerima.
+- Delta ditandatangani dan memuat ID perangkat, nomor urut, HLC, versi izin, dan
+  hash payload.
+- Penerima memverifikasi tanda tangan, memastikan perangkat terdaftar dan belum
+  dicabut, serta memastikan snapshot izin bertanda tangan pemilik mengizinkan
+  aksi tersebut.
+- Perubahan izin dan daftar pencabutan ditandatangani pemilik. Perangkat offline
+  memakai izin terakhir yang sah; delta dari perangkat yang dicabut setelah
+  waktu pencabutan ditolak.
+- Server dapat memverifikasi amplop, registrasi, dan pencabutan tanpa membaca
+  payload. Pemeriksaan makna izin dilakukan penerima dan lapisan data.
+- Perangkat yang dimodifikasi tidak dapat memalsukan perangkat lain atau
+  mengubah snapshot izin tanpa merusak tanda tangan. Kompromi akun owner tetap
+  risiko; aksi sensitif meminta autentikasi ulang.
+- Kunci dirotasi saat registrasi ulang; perangkat hilang dicabut dan delta
+  lanjutannya ditolak. Distribusi kunci, re-key, dan pemulihan mengikuti K-22.
+
+### K-16 — Offline dan pending
+
+- Fitur inti berjalan offline setelah aplikasi terpasang. Gratis tanpa login
+  **tidak memanggil API sama sekali** (K-04). Gratis yang login hanya memanggil
+  API autentikasi, bukan API data atau relay.
+- Internet dibutuhkan untuk login pemilik (opsional bagi gratis, wajib bagi
+  premium), aktivasi premium, login pertama karyawan, manajemen akun, dan
+  sinkronisasi; bukan untuk kasir atau fitur inti. Setelah login awal, kasir
+  tetap berjalan offline.
+- Premium dengan satu perangkat dapat berjalan tanpa relay; relay, outbox, dan
+  pending aktif saat perangkat kedua atau perangkat karyawan didaftarkan.
+- Outbox pengirim tidak kedaluwarsa karena internet mati berbulan-bulan.
+  Antrean relay untuk penerima mengikuti TTL K-13; setelah TTL, snapshot atau
+  backup menjadi jalur pemulihan (K-22).
+- Backup lokal tetap berfungsi tanpa akun dan tanpa internet.
+
+### K-17 — Distribusi dan ukuran
+
+- Rilis Flutter pertama memakai **satu AAB Android, satu installer Windows, dan
+  satu aplikasi macOS**. Semua layout adalah kode Flutter yang dikompilasi di
+  shell; tidak ada paket layout yang diunduh.
+- **Ukuran aplikasi diukur sebelum rilis.** Paket per peran bukan bagian dari
+  rilis pertama.
+- Jika pengukuran membuktikan aset statis mendominasi ukuran, Play Asset
+  Delivery (Android) atau On-Demand Resources (iOS masa depan) boleh dipakai
+  **hanya untuk aset statis** seperti gambar, font, templat, dan label. Paket
+  aset tidak boleh berisi layout, logika, kode, izin, atau fitur baru.
+- Login fitur dasar tidak boleh bergantung pada unduhan aset. Aplikasi tetap
+  offline-first setelah pemasangan.
+- Tidak ada server-driven UI, dex/JAR/so dari luar Play, self-update, atau
+  WebView yang mengeksekusi kode dari CDN.
+- APK sideload memakai APK penuh/split; tidak ada unduhan aset on-demand.
+- iOS masa depan mengikuti App Store 2.5.2: hanya aset, tanpa executable code.
+- Windows memakai installer bertanda tangan; paket aset opsional (jika ada)
+  harus bertanda tangan dan tidak menambah logika.
+
+### K-18 — Data pribadi dan UU PDP
+
+- Data yang diproses server:
+  - **Gratis yang login:** identitas Google/email dan sesi autentikasi saja;
+    tanpa ID owner, tanpa ID perangkat, tanpa data bengkel.
+  - **Premium:** akun owner, ID owner, metadata akun karyawan, ID perangkat,
+    kunci publik, wrapped store key, lisensi, amplop relay terenkripsi, dan log
+    dukungan terbatas.
+  - **Kuota gratis tidak dikirim ke server** (K-04, K-12).
+- Tujuan: autentikasi, lisensi, sinkronisasi, keamanan, dan dukungan. Tidak ada
+  penjualan data, iklan, atau pembacaan data bengkel. Identitas pengguna gratis
+  tidak dipakai untuk pemasaran.
+- Pemberitahuan privasi dan dasar pemrosesan disampaikan **saat pembuatan akun,
+  termasuk akun gratis**, serta ditautkan dari aplikasi dan listing toko aplikasi.
+  Persetujuan dicatat sebelum akun aktif.
+- Retensi: metadata akun selama akun aktif dan sesuai kewajiban hukum; amplop
+  relay mengikuti TTL; log dibatasi; penghapusan akun menghapus metadata dan
+  amplop milik akun.
+- Hak pengguna: akses/ekspor, koreksi, dan penghapusan. Hapus akun tersedia di
+  aplikasi dan tautan web **untuk semua akun, termasuk akun gratis**; konfirmasi
+  menjelaskan apa yang dihapus dan apa yang tetap ada di perangkat pengguna.
+  Menghapus akun gratis menghapus identitas Google dan sesi; tidak ada ID owner
+  atau registrasi perangkat yang perlu dihapus. Menghapus akun premium juga
+  menghapus ID owner, registrasi perangkat, kunci publik/wrapped key, dan
+  amplop. Data bengkel lokal tidak tersentuh.
+- Prosedur insiden dan kontak privasi disiapkan. Jika diwajibkan, DPO ditunjuk.
+- Transfer lintas negara memakai pengaman yang sah. **Kajian hukum UU PDP
+  dilakukan sebelum rilis**, bukan hanya mengandalkan aturan Play/App Store.
+- Deklarasi Data Safety Play dan App Privacy iOS harus sesuai perilaku nyata.
+
+### K-19 — Aplikasi Python lama
+
+- Setelah Flutter stabil, aplikasi Python lama **disimpan** sebagai arsip,
+  acuan perilaku, dan jalur rollback.
+- Tidak diberi fitur baru, tidak dihapus, dan tidak ada migrasi data paksa.
+
+### K-20 — Harga dan unit economics
+
+- Harga final ditetapkan setelah menghitung biaya per pengguna aktif: komisi
+  Play Billing, antrean relay terenkripsi, re-key dan dukungan kunci, dukungan,
+  pajak, biaya pembayaran, dan refund.
+- **Akun gratis yang login tetap menimbulkan biaya**: autentikasi kecil, tetapi
+  dukungan dan penghapusan akun ikut dihitung. Login gratis tidak menambah
+  pendapatan, jadi biayanya harus ditekan dan dipantau (K-07).
+- **Harga premium dihitung untuk satu tier**, bukan versi terpisah. Paket boleh
+  berbeda pada batas perangkat owner, tetapi fitur premium dan janji sinkronisasi
+  tetap satu. Arah awal Rp10.000/bulan untuk 2 perangkat owner adalah arah paket
+  premium, bukan janji final.
+- Halaman harga wajib menjelaskan batas perangkat owner, perangkat karyawan, dan
+  isi premium (K-12, K-21) agar tidak menimbulkan salah paham.
+
+### K-21 — Premium tunggal
+
+- **Hanya ada dua tier produk: Gratis dan Premium.** Tidak ada premium v1 atau
+  premium v2.
+- **Premium** mencakup seluruh fitur berbayar: multi-toko tanpa batas (K-09),
+  akun karyawan di hub dan perangkat karyawan (K-07), Supplier/Follow up/WA
+  (K-04), backup Telegram dan arsip semua toko (K-10), lisensi (K-11), perangkat
+  owner sesuai paket, sinkronisasi relay, aplikasi owner thin client, dan
+  manajemen kunci (K-12, K-13, K-22).
+- Fitur premium boleh dirilis **bertahap di balik flag** untuk pengujian, tetapi
+  tier yang dijual tetap satu dan tidak diberi nama versi. Pengguna premium tidak
+  membeli "paket sync" terpisah.
+- **LAN/hub lokal bukan bagian premium saat ini.** Jika nanti dibutuhkan, LAN
+  menjadi keputusan, pengujian, dan pekerjaan terpisah.
+- Paket harga boleh membedakan **batas perangkat owner**, bukan fitur inti
+  premium. Perangkat karyawan terdaftar tidak dihitung dalam batas owner.
+- Premium tidak boleh dibangun sebelum pilot membuktikan kebutuhan dan
+  spesifikasi protokol + test vector selesai.
+
+### K-22 — Manajemen kunci, re-key, dan pemulihan snapshot
+
+- **Hierarki kunci:**
+  - kunci tanda tangan owner (Ed25519) untuk izin, pencabutan, dan daftar
+    perangkat;
+  - kunci data per toko (X25519 + AEAD) untuk delta dan snapshot;
+  - pasangan kunci per perangkat untuk menandatangani delta dan menerima wrapped
+    store key.
+- Kunci privat tidak pernah dikirim ke server. Server hanya menyimpan kunci
+  publik, wrapped store key, dan amplop terenkripsi; server tidak dapat membuka
+  wrapped key atau payload.
+- **Distribusi:** perangkat baru membuat pasangan kunci dan mendaftar; owner/hub
+  menyetujui lalu membungkus kunci toko yang ditugaskan ke kunci publik
+  perangkat. Perangkat karyawan hanya menerima kunci toko yang ditugaskan.
+- **Perangkat owner kedua:** menerima snapshot awal dan wrapped key dari hub
+  lewat relay saat hub online, atau dari backup lokal. Tanpa hub dan tanpa
+  backup, perangkat baru tidak dapat membuka data lama.
+- **Pencabutan dan re-key:** server langsung menolak amplop dari perangkat
+  dicabut; hub melakukan re-key kunci toko dan membungkusnya ke perangkat
+  tersisa. Perangkat dicabut tidak menerima ciphertext baru. Data yang sudah ada
+  di perangkat dicabut tidak dapat dihapus dari jarak jauh; re-key dan audit
+  wajib.
+- Re-key menunggu hub online. Sampai re-key selesai, delta sensitif ditahan di
+  outbox hub dan tidak dikirim dengan kunci lama.
+- **Kunci owner:** disimpan di secure storage dan dicadangkan terenkripsi dengan
+  kode pemulihan yang ditampilkan sekali. Server boleh menyimpan blob
+  terenkripsi, tetapi tidak dapat membukanya. Login Google ulang tidak
+  menggantikan kode pemulihan.
+- Jika kunci owner dan kode pemulihan hilang, tenant tidak dapat menerbitkan izin
+  atau pencabutan baru. Data lokal tetap dapat dibaca/diekspor; pemulihan
+  lintas-perangkat memerlukan backup lokal dan akun owner baru. Dukungan tidak
+  dapat memulihkan kunci.
+- **Snapshot + outbox:** snapshot diterapkan secara atomik, lalu outbox lokal
+  diputar ulang di atasnya. ID yang sudah ada dideduplikasi, konflik ditandai,
+  dan delta yang belum terkirim tidak dibuang. Jika kunci toko berubah, outbox
+  dienkripsi ulang dengan kunci baru sebelum dikirim.
+- Kunci dirotasi saat registrasi ulang, perangkat hilang, atau pencabutan; kunci
+  lama tidak dipakai untuk delta baru.
+
+## Matriks tier
+
+Angka dan aturan rinci ada di keputusan yang dirujuk; sel sengaja ringkas.
+
+| Area | Gratis | Premium | Rujukan |
 | --- | --- | --- | --- |
-| Model harga | Gratis | Gratis | Langganan bulanan per paket |
-| Kasir, stok, pelanggan, unit, jasa, laporan | Ya | Ya | Ya |
-| Backup manual dan restore satu toko | Ya | Ya | Ya |
-| PIN dan pengaturan lokal | Ya | Ya | Ya |
-| Satu toko | Ya | Ya | Ya |
-| ID database unik (internal) | Ya | Ya | Ya |
-| Karyawan | Tidak | Tidak | Ya |
-| Supplier | Tidak | Tidak | Ya |
-| Follow up | Tidak | Demo | Ya |
-| Tombol WhatsApp | Tidak | 20 klik per database (Follow up) | Unlimited |
-| Akun karyawan (ID owner + username + password) | Tidak | Tidak | Ya |
-| Izin tambahan per karyawan di luar peran dasar | Tidak | Tidak | Ya |
-| Backup otomatis | Tidak | Tidak | Ya (lokal + Telegram) |
-| Backup semua toko | Tidak | Tidak | Ya |
-| Multi-toko dan ganti toko | Tidak | Tidak | Ya |
-| ID owner unik + login Google pemilik | Tidak perlu | Tidak wajib (toko tunggal) | Ya |
-| Jumlah perangkat aktif | 1 | 1 | Sesuai batas paket (contoh: 2 perangkat) |
-| Sinkronisasi API (relay) | Tidak | Tidak | Ya, tahap premium lanjutan |
-| Multi-device lewat relay | Tidak | Tidak | Ya, sesuai batas perangkat paket |
-| Data fitur terkunci (Karyawan/Supplier/Follow up) | Tidak ada | Follow up tetap dibaca/diekspor | Tetap dibaca/diekspor setelah paket berakhir |
-| Aplikasi utama (core logic; owner tanpa karyawan dan karyawan) | Ya | Ya | Ya |
-| Mode karyawan di aplikasi utama | Tidak | Tidak | Ya |
-| Aplikasi owner terpisah (tanpa core logic; ringkasan, laporan, akun, izin tambahan) | Tidak | Tidak | Tahap lanjutan |
-| Unduhan paket resource sesuai peran | Ya (paket dasar) | Ya | Ya (paket premium sesuai lisensi) |
-| Iklan | Tidak ada | Tidak ada | Tidak ada |
+| Model | Seumur hidup, tanpa batas waktu | Langganan bulanan | K-03, K-11, K-21 |
+| Login Google | Opsional, kapan saja | Wajib | K-07 |
+| Peran | Owner (tanpa akun atau login) | Owner + akun karyawan | K-02, K-03, K-07 |
+| ID owner | Tidak | Ya | K-06 |
+| Toko | 1, tanpa tombol tambah | Tanpa batas | K-09 |
+| Kasir, stok, pelanggan, unit, jasa, laporan | Ya, dijalankan owner | Ya, owner atau karyawan | K-03, K-07 |
+| Backup manual | Ya | Ya | K-10 |
+| Backup otomatis lokal terjadwal | Tidak | Ya | K-10 |
+| Backup Telegram/remote | Tidak | Ya | K-10 |
+| Backup semua toko | Tidak | Ya | K-10 |
+| Karyawan | Tidak | Ya, hub atau perangkat sendiri | K-03, K-07, K-21 |
+| Supplier | Tidak | Ya | K-03 |
+| Follow up | Ya, 20 kredit WA | Ya | K-03, K-04 |
+| Tombol WhatsApp | 20 kredit | Tanpa batas | K-04 |
+| Akun karyawan + izin tambahan | Tidak | Ya | K-07, K-08 |
+| Login karyawan | Tidak | Lokal di hub; tiga kolom di perangkat | K-07 |
+| Perangkat owner | Tidak didaftarkan | Sesuai paket (contoh 2) | K-12 |
+| Perangkat karyawan | Tidak | Terdaftar; tidak dihitung | K-12, K-21 |
+| Multi-device owner | Tidak | Ya | K-11, K-12, K-21 |
+| Mode karyawan | Tidak | Ya | K-02, K-07 |
+| Aplikasi owner terpisah | Tidak | Ya | K-02, K-21 |
+| Sinkronisasi relay | Tidak | Ya | K-13, K-14, K-21 |
+| LAN/hub lokal | Tidak | Tidak; keputusan terpisah | K-21 |
+| Iklan | Tidak ada | Tidak ada | K-03 |
+| Panggilan API | Tanpa login: tidak ada; login: auth saja | Lisensi; relay sesuai perangkat | K-04, K-07, K-13, K-16 |
+| Data karyawan di server | Tidak | Ya, untuk login perangkat | K-07, K-18 |
 
-Trial hanya membuka fitur Follow up sebagai demo. Karyawan, Supplier, dan backup
-otomatis tetap terkunci. Setelah 20 klik WhatsApp habis, Follow up dan seluruh
-fitur premium terkunci sampai berlangganan. Data lokal tidak dihapus; data lama
-tetap dapat dibaca dan diekspor.
+## Implementasi fitur premium
 
-Catatan:
+### Karyawan dan izin
 
-- Kuota 20 dihitung per `database_id`, bukan per email atau perangkat.
-- `database_id` tidak mengikat pemilik atau perangkat. Database baru mendapat ID
-  baru dan trial baru; yang dicegah hanya pengulangan trial pada database yang
-  sama.
-- Sinkronisasi API adalah relay; VPS tidak menyimpan data bengkel.
-- Unduhan paket resource dasar lewat Play bukan panggilan API data dan tidak
-  mengirim data bengkel. Setelah paket terpasang, pengguna gratis berjalan
-  offline.
-- Multi-device bukan fitur gratis atau trial. Satu pemilik premium dapat memakai
-  perangkat sebanyak batas paketnya dengan ID owner yang sama; perangkat di atas
-  batas harus logout atau dicabut. Perangkat tambahan tunduk pada aturan satu
-  penulis untuk uang; stok dapat ditulis sebagai delta dari perangkat berizin.
-- Langganan dihitung per paket, bukan per toko. Jumlah toko tetap tanpa batas;
-  yang dibatasi adalah perangkat aktif. Contoh arah: Rp10.000/bulan = 2
-  perangkat.
-- Saat langganan berakhir, data Karyawan, Supplier, dan Follow up tetap dapat
-  dibaca dan diekspor. Yang terkunci hanya penambahan/perubahan data dan aksi
-  premium seperti kirim WhatsApp dan backup otomatis.
+- Akun karyawan hanya ada di premium; di gratis pengguna tetap owner tunggal.
+  Layar karyawan, peran, dan izin tidak muncul sampai langganan aktif.
+- Data karyawan mencakup identitas, peran, penugasan toko, komisi, gaji, absensi,
+  status pengerjaan, catatan, penyelesaian servis, dan performa.
+- Katalog peran dan izin ditetapkan saat implementasi; contoh izin tambahan:
+  opname, stok masuk/keluar, lihat laporan, baca Supplier, baca Follow up, dan
+  cetak laporan.
+- Layar pemilik menampilkan peran dasar, izin tambahan, toko yang ditugaskan, dan
+  riwayat perubahan per karyawan.
+- Aplikasi utama menampilkan menu sesuai peran + izin. Menu owner tidak muncul di
+  mode karyawan; permintaan langsung tetap ditolak di lapisan data.
+- **Di hub:** karyawan login bergiliran dengan username + password + PIN;
+  absensi, status pengerjaan, dan komisi tercatat per akun. Izin berlaku lokal.
+- **Di perangkat karyawan:** perubahan izin dikirim bertanda tangan ke perangkat
+  (K-15); perangkat offline memakai izin terakhir yang sah sampai sinkron.
+  Akun dan izin bersumber dari hub; salinan bertanda tangan dipakai untuk login
+  pertama di perangkat.
+- Jika paket tidak aktif, fitur premium terkunci walau izin tambahan diberikan
+  (K-07).
 
-## Fitur premium
+### Supplier, Follow up, dan WhatsApp
 
-### 1. Karyawan
+- Supplier dan Follow up adalah fitur premium; data lama tetap dapat dibaca saat
+  fitur terkunci (K-03).
+- Tombol WA di Follow up memotong kuota hanya untuk pengguna gratis (K-04);
+  setelah 20 kredit habis, tombol dan fitur premium terkunci sampai berlangganan.
+  Premium tidak memotong kuota.
+- Aplikasi menampilkan sisa kuota dan peringatan sebelum habis.
+- Kuota dihitung saat tautan `wa.me` dibuat; aplikasi tidak dapat memastikan
+  pesan benar-benar terkirim.
 
-- Data karyawan, peran, penugasan mekanik/kasir, komisi, gaji, dan performa.
-- Mode karyawan pada aplikasi utama menjadi sumber absensi, status pengerjaan,
-  komisi, dan performa; rinciannya di bagian Aplikasi utama dan aplikasi owner.
-- Data karyawan tidak ikut ke perangkat gratis.
+### Backup dan restore
 
-### 2. Supplier
+Mengikuti K-10. Detail implementasi:
 
-- Data supplier, relasi supplier–barang, follow up reseller, dan riwayat
-  supplier.
-- Tombol WhatsApp supplier memakai kuota yang sama dengan tombol WA lain.
+- Backup manual tetap tersedia saat langganan berakhir atau fitur premium
+  terkunci.
+- Arsip semua toko berisi manifest, seluruh database, checksum, versi skema, dan
+  versi aplikasi. Restore memakai staging dan all-or-nothing.
+- Backup menyertakan outbox pending dan data fitur terkunci; PIN, token, dan
+  rahasia perangkat diredaksi.
+- Restore tidak menolak database berdasarkan ID owner atau `database_id`.
+- Backup otomatis lokal dan Telegram hanya aktif di premium; keduanya memakai
+  arsip yang sama, dengan batas ukuran file untuk Telegram.
+- Ekspor Excel/CSV dapat berisi subfolder atau workbook per toko dalam satu ZIP.
+- Tidak ada upload ke VPS; Telegram hanya jika pengguna mengaktifkannya.
 
-### 3. Follow up
+## Implementasi multi-toko
 
-- Follow up pelanggan, garansi, servis berkala, prospek, piutang, dan reseller.
-- Hasil follow up dan pengingat.
-- Semua pengiriman WhatsApp dari fitur ini memakai kuota.
+### Registry dan database per toko
 
-### 4. Semua tombol WhatsApp
+- Registry menyimpan daftar toko, nama, alamat, ID database, dan toko aktif.
+- Setiap toko memakai database SQLite terpisah; toko baru dimulai kosong.
+- Registry rusak atau toko hilang harus dapat dipulihkan tanpa mencampur data
+  toko lain.
+- Backup semua toko memakai manifest registry (K-10).
 
-- Mencakup struk, follow up, piutang, garansi, reseller, supplier, dan tombol
-  WhatsApp lain di aplikasi.
-- 1 klik = 1 kuota, termasuk saat pengguna membatalkan atau WhatsApp gagal
-  dibuka. Tidak ada pengembalian kuota.
+### Ganti toko di Menu
 
-### 5. Backup otomatis
+- Tombol/dropdown **Ganti toko** berada di dalam panel Menu, di bagian paling
+  atas dan tepat di atas Ringkasan; bukan tombol terpisah.
+- Gratis: panel hanya menampilkan toko aktif tanpa tombol tambah; ajakan upgrade
+  boleh ditampilkan.
+- Premium: panel menampilkan daftar toko dengan penanda aktif dan tombol
+  **Tambah toko** di bagian bawah.
+- Menambah toko membuka form nama dan alamat; setelah dibuat, toko langsung dapat
+  dipilih. Hanya pemilik yang boleh menambah toko (K-09).
+- Jika ada perubahan belum disimpan, minta konfirmasi sebelum berganti.
+- Ganti toko bekerja offline untuk toko yang datanya tersedia di perangkat.
+- Di layar sempit, tombol tetap di dalam panel Menu, di atas Ringkasan, dan tidak
+  menutupi navigasi.
 
-- Backup terjadwal lokal dan Telegram. Tidak ada backup ke VPS.
-- Backup manual dan restore tetap tersedia untuk pengguna gratis.
-- Sinkronisasi bukan pengganti backup; backup lokal tetap menjadi cadangan
-  utama.
-- Backup semua toko memakai satu arsip; rinciannya di bagian Multi-toko.
-- Backup menyertakan outbox pending agar data yang belum terkirim tidak hilang
-  saat perangkat rusak atau hilang.
-- Backup manual tetap menyertakan data fitur yang sedang terkunci (Karyawan,
-  Supplier, Follow up), sehingga data lama tidak hilang saat paket berakhir.
+### Header bengkel
 
-### 6. Multi-tenant, sinkronisasi, dan multi-device
+- Header memakai dua baris:
 
-- Satu tenant per bengkel; data terpisah antar bengkel.
-- Perangkat hub dengan peran kasir mengirim delta transaksi lewat API hanya ke
-  perangkat owner/karyawan yang berhak; VPS tidak menyimpan delta tersebut.
-- Pemilik premium boleh memakai lebih dari satu perangkat sesuai batas paketnya,
-  dengan ID owner yang sama. Relay mengirim delta ke semua perangkat pemilik
-  yang terdaftar, dan setiap perangkat memakai database lokal serta outbox
-  sendiri. Perangkat di atas batas ditolak sampai logout atau dicabut.
-- Laporan owner dihitung dari database lokal di perangkat owner yang sudah
-  menerima delta lewat relay.
-- Multi-device hanya premium; gratis dan trial tetap satu perangkat. Batas
-  perangkat mengikuti paket langganan, bukan jumlah toko.
-- Satu perangkat ditetapkan sebagai hub kasir. Perangkat lain tidak menulis
-  nota, pembayaran, atau retur; menu tulis uang nonaktif dan permintaan langsung
-  ditolak. Stok dapat ditulis dari perangkat berizin sebagai delta.
-- Perpindahan peran hub harus eksplisit. Dua perangkat tidak boleh menjadi hub
-  aktif bersamaan untuk uang.
-- Pengiriman relay tidak harus real-time. Setiap perubahan masuk outbox lokal;
-  saat internet mati, delta berstatus pending dan transaksi tetap berjalan.
-- Saat online, outbox dikirim berurutan sesuai nomor urut perangkat. Item yang
-  sudah terkirim ditandai dan tidak dikirim ulang.
-- Delta pending tidak kedaluwarsa hanya karena internet mati; antrean disimpan
-  lokal sampai berhasil terkirim atau dibatalkan pengguna.
-- Kasir tetap offline-first: API mati tidak menghentikan transaksi.
-- Sinkronisasi, multi-device, mode karyawan, dan aplikasi owner terpisah
-  dikerjakan setelah premium awal dan multi-toko stabil.
+  ```text
+  Nama bengkel                         [printer]
+  Alamat bengkel
+  ```
 
-#### Banyak akun dan penggabungan data
+- Baris pertama berisi nama bengkel; tombol/ikon printer berada di kanan pada
+  baris yang sama.
+- Baris kedua selalu alamat bengkel, bukan judul halaman. Jika alamat kosong,
+  tampilkan “Alamat belum diisi”.
+- Nama dan alamat mengikuti toko aktif; judul halaman seperti “Ringkasan” tetap
+  di area konten.
+- Nama panjang dipotong atau dibungkus tanpa menutupi tombol printer; alamat
+  aman di area status bar/notch.
+- Header tetap tampil offline dan tidak memanggil API.
 
-- Satu owner dapat memiliki banyak akun karyawan, misalnya 100 akun. Setiap
-  akun memakai perangkat dan outbox sendiri; data antar owner tetap terpisah
-  oleh ID owner.
-- Setiap akun dapat mencatat riwayat dan menambah stok saat offline; owner dapat
-  mempersempit tindakan lewat izin peran. Delta bersifat append-only
-  (penambahan/pengurangan), bukan nilai stok akhir.
-- Nota, pembayaran, dan retur tetap hanya ditulis kasir/hub. Opname atau koreksi
-  stok absolut tidak digabung otomatis; jika bertabrakan, ditandai sebagai
-  konflik untuk diputuskan kasir/owner.
-- Saat perangkat kembali online, outbox dikirim berurutan per perangkat.
-  Penggabungan antar perangkat memakai jam logis (HLC) dan ID perangkat; jam
-  dinding hanya untuk tampilan.
-- Data dianggap lengkap setelah semua perangkat terdaftar mengirim pending dan
-  menerima pembaruan. Sebelum itu, stok dan riwayat berstatus sementara dan
-  ditandai belum lengkap.
+### Isolasi data
 
-#### Pending jangka panjang dan pemberitahuan wajib
+- Nota, stok, pelanggan, karyawan, dan laporan tidak boleh tercampur antar toko.
+- Karyawan hanya melihat toko yang ditugaskan.
+- Data toko tidak ikut ke perangkat pengguna gratis atau akun lain.
 
-- Delta pending disimpan lokal tanpa batas waktu; internet mati berbulan-bulan
-  tidak menghapus antrean.
-- Selama masih ada pending, aplikasi wajib:
-  - menampilkan banner tetap di layar utama berisi jumlah delta dan usia data
-    terlama;
-  - mengirim notifikasi sistem lokal saat pengiriman gagal, lalu mengulang
-    berkala (mis. 1 jam, 24 jam, 7 hari, lalu tiap 7 hari);
-  - menampilkan badge pada menu sinkronisasi dan status perangkat.
-- Notifikasi tidak dapat dimatikan permanen selama pending masih ada; pengguna
-  hanya dapat menunda. Notifikasi memakai mekanisme lokal sehingga tetap muncul
-  tanpa internet.
-- Setelah pending terkirim dan semua perangkat terdaftar melapor, status berubah
-  menjadi tersinkron dan notifikasi berhenti.
-- Aplikasi owner menampilkan status sinkron perangkat: terakhir online dan
-  jumlah pending terakhir yang dilaporkan. Ini metadata relay, bukan data
-  bengkel.
+## Implementasi akun, login, dan peran
 
-## Aplikasi utama dan aplikasi owner
+### ID owner
 
-- **Aplikasi utama** secara keseluruhan—shell ditambah paket resource per
-  peran—memuat seluruh core logic. Shell menyimpan seluruh logika, layar, aksi,
-  izin, dan perhitungan; paket resource hanya mengatur tampilan, label, dan aset
-  peran. Karyawan dan owner yang tidak punya karyawan memakai aplikasi ini.
-- Owner tanpa karyawan memakai aplikasi utama dengan semua fitur; fitur premium
-  tetap terkunci bila akun gratis.
-- Karyawan memakai aplikasi utama; setelah login hanya melihat tampilan dan toko
-  yang diizinkan.
-- Pembatasan dilakukan di UI dan lapisan data/izin, bukan hanya menyembunyikan
-  tombol. Permintaan langsung ke data yang tidak diizinkan tetap ditolak.
-- **Aplikasi owner** adalah aplikasi **terpisah** yang dibuat nanti. Aplikasi ini
-  tidak memuat core logic dan tidak menjalankan kasir, stok, atau transaksi.
-- Aplikasi owner hanya untuk pemilik yang punya karyawan atau multi-toko;
-  pemilik tanpa karyawan tidak perlu aplikasi ini.
-- Data aplikasi owner diterima lewat relay; VPS tidak menyimpan data bengkel.
-
-### Aplikasi utama: owner tanpa karyawan
-
-- Owner memakai semua fitur: kasir, stok, pelanggan, unit, jasa, laporan, dan
-  pengaturan.
-- Fitur premium mengikuti paket: gratis terkunci, trial hanya Follow up, premium
-  terbuka.
-- Owner dapat bertransaksi langsung dari aplikasi ini; ini jalur untuk bengkel
-  tanpa karyawan.
-- Pemilik premium dapat memasang aplikasi di beberapa perangkat sesuai batas
-  paket dengan ID owner yang sama. Satu perangkat menjadi hub untuk uang (nota,
-  pembayaran, retur); stok dapat dicatat dari perangkat lain sebagai delta.
-- Multi-toko tetap memerlukan akun pemilik dan lisensi premium.
-
-### Aplikasi utama: mode karyawan
-
-- Terbuka setelah login dengan ID owner + username + password; tanpa Google.
-- Hanya menampilkan fitur sesuai **peran dasar + izin tambahan** dan toko yang
-  ditugaskan. Menu owner dan pengaturan akun tidak muncul.
-- Aplikasi operasional untuk kasir/teknisi sesuai peran dan izin tambahan.
-  Contoh: kasir dengan izin tambahan opname melihat menu opname tanpa berubah
-  menjadi peran stok.
-- Izin tambahan tidak mengubah peran dasar, komisi, atau aturan penulis uang;
-  izin hanya menambah aksi yang diizinkan.
-- Menjadi sumber perhitungan:
-  - absensi dan jam kerja;
-  - penugasan dan status pengerjaan;
-  - penyelesaian servis dan catatan;
-  - komisi dari pekerjaan yang diselesaikan;
-  - pencatatan stok sesuai izin (permintaan atau penambahan).
-- Pada perangkat hub, peran kasir menjadi satu-satunya penulis nota, pembayaran,
-  dan retur. Stok dapat ditambah karyawan berizin dari perangkatnya masing-masing
-  sebagai delta yang digabung saat sinkronisasi.
-- Selama masih ada delta pending, stok dan riwayat di perangkat bersifat
-  sementara dan ditandai belum lengkap.
-- Karyawan tidak dapat melihat toko lain, mengubah tarif komisi, atau mengubah
-  gaji.
-- Komisi, gaji, dan performa dihitung dari data mode karyawan; owner hanya
-  melihat hasilnya.
-
-### Aplikasi owner (terpisah, tanpa core logic)
-
-- Isi:
-  - ringkasan hari ini per toko: penjualan, servis, pembayaran, piutang, stok
-    kritis, dan aktivitas karyawan;
-  - laporan per toko dan per periode;
-  - buat akun karyawan: username, password awal (diketik atau **tombol acak**),
-    peran dasar, toko yang ditugaskan, dan izin tambahan; **tombol salin semua**
-    untuk mengirim ID owner + username + password sekaligus; ubah/cabut izin,
-    reset password, dan cabut perangkat;
-  - riwayat perubahan izin per karyawan (siapa, kapan, sebelum/sesudah);
-  - status sinkron perangkat: terakhir online dan jumlah pending terakhir yang
-    dilaporkan.
-- Read-only untuk data operasional: tidak membuat atau mengubah nota,
-  pembayaran, retur, stok, atau komisi.
-- Ganti toko memfilter ringkasan dan laporan ke satu toko; data tidak tercampur.
-- Tanpa core logic, aplikasi owner tidak dapat menghitung ulang transaksi; semua
-  angka berasal dari data yang diterima lewat relay.
-
-## Distribusi modular dan unduhan per peran
-
-- **Paket dasar (base)** berisi seluruh logika aplikasi: launcher, login, SQLite,
-  sync, printer, backup, izin, pengelola paket resource, layar, dan aksi.
-  Paket resource peran tidak ikut di base.
-- **Manifest peran** menentukan paket resource minimum. Saat login pertama,
-  aplikasi hanya mengunduh paket resource yang dibutuhkan peran itu; peran
-  tambahan mengunduh paket tambahan dan menyimpannya di cache.
-- Paket resource berisi layout, aset, label, dan konfigurasi tampilan—bukan kode.
-  Paket hanya menampilkan fitur yang sudah ada dan diizinkan di shell; paket
-  tidak boleh menambah fitur, logika, atau izin baru.
-- Paket dasar gratis diunduh saat pertama membuka aplikasi. Paket premium hanya
-  diunduh setelah lisensi aktif; paket yang terkunci tidak dipasang.
-- Contoh pemetaan:
-
-  | Peran | Paket resource minimum |
-  | --- | --- |
-  | Kasir | kasir, pembayaran, struk, pelanggan/unit/jasa baca |
-  | Teknisi | servis, status, catatan, stok sesuai izin |
-  | Stok | stok, opname |
-  | Owner tanpa karyawan | paket gratis; paket premium setelah lisensi aktif |
-  | Aplikasi owner | ringkasan, laporan, akun karyawan, izin tambahan (aplikasi terpisah) |
-
-- **Android:** AAB + Play Asset Delivery. Tidak ada unduhan dex/JAR/so, tidak
-  ada self-update, dan tidak ada kode yang dieksekusi dari CDN.
-- **iOS (masa depan):** paket resource yang sama lewat unduhan aset atau
-  On-Demand Resources. Tidak ada executable code yang diunduh; paket tidak boleh
-  menambah fitur di luar shell (App Store Review Guidelines 2.5.2).
-- **Windows:** installer shell + paket resource bertanda tangan dari CDN.
-  Logika uang/stok dan izin tetap di shell; Windows tidak memuat Dart/DLL baru
-  saat runtime. EXE lebih ringan, tetapi tidak se-extreme base APK; jika EXE
-  harus launcher-only, role executable bertanda tangan menjadi tahap terpisah.
-- **Offline:** setelah paket resource terpasang, fitur berjalan tanpa internet.
-  Jika paket belum terpasang dan perangkat offline, fitur terkunci dengan pesan
-  jelas.
-- **Izin:** paket yang terpasang tidak membuka akses di luar peran. Pemeriksaan
-  tetap di shell dan lapisan data.
-- **Versi paket:** shell menolak paket resource di bawah versi minimum; update
-  paket mengikuti rilis aplikasi/Play. Windows dan iOS memverifikasi tanda
-  tangan/checksum paket sebelum dipakai, dengan rollback ke paket bawaan bila
-  gagal.
-- **Sideload:** tanpa Play, tidak ada unduhan aset on-demand. APK sideload
-  memakai APK penuh/split; jalur ringan hanya berlaku lewat Play.
-- **Cache:** paket resource tidak dihapus otomatis saat logout; pengguna dapat
-  membersihkannya dari pengaturan. Paket diunduh ulang saat dibutuhkan. Backup
-  data tidak menyertakan cache paket.
-
-## Kepatuhan Google Play
-
-- Android dirilis sebagai AAB lewat Play dengan Play App Signing; target API
-  mengikuti syarat Play terbaru.
-- Distribusi per peran memakai Play Asset Delivery untuk paket resource, bukan
-  unduhan kode. Tidak ada dex/JAR/so dari luar Play, tidak ada self-update, dan
-  tidak ada WebView yang mengeksekusi kode dari CDN.
-- Unduhan paket resource menampilkan ukuran/progres dan tidak berjalan diam-diam.
-- Langganan fitur digital di Android memakai Google Play Billing, termasuk
-  restore, acknowledge, perpanjangan, dan pembatalan. Jika ada program
-  pembayaran alternatif, hanya yang diizinkan Play yang dipakai.
-- Sediakan hapus akun di aplikasi dan tautan web; konfirmasi menjelaskan data
-  lokal dan metadata server yang dihapus.
-- Data safety: akun, lisensi, perangkat, dan kuota; tidak ada data bengkel di
-  VPS.
-- Privacy policy tersedia dan dapat diakses dari aplikasi serta listing Play.
-- Izin Android (printer, file, notifikasi) diminta saat dibutuhkan dengan alasan
-  yang jelas.
-
-## Kepatuhan iOS (masa depan)
-
-- iOS belum menjadi target rilis; aturan ini disiapkan agar rencana tidak perlu
-  dirombak saat target iOS dimulai.
-- Tidak ada unduhan kode yang dieksekusi. Paket peran tetap resource/layout/aset
-  dan diunduh lewat mekanisme aset atau On-Demand Resources, mengikuti App Store
-  Review Guidelines 2.5.2.
-- Paket resource tidak boleh menambah fitur, logika, izin, atau fungsi yang belum
-  ada di shell; tanpa paket, fitur tetap ada dan hanya tampilannya yang berbeda.
-- Langganan fitur digital di iOS memakai In-App Purchase dengan restore,
-  perpanjangan, dan pembatalan; tidak ada tautan pembayaran eksternal yang
-  melanggar aturan App Store.
-- Sediakan hapus akun di aplikasi dan tautan web, privacy policy, serta App
-  Privacy Details (data yang dikumpulkan: akun, lisensi, perangkat, kuota; tanpa
-  data bengkel di server).
-- Izin iOS (Bluetooth printer, file, notifikasi) diminta saat dibutuhkan dengan
-  alasan yang jelas di Info.plist.
-
-## Multi-toko
-
-### Keputusan cakupan
-
-- Multi-toko bukan UI kosong. Fitur baru dirilis setelah registry toko,
-  database per toko, dan pemisahan data bekerja.
-- Multi-toko lokal berarti **satu database SQLite per toko ditambah registry
-  toko**.
-- Login tanpa akun tetap jalur default untuk **toko tunggal dan pengguna
-  gratis**. Multi-toko, ganti toko, dan backup semua toko hanya tersedia untuk
-  premium dengan login Google pemilik.
-- Multi-toko dan ganti toko harus tetap bekerja **offline setelah login awal**.
-  Internet hanya dibutuhkan untuk login, aktivasi lisensi, dan sinkronisasi.
-- Google hanya dipakai untuk identitas, akun premium, dan sinkronisasi. Data
-  bengkel tetap disimpan lokal lebih dulu.
-- Tidak ada tombol atau menu multi-toko yang dikirim sebelum backend-nya
-  tersedia.
-- Belum ada user saat ini, jadi tidak ada backup data operasional. Backup semua
-  toko adalah fitur produk untuk user mendatang.
-- Tidak perlu migrasi data 2.x satu toko ke multi-toko; database baru dibuat
-  dari nol.
-
-### Prasyarat
-
-1. Backup/restore satu toko di PusatkuPOS sudah tersedia dan stabil.
-2. Lapisan data web 2.7.0 dan repository siap; SQLite/drift disiapkan saat port
-   Flutter.
-3. Keputusan bisnis: multi-toko premium (diputuskan 2026-11-03).
-4. Keputusan peran: pemilik boleh menambah toko; karyawan hanya melihat toko
-   yang ditugaskan (diputuskan).
-5. Keputusan akun: Google wajib untuk pemilik multi-toko; karyawan memakai akun
-   buatan pemilik tanpa Google (diputuskan 2026-11-03).
-6. Penyimpanan aman platform untuk token (Keystore/Keychain/DPAPI) tersedia.
-
-### Arsitektur lokal
-
-- Setiap toko memiliki database sendiri, misalnya
-  `stores/<store_id>/database.db`.
-- Setiap database memiliki **`database_id` unik** (UUIDv7/ULID) yang dibuat saat
-  database pertama kali dibuat dan disimpan di tabel meta. ID ini tidak berubah
-  saat backup/restore.
-- `database_id` hanya dipakai untuk mencatat pemakaian trial. ID ini tidak
-  mengikat `owner_id`, perangkat, lisensi, atau toko.
-- Siapa pun yang memiliki file database dapat membukanya; aplikasi tidak
-  mencocokkan `database_id` dengan pemilik atau perangkat.
-- Salinan file database membawa `database_id` dan status trial yang sama.
-- Daftar toko disimpan di registry lokal, misalnya `stores/registry.json`,
-  berisi ID owner, ID toko, nama, alamat, toko aktif, versi skema, dan waktu
-  dibuat.
-- Registry adalah sumber kebenaran daftar toko. Setiap database toko berdiri
-  sendiri; tidak ada foreign key lintas toko.
-- Ganti toko menutup koneksi database aktif, menyelesaikan penulisan yang
-  tertunda, lalu membuka database toko tujuan.
-- Toko aktif disimpan di registry. Jika registry rusak, aplikasi menampilkan
-  peringatan dan memakai toko valid terakhir; aplikasi tidak membuat toko baru
-  secara otomatis.
-- Toko baru dibuat dengan database kosong dan skema terbaru. Data toko lain
-  tidak disalin.
-- Penghapusan toko bukan bagian MVP; jika ditambahkan nanti, wajib memakai
-  konfirmasi, backup, dan prosedur rollback.
-- Skema database setiap toko memakai versi yang sama. Registry mencatat versi
-  skema; database baru dibuat dari nol.
-
-### ID owner dan akun karyawan
-
-- Setiap pemilik memiliki **ID owner unik global** yang dibuat sekali dan tidak
-  pernah sama dengan pemilik lain. ID ini tidak berubah walaupun nama bengkel,
-  daftar toko, atau perangkat berganti.
-- ID owner dipakai untuk:
-  - mengikat lisensi premium, kuota trial, daftar toko, dan daftar perangkat ke
-    satu pemilik;
-  - merutekan delta lewat relay ke perangkat milik pemilik yang benar tanpa
-    menyimpan data bengkel di VPS;
-  - memisahkan username karyawan antar pemilik, sehingga dua pemilik boleh
-    memakai username karyawan yang sama.
-- ID owner **bukan rahasia** dan boleh dibagikan ke karyawan karena dipakai saat
-  login. ID owner saja tidak memberi akses; akses tetap membutuhkan username dan
+- ID owner dibuat sekali saat **premium aktif**, unik global, dan tidak berubah
+  (K-06). Gratis tidak menerima ID owner.
+- Ditampilkan sebagai kartu teks besar + tombol salin + QR berisi ID saja.
+- ID owner bukan rahasia; login karyawan tetap membutuhkan username dan
   password.
-- Format ID owner: **8 karakter acak** (minimum 7), huruf kecil dan angka,
-  tanpa karakter ambigu `0`, `1`, `l`, dan `o`. Contoh bentuk: `398urw7x`.
-  Panjang ini cukup untuk mencegah tebakan tanpa menyulitkan pengetikan.
-- ID owner ditampilkan sebagai **kartu** berisi teks besar + tombol salin dan
-  **QR** untuk dibagikan ke karyawan. QR hanya berisi ID owner, bukan password
-  atau token.
-- Username karyawan hanya wajib unik di dalam satu ID owner, tidak perlu unik
-  global.
-- Akun karyawan dibuat pemilik lewat aplikasi owner: username, password awal,
-  peran dasar, toko yang ditugaskan, dan **izin tambahan** opsional. Karyawan
-  tidak memakai Google. Password boleh diketik pemilik atau dibuat otomatis
-  dengan **tombol acak**.
-- Akun karyawan disimpan di server sebagai metadata akun (username, hash
-  password, peran, penugasan, izin tambahan), bukan data bengkel.
-- Password disimpan sebagai hash (Argon2id/bcrypt); password awal wajib diganti
-  saat login pertama.
-- **Kebijakan password karyawan:** minimal 8 karakter, dibuat pemilik, dan wajib
-  berbeda dari semua karyawan lain di owner yang sama. Sistem menolak password
-  yang sama saat pembuatan atau penggantian. Tidak ada kedaluwarsa otomatis;
-  pemilik dapat mereset kapan saja. Tidak ada pemulihan mandiri lewat email.
-- **Kebijakan PIN karyawan:** PIN 6 digit diatur karyawan sendiri setelah login
-  pertama dan tidak dibagikan. Jika lupa, karyawan meminta reset PIN ke pemilik;
-  pemilik mereset PIN, lalu karyawan membuat PIN baru. PIN tidak sama dengan
-  password akun.
-- Pemilik dapat mereset password, menonaktifkan akun, dan mencabut perangkat
-  karyawan dari aplikasi owner kapan saja.
+- Di hub, ID owner tidak perlu diketik karena perangkat sudah terikat akun.
 
-### Membuat dan membagikan akun karyawan
+### Login pemilik dan karyawan
 
-- Di samping kolom password ada **tombol acak berbentuk ikon putar/bulat**.
-  Tombol ini langsung mengisi password acak yang lolos kebijakan: 10–12
-  karakter, campuran huruf besar/kecil dan angka, tanpa karakter ambigu.
-  Pemilik tidak perlu mengetik atau memikirkan password.
-- Password hasil tombol acak tetap dicek unik terhadap semua karyawan di owner
-  yang sama. Jika bentrok, sistem membuat ulang otomatis.
-- Tombol yang sama dipakai untuk **reset password**: menimpa password lama,
-  menampilkan password baru sekali, dan mewajibkan karyawan menggantinya saat
-  login berikutnya. Reset password tidak otomatis mencabut perangkat; jika akun
-  dicurigai bocor, pemilik juga mencabut perangkat karyawan itu.
-- Di samping tombol acak ada **tombol salin semua**. Tombol ini menyalin teks
-  siap kirim ke clipboard:
+- **Tanpa login** adalah jalur default untuk pengguna gratis: lokal, satu
+  perangkat, tanpa internet, memakai PIN perangkat (K-07).
+- **Login Google opsional untuk gratis (boleh kapan saja) dan wajib untuk
+  premium.** Layar login menampilkan manfaatnya: upgrade mulus tanpa pindah data
+  dan pemulihan lisensi di perangkat baru (K-07).
+- Login gratis **tidak mendaftarkan perangkat**; server hanya menerima
+  autentikasi dan data bengkel tetap lokal (K-07, K-12).
+- **Di hub:** karyawan login dengan username + password + PIN, diverifikasi lokal
+  tanpa internet dan tanpa ID owner.
+- **Di perangkat karyawan:** login memakai ID owner + username + password, tanpa
+  Google; login pertama membutuhkan internet, lalu PIN dapat dipakai offline.
+- Perangkat karyawan terdaftar per akun dan hanya menerima kunci toko yang
+  ditugaskan (K-22); perangkat itu tidak menulis uang (K-12).
+- Setelah login premium, perangkat menyimpan token perangkat di penyimpanan
+  aman; pemakaian berikutnya dapat memakai PIN perangkat saat offline.
+- Pesan login gagal bersifat umum dan percobaan dibatasi (K-08).
+
+### Membuat dan membagikan akun
+
+- Form akun berisi username, password (diketik atau tombol acak), peran dasar,
+  toko yang ditugaskan, dan izin tambahan.
+- Di samping kolom password ada tombol acak berikon putar/bulat. Password hasil
+  tombol acak langsung memenuhi K-08; pemilik tidak perlu mengetik.
+- Tombol yang sama dipakai untuk reset; password lama langsung tidak berlaku.
+- Tombol **salin semua** menyalin teks siap kirim:
 
   ```text
   PusatkuPOS — akun karyawan
@@ -546,642 +686,418 @@ Catatan:
   Ganti password saat login pertama.
   ```
 
-- Teks salin semua tidak berisi PIN, token, atau data bengkel. Pemilik tinggal
-  menempelkannya ke WhatsApp atau aplikasi pesan lain.
-- Password hanya ditampilkan di dialog pembuatan/reset dan tidak bisa dilihat
-  lagi setelah dialog ditutup. Jika pemilik lupa, gunakan tombol acak untuk
-  reset ulang; password lama langsung tidak berlaku.
-- Tombol salin semua hanya aktif selama password baru masih tampil di dialog.
-  Ini mencegah password lama tersalin tanpa sengaja.
-- QR karyawan tetap hanya berisi ID owner; password tidak pernah masuk QR atau
-  tautan.
+- Teks salin semua tidak memuat PIN, token, atau data bengkel. Password hanya
+  tampil sekali; tombol salin hanya aktif selama password baru tampil.
+- QR karyawan tetap hanya berisi ID owner; password tidak masuk QR atau tautan.
+- Pemilik dapat mereset password, menonaktifkan akun, dan mencabut perangkat
+  karyawan dari aplikasi owner.
 
-### Peran dan izin tambahan per karyawan
+### Logout
 
-- Setiap karyawan memiliki **satu peran dasar**—misalnya Kasir, Teknisi, atau
-  Stok—yang menentukan menu dan aksi minimum.
-- Pemilik dapat menambah **izin tambahan** per karyawan di luar peran dasarnya.
-  Contoh: Budi berperan Kasir, lalu diberi izin tambahan untuk stok opname.
-- Izin tambahan bersifat **aditif**: peran dasar tidak dihapus dan tidak
-  otomatis diperluas ke karyawan lain. Setiap tambahan dicatat per akun.
-- Katalog izin mengikuti fitur aplikasi, misalnya opname, stok masuk/keluar,
-  lihat laporan, baca Supplier, baca Follow up, atau cetak laporan. Daftar final
-  ditetapkan saat implementasi.
-- **Akses khusus pemilik tidak dapat diberikan** lewat izin tambahan: kelola
-  akun/perangkat, lisensi/langganan, tambah/hapus toko, ubah tarif komisi/gaji,
-  dan hapus data.
-- Izin tambahan tidak mengubah aturan penulis uang. Nota, pembayaran, dan retur
-  tetap hanya dari perangkat hub/kasir. Izin stok hanya menambah hak delta stok
-  atau opname; untuk memindahkan hak kasir, peran atau hub harus diubah.
-- Izin tambahan disimpan sebagai metadata akun, di-cache di perangkat untuk
-  offline, dan diperiksa di UI **serta** lapisan data/izin. Permintaan langsung
-  yang tidak diizinkan tetap ditolak.
-- Perubahan izin berlaku saat login atau sinkronisasi berikutnya. Perangkat yang
-  offline memakai izin terakhir yang tersimpan sampai berhasil sinkron; pemilik
-  tetap dapat mencabut perangkat untuk menghentikan akses.
-- Setiap perubahan izin dicatat (siapa, kapan, sebelum/sesudah) dan terlihat di
-  aplikasi owner.
-- Jika izin tambahan bertabrakan dengan fitur yang terkunci paket, paket tetap
-  menang; izin tidak membuka fitur premium yang tidak aktif.
-
-### Login karyawan
-
-Form login karyawan memakai tiga kolom:
-
-| Kolom | Isi |
-| --- | --- |
-| ID unik | ID owner yang diberikan pemilik |
-| Username | Username yang dibuat pemilik |
-| Password | Password akun karyawan |
-
-- Login pertama membutuhkan internet untuk memverifikasi akun ke server.
-- Setelah login berhasil, perangkat menyimpan token perangkat di penyimpanan
-  aman; pemakaian berikutnya bisa memakai PIN perangkat saat offline.
-- PIN 6 digit diatur karyawan sendiri, bukan oleh pemilik. Jika lupa, karyawan
-  meminta reset PIN ke pemilik, lalu membuat PIN baru.
-- Kombinasi ID owner + username menentukan akun. ID owner yang salah atau tidak
-  cocok ditolak dengan pesan umum, tanpa membocorkan apakah username ada.
-- Percobaan login dibatasi dan dikunci sementara per kombinasi ID owner +
-  username.
-- Karyawan hanya melihat toko yang ditugaskan pada akunnya.
-
-### Login tanpa akun, Google, dan logout
-
-- **Tanpa login** adalah jalur default untuk toko tunggal/pengguna gratis:
-  lokal, satu perangkat, tanpa internet, dan memakai PIN perangkat. Data
-  disimpan di SQLite lokal pada folder aplikasi perangkat; tidak ada upload ke
-  API.
-- **Login Google wajib untuk pemilik multi-toko.** Google dipakai untuk
-  identitas, lisensi premium, dan akun; data tetap disimpan lokal lebih dulu.
-- Karyawan tidak wajib punya akun Google. Mereka memakai akun yang dibuat
-  pemilik dan login dengan ID owner + username + password; lihat bagian
-  "Login karyawan".
-- Login Google hanya dipakai untuk akun pemilik multi-toko premium. Tanpa
-  premium atau saat memakai toko tunggal, data tetap lokal dan tidak diunggah.
-  Dengan premium, delta dipertukarkan lewat API ke perangkat yang berhak; VPS
-  tidak menyimpan salinan, dan database lokal tetap menjadi sumber utama.
-- Login pertama membutuhkan internet. Setelah itu data lokal tetap dapat dipakai
-  saat offline; permintaan login ulang hanya muncul saat fitur akun/sync
-  dipakai.
-- **Logout/sign out** tersedia di menu akun atau Pengaturan. Logout meminta
-  konfirmasi, menghapus sesi akun dan token perangkat, lalu kembali ke pilihan
-  akses.
-- Logout **tidak menghapus** database, nota, stok, backup, atau pengaturan.
-  Penghapusan data harus menjadi aksi terpisah dengan konfirmasi.
-- Setelah logout, pengguna dapat memakai mode tanpa login atau masuk dengan
-  akun Google lain; penautan data ke akun berbeda harus dikonfirmasi.
-- PIN perangkat tetap menjadi pengunci lokal dan tidak otomatis terhapus oleh
-  logout Google.
-- Logout menghentikan sinkronisasi di perangkat itu sampai login kembali.
-- Token Google disimpan di penyimpanan aman platform, bukan di database biasa.
-  Aplikasi tidak memakai Google Drive untuk data bengkel kecuali fitur itu
-  ditambahkan eksplisit.
+- Logout meminta konfirmasi, menghapus sesi dan token perangkat, lalu kembali ke
+  pilihan akses.
+- Logout tidak menghapus database, nota, stok, backup, atau PIN lokal.
+- Setelah logout, sinkronisasi perangkat itu berhenti sampai login kembali.
 - Jika aplikasi dihapus, data hanya dapat dipulihkan dari backup lokal/Telegram;
-  VPS tidak menyimpan salinan data bengkel.
+  server tidak menyimpan salinan data bengkel yang dapat dibaca.
 
-### Ganti toko di dalam Menu
+## Implementasi lisensi, perangkat, dan pembayaran
 
-- Tombol/dropdown **Ganti toko** ditempatkan **di dalam panel Menu**, di bagian
-  paling atas dan tepat di atas item Ringkasan. Bukan tombol terpisah di luar
-  panel menu.
-- Saat tombol Menu ditekan, Ganti toko tampil sebelum Ringkasan.
-- Menampilkan nama toko yang sedang aktif.
-- **Gratis:** panel hanya menampilkan toko aktif tanpa tombol tambah; bila perlu,
-  tampilkan ajakan upgrade premium.
-- **Premium:** jika belum ada toko kedua, panel menampilkan toko aktif dan
-  tombol **Tambahkan toko baru**.
-- Jika sudah ada beberapa toko, panel menampilkan daftar **Toko A**, **Toko B**,
-  dan seterusnya, dengan penanda toko aktif, lalu tombol **Tambah toko** di
-  bagian bawah. Tidak ada batas jumlah toko untuk premium.
-- Menekan **Tambahkan toko baru/Tambah toko** membuka form nama toko dan alamat
-  (serta profil bengkel bila diperlukan). Setelah dibuat, toko masuk ke daftar
-  dan dapat langsung dipilih.
-- Toko baru memakai database/tenant terpisah; tidak menyalin data toko lain.
-- Nota, stok, pelanggan, karyawan, dan laporan tidak boleh tercampur antar
-  toko.
-- Hanya pemilik yang boleh menambah toko. Pemilik harus login Google dan
-  memiliki lisensi premium. Karyawan hanya melihat daftar toko yang ditugaskan
-  dan tidak melihat tombol tambah.
-- Jika ada perubahan yang belum disimpan, minta konfirmasi sebelum berganti.
-- Ganti toko harus bekerja offline untuk toko yang datanya tersedia di
-  perangkat.
-- Di layar sempit, tombol tetap berada di dalam panel Menu, di atas Ringkasan,
-  dan tidak menutupi navigasi.
+- Server menerbitkan token lisensi bertanda tangan berisi masa aktif dan batas
+  perangkat owner (K-11). Batas perangkat mengikuti paket premium.
+- Aplikasi memakai hitung mundur lokal saat offline; jam mundur tidak
+  memperpanjang masa aktif dan dikoreksi saat online.
+- Perangkat owner dan karyawan didaftarkan terpisah (K-12). Perangkat karyawan
+  tidak memakai slot owner, tidak menjadi hub, dan tetap dapat dicabut.
+- Perangkat hilang atau rusak dilepas dengan login Google di perangkat baru lalu
+  mencabut perangkat lama dari aplikasi atau halaman akun web; pelepasan mandiri
+  dibatasi satu kali per 72 jam (K-12).
+- Hak menulis uang mengikuti flag hub per toko, bukan status owner/karyawan
+  (K-12). Hanya perangkat owner yang dapat menjadi hub; perangkat non-hub dan
+  perangkat karyawan hanya dapat menulis stok sesuai izin.
+- Batas perangkat dapat berubah lewat rilis aplikasi, bukan pengaturan pengguna.
+- Android memakai Play Billing untuk langganan; Windows/macOS memakai penyedia
+  yang dipilih pada tahap lisensi.
+- Harga final menunggu unit economics (K-20); halaman harga menjelaskan batas
+  perangkat owner dan kebijakan perangkat karyawan.
 
-### Judul bengkel dan alamat di header
+## Implementasi relay dan sinkronisasi (premium)
 
-- Header paling atas memakai dua baris:
+Relay dan sinkronisasi adalah bagian dari premium (K-21). Instalasi satu
+perangkat dapat berjalan tanpa relay, tetapi lisensi tetap diverifikasi.
 
-  ```text
-  Nama bengkel                         [printer]
-  Alamat bengkel
-  ```
+### Relay dan antrean
 
-- Baris pertama berisi **nama bengkel**; tombol/ikon printer berada di kanan
-  pada baris yang sama.
-- Baris kedua selalu **alamat bengkel**, bukan judul halaman. Fungsinya agar
-  pengguna langsung tahu toko/bengkel mana yang sedang aktif.
-- Nama dan alamat mengikuti toko yang dipilih lewat tombol Ganti toko.
-- Jika alamat kosong, tampilkan “Alamat belum diisi” agar ruang tidak kosong.
-- Judul halaman seperti “Ringkasan” tetap berada di area konten, bukan di
-  header toko.
-- Nama panjang dipotong atau dibungkus tanpa menutupi tombol printer; alamat
-  mengikuti lebar layar dan aman di area status bar/notch.
-- Header tetap tampil offline dan tidak memanggil API.
+- API adalah relay: metadata akun/lisensi/perangkat, kunci publik, wrapped store
+  key, dan amplop delta terenkripsi untuk penerima offline (K-13, K-22).
+- Server tidak memegang kunci privat dan tidak dapat membaca isi amplop atau
+  wrapped key.
+- Amplop dihapus setelah semua penerima mengonfirmasi atau setelah TTL
+  mengikuti K-13. Setelah TTL, penerima mengambil snapshot terenkripsi dari hub
+  yang online atau memulihkan backup, lalu memutar ulang outbox lokal (K-22).
+- Perangkat owner kedua mengambil snapshot awal dan wrapped key dari hub lewat
+  relay terenkripsi saat hub online, atau dari backup lokal.
+- Outbox pengirim tetap menyimpan delta sampai server mengonfirmasi; antrean
+  server bukan backup.
+- Jika hub rusak atau hilang, pemulihan hanya lewat backup lokal; cache aplikasi
+  owner bukan cadangan.
 
-### Backup semua toko
+### Outbox dan penggabungan
 
-- Backup semua toko adalah **fitur premium**. Pengguna gratis tetap memakai
-  backup satu toko.
-- Setiap toko punya database SQLite sendiri, tetapi backup manual dan otomatis
-  dibuat sebagai **satu arsip semua toko**, bukan satu file per toko.
-- Arsip berisi manifest toko (ID owner, ID database, ID toko, nama, alamat, toko
-  aktif), seluruh database toko, versi skema, dan versi aplikasi. Contoh:
-  `backup_semua_toko_YYYYMMDD.zip`.
-- Arsip menyertakan checksum untuk setiap database dan manifest.
-- Backup tidak boleh hanya mengambil toko aktif karena restore bisa
-  menghasilkan daftar toko yang tidak lengkap.
-- Restore satu arsip langsung memunculkan **Toko A, Toko B, Toko C** dan
-  seterusnya tanpa upload/impor database satu per satu.
-- Restore memvalidasi manifest, checksum, dan seluruh database. Jika satu
-  bagian gagal, seluruh restore dibatalkan dan data lama dikembalikan.
-- Restore tidak menolak database berdasarkan ID owner atau `database_id`;
-  `database_id` hanya dicatat agar status trial database itu ikut terbawa.
-- Restore memakai mekanisme tukar-sementara (staging) sebelum mengganti data
-  aktif; data lama disimpan sampai restore dinyatakan berhasil.
-- Toko yang ditambahkan setelah backup terakhir akan ikut pada backup
-  berikutnya.
-- Backup otomatis, manual, dan Telegram memakai arsip yang sama; Telegram tetap
-  tunduk pada batas ukuran file.
-- Ekspor Excel/CSV dapat berisi subfolder atau workbook per toko di dalam satu
-  ZIP.
-- PIN, token, dan rahasia perangkat tetap diredaksi dari arsip.
-- Tidak ada upload ke VPS/cloud; restore memakai satu arsip lokal atau satu file
-  yang dipilih pengguna.
-- Fitur ini dikerjakan **setelah** backup satu toko di PusatkuPOS stabil.
+- Setiap perubahan masuk outbox lokal dengan status pending; saat online, antrean
+  dikirim berurutan sesuai nomor urut perangkat.
+- Item yang sudah terkirim ditandai dan tidak dikirim ulang; pengiriman ulang
+  harus idempotent (K-14).
+- Saat internet mati, transaksi tetap berjalan dan delta menunggu.
+- Urutan antar perangkat memakai HLC + ID perangkat; jam dinding hanya untuk
+  tampilan.
+- Stok digabung sebagai delta append-only; opname atau koreksi absolut yang
+  bertabrakan ditandai konflik.
+- Status data berubah menjadi lengkap setelah semua perangkat terdaftar mengirim
+  pending dan menerima pembaruan.
 
-## Kuota trial
+### Banyak akun dan pending jangka panjang
 
-- Total kuota: **20 klik WhatsApp per database**, hanya untuk tombol WA di fitur
-  Follow up.
-- Tombol WA di fitur lain tetap terkunci selama trial.
-- Tidak ada batas waktu; trial berakhir saat kuota habis.
-- Tidak ada penambahan ulang, reset, atau kuota harian/bulanan.
-- Kuota dihitung saat tombol WA ditekan dan link `wa.me` dibuat.
-- Aplikasi tidak dapat memastikan pesan benar-benar terkirim karena WhatsApp
-  berada di luar aplikasi.
-- Kuota yang sudah terpakai tidak dikembalikan jika pengguna membatalkan,
-  WhatsApp tidak terpasang, atau pesan gagal dikirim.
-- Aplikasi menampilkan sisa kuota dan peringatan sebelum habis.
-- Setelah kuota 0, tombol WA dan fitur premium terkunci sampai berlangganan.
+- Satu owner dapat memiliki banyak akun karyawan (mis. 100). Setiap akun dapat
+  memakai perangkat dan outbox sendiri; data antar owner tetap terpisah oleh ID
+  owner. Akun yang hanya memakai hub login bergiliran tanpa perangkat sendiri.
+- Perangkat karyawan terdaftar per akun, tidak memakai slot owner, dan tidak
+  menjadi hub, mengikuti K-12.
+- Outbox pengirim tidak kedaluwarsa karena internet mati berbulan-bulan.
+- Selama pending ada, aplikasi menampilkan banner tetap berisi jumlah delta dan
+  usia data terlama, badge menu sinkronisasi, dan notifikasi sistem berkala.
+- Notifikasi tidak dapat dimatikan permanen selama pending ada; pengguna hanya
+  dapat menunda. Notifikasi memakai mekanisme lokal dan tetap muncul tanpa
+  internet.
+- Setelah pending terkirim dan semua perangkat terdaftar melapor, status berubah
+  menjadi tersinkron dan notifikasi berhenti.
 
-### Trial per database
+### Keamanan delta dan kunci
 
-- Trial dihitung dari `database_id`, bukan email, akun, perangkat, atau lisensi.
-- `database_id` dibuat sekali saat database dibuat dan ikut tersimpan di file
-  database serta backup.
-- Kuota terpakai disimpan di database. Server hanya mencatat kuota terpakai per
-  `database_id` (metadata kuota, bukan data bengkel) agar file database yang
-  sama tidak mengulang trial.
-- Kuota bersifat monoton untuk `database_id` yang sama: restore atau salin file
-  tidak menurunkan kuota terpakai.
-- Database yang sama dapat dibuka oleh pemilik atau perangkat lain; status trial
-  mengikuti `database_id` tersebut, bukan siapa yang membuka.
-- Database baru selalu mendapat `database_id` baru dan memulai trial dari 20.
-- Karena tidak ada pengikat perangkat atau akun, ID ini tidak bisa membedakan
-  database baru yang dibuat oleh orang yang sama. Yang dicegah hanya pemakaian
-  ulang database yang sama; penghapusan aplikasi lalu pembuatan database baru
-  tetap menghasilkan trial baru.
-- Pencegahan tambahan hanya mungkin lewat pengikat perangkat/akun, dan itu tidak
-  dipakai dalam keputusan ini.
-- Tanpa internet, kuota lokal tetap dicatat dan memakai token bertanda tangan;
-  saat online, nilai tertinggi antara lokal dan server untuk `database_id` yang
-  sama yang dipakai.
+- Setiap perangkat memiliki pasangan kunci (K-15, K-22); kunci privat di
+  penyimpanan aman, kunci publik didaftarkan.
+- Delta, perubahan izin, dan daftar pencabutan ditandatangani.
+- Penerima menolak tanda tangan salah, perangkat tidak terdaftar, perangkat
+  dicabut, atau izin yang tidak sah.
+- Server memverifikasi amplop dan status perangkat tanpa membaca payload;
+  penerima memeriksa makna izin.
+- Perangkat yang dimodifikasi tidak dapat memalsukan perangkat lain atau
+  mengubah snapshot izin tanpa merusak tanda tangan.
+- Perangkat hilang dicabut; delta setelah waktu pencabutan ditolak. Re-key
+  dijalankan ke perangkat tersisa dan delta sensitif ditahan sampai selesai
+  (K-22).
 
-## Free tier
+## Implementasi distribusi dan ukuran
 
-- Berjalan lokal, satu perangkat, satu toko, tanpa panggilan API data. Paket
-  resource dasar diunduh sekali lewat Play; setelah itu berjalan offline.
-- Kasir, stok, pelanggan, unit, jasa, laporan, PIN, pengaturan, backup manual,
-  dan restore tetap tersedia.
-- Karyawan, Supplier, Follow up, tombol WA, backup otomatis, dan multi-toko
-  terkunci.
-- **Tanpa iklan sama sekali:** tidak ada banner, popup, video, ad SDK, jaringan
-  iklan, atau permintaan latar untuk iklan, termasuk saat online.
-- Tidak ada pengiriman data ke API developer.
+Mengikuti K-17. Detail implementasi:
 
-## Arsitektur premium
+- Android memakai AAB lewat Play App Signing; APK sideload memakai APK
+  penuh/split tanpa unduhan aset on-demand.
+- Windows memakai installer bertanda tangan; paket aset opsional, jika ada,
+  harus bertanda tangan.
+- iOS masa depan memakai aset/ODR tanpa executable code.
+- Ukuran diukur pada build rilis; hasil pengukuran menentukan perlu/tidaknya
+  paket aset statis.
+- Tidak ada server-driven UI, WebView yang mengeksekusi kode dari CDN, atau
+  self-update.
+
+## Kepatuhan Play, App Store, dan data pribadi
+
+- Android dirilis sebagai AAB lewat Play dengan Play App Signing; target API
+  mengikuti syarat Play terbaru.
+- Langganan digital di Android memakai Play Billing, termasuk restore,
+  acknowledge, perpanjangan, dan pembatalan (K-11).
+- Sediakan hapus akun di aplikasi dan tautan web; konfirmasi menjelaskan data
+  lokal dan metadata server yang dihapus (K-18).
+- Data safety Play dan App Privacy iOS mendeklarasikan akun, lisensi, perangkat,
+  kunci publik/wrapped key, dan amplop relay terenkripsi; tidak ada data bengkel
+  atau kuota gratis yang dapat dibaca server.
+- Privacy policy tersedia di aplikasi dan listing toko aplikasi.
+- Izin Android/iOS (printer, file, notifikasi, Bluetooth) diminta saat
+  dibutuhkan dengan alasan jelas.
+- iOS masa depan mengikuti App Store 2.5.2: tidak ada unduhan executable code;
+  paket aset tidak menambah fitur.
+- Kepatuhan UU PDP mengikuti K-18; kajian hukum dilakukan sebelum rilis.
+
+## Arsitektur
 
 ```text
-Aplikasi utama (core logic; web 2.7.0 untuk uji, lalu Flutter)
-        │
-        ├─ SQLite lokal (database_id) + outbox pending + kuota lokal
-        ├─ Registry toko + database per toko
-        │
-        ├─ Owner tanpa karyawan / mode karyawan (peran dasar + izin tambahan)
-        ├─ Pemilik premium: perangkat sesuai batas paket (satu hub kasir)
-        ├─ Hub kasir (mode karyawan) ── LAN ── perangkat bengkel
-        │
-        └─ API relay (HTTPS, tanpa penyimpanan data bengkel)
-                ├─ akun owner + ID owner unik, lisensi, daftar perangkat
-                ├─ akun karyawan (username, hash password, peran, izin tambahan)
-                ├─ validasi kuota trial per database_id
-                └─ forward delta dan ringkasan berdasarkan ID owner
+Gratis
+        ├─ SQLite lokal (database_id) + kuota lokal
+        ├─ Registry toko (1 toko)
+        ├─ Peran owner: kasir, ringkasan, stok, laporan
+        ├─ PIN perangkat atau login Google (autentikasi saja)
+        └─ Tanpa registrasi perangkat, tanpa relay
 
-Aplikasi owner (tanpa core logic)
-        └─ ringkasan, laporan, dan akun karyawan lewat API relay
+Premium (satu tier)
+        ├─ Hub: SQLite per toko + registry
+        ├─ Perangkat owner sesuai paket + perangkat karyawan
+        ├─ Satu hub uang per toko; perangkat non-hub menulis stok saja
+        ├─ Karyawan: login lokal di hub; tiga kolom di perangkat sendiri
+        ├─ Backup otomatis/Telegram/semua toko + aplikasi owner thin client
+        └─ API relay (HTTPS)
+                ├─ akun owner + ID owner, lisensi, daftar perangkat
+                ├─ akun karyawan (username, hash password, peran, izin)
+                ├─ kunci publik + wrapped store key (tanpa kunci privat)
+                ├─ amplop delta terenkripsi E2E (TTL, hapus setelah ack)
+                └─ forward delta dan ringkasan berdasarkan ID owner
 ```
 
-- **Client:** implementasi pertama di web 2.7.0 (BengkelPOS Radiator) agar dapat
-  diuji; target produk PusatkuPOS memakai Flutter + SQLite. Aplikasi owner adalah
-  klien ringan tanpa core logic.
-- **API:** FastAPI sebagai relay; Python hanya di server, tidak masuk paket
-  aplikasi. Server hanya menyimpan akun (termasuk akun karyawan), ID owner,
-  lisensi, daftar perangkat, dan kuota per `database_id`, bukan data bengkel.
-- **Auth:** login tanpa akun untuk pemakaian lokal, Google untuk akun pemilik
-  premium, dan login karyawan dengan ID owner + username + password. Token
-  perangkat disimpan aman; sign out menghentikan sync di perangkat itu tanpa
-  menghapus data lokal.
-- **Kuota:** dicatat lokal per `database_id` dan disamakan dengan catatan server
-  untuk ID database yang sama saat online.
-- **Lisensi:** langganan bulanan per paket. Server menerbitkan token bertanda
-  tangan berisi masa aktif dan batas perangkat. Saat offline, aplikasi memakai
-  hitung mundur lokal dari token; VPS tidak menyimpan data bengkel. Kegagalan
-  API tidak mengunci kasir lokal.
-- **Saat langganan berakhir:** fitur premium terkunci, tetapi data lama tetap
-  dapat dibaca dan diekspor; kasir dan data lokal tetap jalan. Jika ada delta
-  pending, aplikasi mengirimkannya lebih dulu saat online, lalu berhenti
-  mengirim sampai langganan aktif kembali. Ini mencegah data hilang tanpa
-  memberi akses premium berkelanjutan.
-- **Pembayaran:** langganan Android memakai Google Play Billing; Windows/macOS
-  memakai penyedia yang dipilih saat tahap lisensi. Aktivasi dan perpanjangan
-  lisensi tetap di server; tidak ada pembelian sekali bayar untuk premium.
+- **Client:** web 2.7.0 hanya untuk lingkup K-01; target PusatkuPOS Flutter +
+  SQLite. Aplikasi owner adalah thin client premium tanpa database transaksi
+  (K-02, K-21).
+- **API:** FastAPI sebagai relay premium. Server hanya menyimpan akun, ID owner,
+  lisensi, perangkat, kunci publik/wrapped key, dan amplop terenkripsi; bukan
+  data bengkel yang dapat dibaca (K-13, K-22).
+- **Auth:** mengikuti K-07. Tanpa login untuk pemakaian lokal; Google opsional
+  untuk gratis kapan saja dan wajib untuk premium. Login karyawan di hub memakai
+  username + password + PIN; login dari perangkat karyawan memakai ID owner +
+  username + password. Token perangkat premium disimpan aman.
+- **Kuota:** mengikuti K-04; hanya lokal per `database_id`, tanpa sinkronisasi
+  server. Gratis tanpa login tidak memanggil API; login gratis hanya memanggil
+  autentikasi.
+- **Lisensi:** langganan bulanan per paket premium; batas perangkat owner sesuai
+  paket; token bertanda tangan; kegagalan API tidak mengunci kasir lokal (K-11,
+  K-12, K-21).
+- **Pembayaran:** Play Billing (Android), penyedia Windows/macOS ditentukan pada
+  tahap lisensi. Tidak ada pembelian sekali bayar (K-11).
+- **Keamanan delta:** tanda tangan per perangkat, verifikasi penerima, daftar
+  pencabutan, wrapped store key, dan re-key (K-15, K-22).
 
-## Alur trial dan langganan
+## Alur gratis dan langganan
 
-1. Pengguna membuat akun trial dan mendapat 20 kuota.
-2. Hanya fitur Follow up yang terbuka dalam mode demo; fitur premium lain
-   terkunci.
-3. Setiap klik WA dari Follow up mengurangi kuota satu.
-4. Saat kuota habis, Follow up dan fitur premium lain terkunci dan muncul
-   pilihan langganan.
-5. Langganan bulanan membuka pesan unlimited, seluruh fitur premium, dan batas
-   perangkat sesuai paket.
-6. Data lokal tetap tersimpan selama trial berakhir.
-7. Jika langganan berakhir, kasir lokal tetap jalan; fitur premium terkunci,
-   data lama tetap dibaca/diekspor, dan delta pending dikirim lebih dulu saat
-   online sebelum pengiriman berhenti.
-8. Perpanjangan mengaktifkan kembali fitur premium dan pengiriman delta tanpa
-   menghapus data lokal.
+1. Pengguna memakai gratis seumur hidup sebagai **owner tunggal** dengan membuat
+   database lokal; tidak perlu akun, login, atau Google. Login boleh dilakukan
+   kapan saja tetapi tidak wajib dan tidak mengubah peran. Kuota mengikuti K-04.
+2. Fitur inti terbuka untuk owner; Follow up terbuka dengan 20 kredit WA; akun
+   karyawan, multi-toko, dan fitur premium lain terkunci (K-03/K-04).
+3. Setiap klik WA dari Follow up mengurangi kredit (K-04).
+4. Saat kredit habis, Follow up terkunci; pilihan langganan muncul. Fitur inti
+   gratis tetap berjalan tanpa batas waktu.
+5. Sebelum membeli, pengguna login Google (wajib untuk premium) dan menerima ID
+   owner (K-06/K-07); jika sudah login sebagai pengguna gratis, akun yang sama
+   dipakai tanpa membuat akun baru.
+6. Langganan premium membuka fitur premium dan perangkat owner sesuai paket
+   (K-11/K-12/K-21).
+7. Data lokal tetap tersimpan; tidak ada data yang dihapus saat gratis atau saat
+   langganan berakhir.
+8. Jika langganan berakhir, perilaku mengikuti K-03/K-11.
+9. Perpanjangan mengaktifkan kembali fitur premium tanpa menghapus data lokal
+   (K-11).
 
-## Aturan konflik dan sinkronisasi
+## Urutan pekerjaan
 
-- Perangkat hub dengan peran kasir adalah satu-satunya penulis nota, pembayaran,
-  dan retur.
-- Pemilik premium yang memakai beberapa perangkat tetap tunduk pada aturan satu
-  penulis untuk uang: satu perangkat menjadi hub. Stok dapat dicatat dari
-  perangkat lain sebagai delta.
-- Owner yang memakai aplikasi utama dapat bertransaksi sesuai fitur dan izinnya;
-  aplikasi owner terpisah hanya read-only untuk ringkasan, laporan, dan
-  manajemen akun karyawan.
-- Karyawan berizin menulis absensi, status tugas, catatan, penyelesaian servis,
-  pencatatan stok, dan data dasar komisi. Tarif komisi dan gaji tidak dapat
-  diubah dari mode karyawan.
-- Uang tidak memakai “tulisan terakhir menang”. Stok digabung sebagai delta
-  append-only; opname atau koreksi stok absolut yang bertabrakan ditandai
-  konflik, bukan ditimpa.
-- Urutan dalam satu perangkat mengikuti nomor urut lokal yang selalu naik.
-  Delta yang sempat pending tetap dikirim sesuai urutan itu, bukan urutan waktu
-  terkirim.
-- Urutan antar perangkat memakai jam logis (HLC) dan ID perangkat sebagai
-  pemecah seri. Jam dinding dan waktu terima relay hanya untuk tampilan/audit.
-- Pengiriman ulang harus idempotent agar nota/stok tidak ganda.
-- Relay tidak menyimpan delta; jika perangkat penerima offline, delta ditahan di
-  outbox pengirim sampai terkirim.
+Keputusan produk tidak diulang di sini; rujuk `## Keputusan`. Urutan disusun dari
+pekerjaan termudah ke tersulit, lalu disesuaikan dengan dependensi. Estimasi
+adalah perkiraan kasar untuk satu pengembang setelah prasyarat selesai.
 
-## Urutan pekerjaan (mudah → sulit)
+Implementasi pertama di **web 2.7.0 (BengkelPOS Radiator)** hanya untuk pekerjaan
+1–4. Setelah pilot, port Flutter dan premium dibangun di Dart. Sync dan kripto
+tidak ditulis dua kali: spesifikasi protokol dan test vector diselesaikan lebih
+dulu, lalu diimplementasikan sekali di Dart.
 
-Keputusan produk sudah selesai 2026-11-03 dan tidak dihitung dalam urutan:
-multi-toko premium, Google wajib untuk pemilik, karyawan tanpa Google, ID owner
-unik global, login karyawan tiga kolom, tanpa batas toko untuk premium, VPS
-hanya menjadi relay tanpa menyimpan data bengkel, premium berupa langganan
-bulanan dengan batas perangkat per paket, data fitur terkunci tetap
-dibaca/diekspor, ID owner 8 karakter + kartu/QR, serta kebijakan password/PIN
-karyawan.
+| Urutan | Pekerjaan | Kanal | Kesulitan | Prioritas | Estimasi | Prasyarat |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Header nama bengkel + alamat | Web | Mudah | P0 | 1–2 hari | Tidak ada |
+| 2 | Registry toko + `database_id` + folder + database kosong per toko | Web | Mudah–Sedang | P0 | 3–5 hari | Lapisan data web |
+| 3 | Ganti toko di Menu + izin peran + konfirmasi | Web | Sedang | P0 | 2–4 hari | Registry |
+| 4 | Gating + kuota Follow up lokal dengan entitlement stub | Web | Sedang | P0 | 4–6 hari | Registry |
+| 5 | **Pilot 1–3 bengkel nyata** | Web | **Gerbang** | P0 | 2–4 minggu | 1–4 |
+| 6 | Spesifikasi protokol sync/kripto + test vector | Dokumen | Sulit | P0 | 8–12 hari | Pilot lulus |
+| 7 | Port Flutter + ukur ukuran aplikasi | Dart | Sulit | P0 | 30–45 hari | 6 |
+| 8 | Akun owner + Google + secure storage | Dart | Sedang–Sulit | P0 | 8–12 hari | 7 |
+| 9 | Akun karyawan + peran + izin + password/PIN + login lokal hub | Dart | Sedang | P0 | 5–8 hari | 8 |
+| 10 | Lisensi + Play Billing + hitung mundur + ID owner + registrasi/pencabutan perangkat | Dart | Sedang–Sulit | P0 | 8–12 hari | 8 |
+| 11 | Backup manual/otomatis lokal/Telegram/semua toko + restore | Dart | Sulit | P0 | 10–15 hari | 2, 7 |
+| 12 | **Rilis premium tahap hub** + QA | Dart | Gerbang | P0 | 5–10 hari | 8–11 |
+| 13 | Premium: multi-device sync + E2E + kunci + antrean + snapshot + batching + notifikasi | Dart | Sangat sulit | P1 | 40–60 hari | 6, 12 |
+| 14 | Premium: perangkat karyawan + aplikasi owner thin client | Dart | Sulit–Sangat sulit | P1 | 20–30 hari | 13 |
+| 15 | LAN/hub lokal (opsional) | Dart | Sangat sulit | P2 | TBD | Keputusan terpisah |
 
-Urutan di bawah ini disusun dari pekerjaan termudah ke tersulit, lalu
-disesuaikan dengan dependensi. Jika pekerjaan ringan bergantung pada pekerjaan
-yang lebih sulit (misalnya logout membutuhkan login), dependensi menang dan
-pekerjaan ringan itu dikerjakan tepat setelah prasyaratnya. Estimasi adalah
-perkiraan kasar untuk satu pengembang setelah prasyarat selesai.
-
-Implementasi pertama dilakukan di **web 2.7.0 (BengkelPOS Radiator)** agar fitur
-dapat diuji tanpa menunggu port Flutter. Estimasi di bawah adalah perkiraan untuk
-implementasi web; port Flutter dikerjakan setelah perilaku web stabil. Pekerjaan
-11 adalah persiapan distribusi Flutter dan tidak menghalangi uji web.
-
-| Urutan | Pekerjaan | Kesulitan | Prioritas | Estimasi | Prasyarat |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Header nama bengkel + alamat | Mudah | P0 | 1–2 hari | Tidak ada; memakai toko aktif dan menyatu saat ganti toko siap |
-| 2 | Registry toko + ID owner + `database_id` + folder + database kosong per toko | Mudah–Sedang | P0 | 3–4 hari | Web 2.7.0; lapisan data web |
-| 3 | Ganti toko di Menu + izin peran + konfirmasi | Sedang | P0 | 2–3 hari | Registry; login pemilik untuk rilis premium |
-| 4 | Akun premium + ID owner unik + login Google pemilik + lisensi + token aman | Sedang–Sulit | P0 | 5–8 hari | Penyimpanan aman web; sesi login |
-| 5 | Gating premium + kuota WhatsApp per `database_id` | Sedang | P0 | 3–5 hari | Akun dan lisensi |
-| 6 | Langganan, aktivasi, hitung mundur offline, penurunan paket | Sedang | P0 | 3–5 hari | Lisensi |
-| 7 | Logout + akun karyawan (ID owner + username + password), tombol acak password, dan salin semua | Sedang | P1 | 3–4 hari | Login pemilik |
-| 8 | Backup otomatis + backup semua toko | Sulit | P0/P1 | 8–12 hari | Registry; backup satu toko stabil |
-| 9 | Multi-device premium + sinkronisasi banyak akun + notifikasi pending | Sangat sulit | P1 | 12–17 hari | API, outbox, idempotency, HLC |
-| 10 | Mode karyawan di aplikasi utama + aplikasi owner terpisah (tanpa core logic), termasuk izin tambahan per karyawan | Sulit–Sangat sulit | P1 | 11–18 hari | Sinkronisasi dasar dan izin |
-| 11 | Port Flutter: shell modular + pengelola paket resource + manifest peran + Play Asset Delivery (Android) + paket resource Windows | Sulit | P0 | 10–15 hari | Uji web stabil |
-
-Perkiraan total: **61–93 hari** setelah prasyarat. Pekerjaan 1–6 adalah
-rangkaian premium awal dan multi-toko di web; pekerjaan 7 menyusul tanpa menunda
-rilis. Pekerjaan 8 boleh berjalan paralel setelah registry siap. Pekerjaan 9–10
-adalah tahap lanjutan dan dikerjakan terakhir di web. Pekerjaan 11 adalah
-persiapan distribusi Flutter setelah uji web dinyatakan stabil.
+Perkiraan kasar satu pengembang: **premium tahap hub sekitar 80–130 hari** dan
+**sinkronisasi/perangkat sekitar 60–90 hari**; total **140–220 hari kerja** di
+luar pilot 2–4 minggu, desain, QA lanjutan, dan buffer. Estimasi ini menggantikan
+angka 58–89 hari yang terlalu optimistis, terutama untuk pekerjaan 13.
 
 Catatan urutan:
 
-- Pekerjaan 1–3 tidak membutuhkan API relay. Pekerjaan 11 membutuhkan akun Play
-  Console dan jalur distribusi Play untuk Android.
-- Pekerjaan 11 menetapkan batas paket resource: tampilan peran masuk ke paket
-  masing-masing, sedangkan logika, layar, aksi, dan izin tetap di shell. Ukuran
-  base wajib diukur sebelum fitur peran ditambahkan.
-- Pekerjaan 2 mencakup ID owner di registry dan `database_id` di database.
-  `database_id` tetap berdiri sendiri dan tidak terikat ke owner atau perangkat.
-- Pekerjaan 4–6 satu rangkaian: akun, ID owner, dan lisensi sebelum gating dan
-  langganan. Login Google pemilik wajib sebelum multi-toko dirilis.
-- Pekerjaan 5 mencatat kuota per `database_id`; ID ini tidak mengikat pemilik
-  atau perangkat.
-- Pekerjaan 7 (logout dan akun karyawan) menyusul setelah login tanpa menunda
-  rilis multi-toko. Akun karyawan memakai ID owner + username + password.
-- Pekerjaan 8 menunggu backup satu toko stabil; backup semua toko tidak boleh
-  mendahului backup satu toko.
-- Pekerjaan 9–10 dikerjakan setelah alur lokal stabil. Mode karyawan dan
-  aplikasi owner terpisah menunggu sinkronisasi dasar.
-- Pekerjaan 9 mencakup penggabungan banyak akun, notifikasi pending, dan status
-  sinkron perangkat. Multi-device tidak boleh dirilis tanpa notifikasi pending.
+- Pekerjaan 1–4 tidak membutuhkan API relay; web tetap loopback-only.
+- **Pilot adalah gerbang wajib** sebelum pekerjaan 6 dan seterusnya. Jika pilot
+  gagal, perbaiki inti dan jangan mulai akun, lisensi, atau relay.
+- Pekerjaan 6 menulis protokol, format pesan, urutan HLC, tanda tangan, wrapped
+  key, snapshot, dan test vector. Tidak ada implementasi Python untuk sync/kripto.
+- Pekerjaan 7 mengukur ukuran Flutter lebih dulu; paket aset hanya jika perlu
+  (K-17).
+- Pekerjaan 8–12 adalah premium tahap hub: satu perangkat owner, multi-toko,
+  karyawan shift di hub, lisensi, dan backup. Relay dan perangkat karyawan
+  menyusul di tahap premium berikutnya, tetapi tier yang dijual tetap satu.
+- Pekerjaan 13–14 melengkapi premium dengan sync dan perangkat karyawan; tidak
+  ada tier baru.
+- Pekerjaan 15 tidak dikerjakan kecuali ada keputusan baru dan uji terpisah.
 
-Urutan wajib: registry dan isolasi sebelum ganti toko; akun dan lisensi sebelum
-multi-toko dirilis; backup satu toko stabil sebelum backup semua toko; uji web
-stabil sebelum port Flutter; Play Asset Delivery sebelum rilis Android Flutter;
-tidak ada rilis UI kosong.
+Urutan wajib: registry dan isolasi sebelum ganti toko; pilot sebelum akun/lisensi;
+spesifikasi protokol sebelum kode sync/kripto Dart; port Flutter dan ukuran
+sebelum rilis premium tahap hub; backup satu toko stabil sebelum backup semua
+toko; sync lulus uji sebelum perangkat karyawan; tidak ada rilis UI kosong.
 
 ## Kriteria selesai
 
-- **Hanya akun premium** yang dapat menambah toko; pengguna gratis tetap satu
-  toko dan tidak melihat tombol tambah.
-- **Login Google pemilik wajib** untuk multi-toko; karyawan login dengan ID
-  owner + username + password tanpa Google.
-- **Setiap pemilik memiliki ID owner unik global** yang tidak pernah sama
-  dengan pemilik lain dan tidak berubah setelah dibuat.
-- **Dua pemilik boleh memakai username karyawan yang sama** tanpa tabrakan
-  karena akun dipisahkan oleh ID owner.
-- **ID owner saja tidak membuka akses**; login tetap membutuhkan username dan
-  password, dan percobaan dibatasi.
-- **Tidak ada batas jumlah toko** untuk akun premium.
-- **Paket dasar memuat seluruh logika shell dan fitur**; paket resource peran
-  tidak ikut di base dan ukuran base diukur sebelum rilis.
-- **Login pertama hanya mengunduh paket resource peran itu.** Kasir tidak
-  memasang paket stok/owner; peran tambahan mengunduh paket tambahan dan memakai
-  cache.
-- **Paket resource tidak menambah fitur atau izin.** Semua layar, aksi, logika,
-  dan perhitungan tetap di shell; paket hanya mengatur tampilan.
-- **Setelah paket terpasang, fitur berjalan offline.** Jika paket belum terpasang
-  dan perangkat offline, fitur terkunci dengan pesan jelas.
-- **Android memakai Play Asset Delivery.** Tidak ada unduhan dex/JAR/so dari
-  luar Play dan tidak ada self-update. Sideload memakai APK penuh/split.
-- **iOS masa depan memakai unduhan aset/ODR tanpa executable code** dan mengikuti
-  App Store 2.5.2; paket tidak boleh menambah fitur di luar shell.
-- **Paket terpasang tidak membuka izin.** Pemeriksaan peran tetap di shell dan
-  lapisan data; permintaan langsung ditolak.
-- Shell menolak paket resource di bawah versi minimum dan menyediakan rollback
-  ke paket bawaan jika unduhan atau pembaruan gagal.
-- Multi-toko bekerja penuh, bukan UI kosong: registry, database per toko, dan
-  pemisahan data tersedia.
-- Ganti toko tampil di dalam panel Menu, di atas Ringkasan, dan tidak menutupi
-  navigasi.
-- Nota, stok, pelanggan, karyawan, dan laporan tidak tercampur antar toko;
-  karyawan hanya melihat toko yang diizinkan.
-- Header menampilkan nama bengkel + printer di baris pertama dan alamat di
-  baris kedua; keduanya berubah saat ganti toko.
-- Backup dengan 3 toko menghasilkan satu arsip; setelah aplikasi dihapus dan
-  dipasang ulang, restore arsip langsung menampilkan kembali ketiga toko.
-- Restore arsip yang gagal tidak menghilangkan data toko yang lama.
-- Logout menghapus sesi/token, menghentikan sync, dan tidak menghapus data
-  lokal; PIN tetap berlaku.
-- Hapus akun owner tersedia di aplikasi dan tautan web; konfirmasi menjelaskan
-  data lokal serta metadata server yang dihapus.
-- Langganan premium Android memakai Google Play Billing; restore, acknowledge,
-  perpanjangan, dan pembatalan berjalan; tidak ada tautan pembayaran digital
-  eksternal yang melanggar kebijakan Play.
-- Login tanpa akun bekerja penuh offline untuk toko tunggal; multi-toko
-  memerlukan login Google pemilik dan lisensi premium.
-- Free tier tidak menampilkan iklan dan tidak memanggil API.
-- Trial hanya membuka Follow up dan memberi 20 klik WA per database.
-- Trial dihitung per database; database yang sama tidak bisa mengulang trial.
-- Salinan atau restore file database membawa `database_id` dan kuota yang sama.
-- Setiap database memiliki `database_id` unik; database baru mendapat ID baru
-  dan memulai trial baru.
-- Klik WA ke-21 ditolak dan Follow up terkunci.
-- Premium membuka pesan unlimited dan semua fitur premium awal.
-- Premium dijual sebagai langganan bulanan; tidak ada opsi sekali bayar.
-- Batas perangkat mengikuti paket langganan (contoh: paket Rp10.000/bulan = 2
-  perangkat); perangkat di atas batas ditolak sampai logout atau dicabut.
-- Saat fitur Karyawan, Supplier, atau Follow up terkunci, data lama tetap dapat
-  dibaca dan diekspor; hanya tambah/ubah data dan aksi premium yang diblokir.
-- Lisensi offline memakai token bertanda tangan dan hitung mundur di perangkat;
-  VPS tidak menyimpan data bengkel. Saat langganan berakhir dan ada delta
-  pending, delta dikirim lebih dulu saat online, lalu pengiriman berhenti sampai
-  langganan aktif kembali.
-- ID owner 8 karakter acak (minimum 7), huruf kecil/angka tanpa `0`, `1`, `l`,
-  `o`, unik global, ditampilkan sebagai kartu teks + tombol salin + QR.
-- Password karyawan minimal 8 karakter, unik di antara karyawan satu owner,
-  diganti saat login pertama, tanpa kedaluwarsa otomatis, dan dapat direset
-  pemilik. PIN 6 digit diatur karyawan sendiri dan direset pemilik jika lupa.
-- Tombol acak mengisi password yang lolos kebijakan tanpa diketik pemilik;
-  tombol salin semua menyalin ID owner + username + password + peran + toko
-  dalam satu teks siap kirim. Password hanya tampil sekali setelah dibuat atau
-  direset, dan reset membuat password lama langsung tidak berlaku.
-- Pemilik premium dapat memakai perangkat sesuai batas paket dengan ID owner
-  yang sama; delta tersinkron lewat relay dan perangkat baru memakai database
-  lokal sendiri.
-- Perangkat pemilik yang bukan hub tidak dapat menulis nota, pembayaran, atau
-  retur; stok boleh ditambah dari perangkat berizin sebagai delta. Percobaan
-  langsung ditolak di lapisan izin.
-- Gratis dan trial tetap satu perangkat; multi-device terkunci.
-- Satu owner dapat memiliki 100 akun karyawan atau lebih; masing-masing dapat
-  mencatat riwayat dan menambah stok saat offline tanpa tercampur dengan owner
-  lain.
-- Delta dari banyak perangkat digabung setelah online memakai urutan perangkat
-  dan jam logis; stok tidak ganda dan opname yang bertabrakan ditandai konflik.
-- Pending bertahan walau internet mati berbulan-bulan. Aplikasi wajib
-  menampilkan banner, badge, dan notifikasi sistem berkala selama pending ada;
-  notifikasi tidak dapat dimatikan permanen.
-- Status data berubah menjadi lengkap setelah semua perangkat terdaftar mengirim
-  pending dan menerima pembaruan.
-- Kasir tetap bertransaksi saat API mati total.
-- Backup manual tetap bisa dipulihkan tanpa API atau VPS.
-- Data lokal tidak hilang saat trial berakhir.
-- VPS tidak menyimpan data bengkel; API hanya meneruskan pertukaran data antar
-  perangkat.
-- Relay tidak harus langsung; delta saat internet mati tersimpan pending di
-  perangkat dan terkirim berurutan saat online.
-- Pengiriman ulang delta pending tidak menggandakan nota atau stok.
-- Jika API/VPS mati, delta ditahan di outbox dan data lokal tetap utuh.
-- Aplikasi utama dipakai owner tanpa karyawan dan karyawan; owner tanpa
-  karyawan dapat membuka semua fitur, dengan fitur premium terkunci bila akun
-  gratis.
-- Aplikasi owner terpisah tidak memuat core logic dan tidak dapat bertransaksi;
-  hanya ringkasan hari ini per toko, laporan, dan pembuatan akun karyawan.
-- Mode karyawan di aplikasi utama menjadi sumber absensi, status pengerjaan, dan
-  komisi; perhitungan komisi dan gaji memakai data tersebut.
-- Aplikasi utama menampilkan menu sesuai peran dasar + izin tambahan; percobaan
-  membuka menu atau data owner dari mode karyawan ditolak di lapisan izin, bukan
-  hanya disembunyikan.
-- Pemilik dapat menambah izin per karyawan tanpa mengubah peran dasarnya;
-  contoh Budi kasir + opname berhasil membuka opname, sedangkan karyawan kasir
-  lain tanpa izin tetap ditolak.
-- Izin tambahan tidak dapat membuka akses khusus pemilik (kelola akun/perangkat,
-  lisensi, tambah/hapus toko, ubah tarif komisi/gaji, hapus data).
-- Pencabutan izin berlaku saat login/sinkron berikutnya; perangkat offline
-  memakai izin terakhir sampai sinkron, dan pemilik dapat mencabut perangkat.
-- Setiap perubahan izin tercatat dan terlihat di aplikasi owner.
-- Karyawan hanya melihat toko yang ditugaskan dan tidak dapat mengubah tarif
-  komisi atau gaji.
-- Fitur multi-toko dan premium lolos uji di web 2.7.0 sebelum port Flutter
-  dimulai.
-- Aplikasi Python lama disimpan sebagai arsip/acuan dan tidak dihapus saat
-  Flutter stabil.
-- Tidak ada rahasia di arsip backup.
+Kriteria ini adalah gerbang penerimaan, bukan penetapan aturan. Nilai dan
+kebijakan mengikuti `K-xx`; skenario rinci ada di `RENCANA_PEMANTAPAN.md`
+bagian 7.
 
-## Aplikasi Python lama
-
-- Setelah PusatkuPOS Flutter stabil, aplikasi Python lama **disimpan**, bukan
-  dihapus.
-- Aplikasi lama tidak diberi fitur baru dan tidak lagi menjadi target rilis;
-  fungsinya sebagai arsip, acuan perilaku, dan jalur rollback bila diperlukan.
-- Database dan backup lama tidak dihapus atau dimigrasikan paksa. Data baru
-  berjalan di database baru.
-- Proyek lama hanya diarsipkan agar tidak membingungkan pengembangan; tidak ada
-  pekerjaan pemeliharaan rutin.
-
-## Di luar lingkup
-
-- Penyimpanan data bengkel di VPS atau cloud; API hanya relay.
-- Penghapusan atau pemindahan kepemilikan toko.
-- Backup ke Google Drive.
-- Migrasi otomatis data 2.x satu toko ke multi-toko; belum ada user, database
-  baru dibuat dari nol.
-- Modul WebView yang mengeksekusi kode dari CDN; paket peran memakai Play Asset
-  Delivery (Android), unduhan aset/ODR (iOS nanti), dan paket resource bertanda
-  tangan (Windows).
-- Unduhan kode yang dieksekusi di luar toko aplikasi, Play Feature Delivery, atau
-  self-update.
-- iOS sebagai target rilis tahap ini; target Flutter tahap ini Android, Windows,
-  dan macOS.
+- **K-01:** web hanya membuktikan lingkup header/registry/ganti toko/gating;
+  Play Billing, secure storage, kunci, notifikasi, dan relay diuji di Dart.
+- **K-02/K-21:** hanya ada Gratis dan Premium; premium mencakup hub, sync, dan
+  aplikasi owner tanpa tier versi terpisah.
+- **K-03/K-11:** tier, gating, langganan, data terkunci, dan perilaku saat
+  langganan berakhir lulus uji.
+- **K-04/K-05:** gratis tanpa API data (login hanya autentikasi), kuota Follow up
+  lokal, dan `database_id` lulus uji.
+- **K-06/K-07/K-08:** ID owner, login, peran + izin tambahan, password/PIN,
+  audit, dan pencabutan lulus uji.
+- **K-09/K-10:** multi-toko, isolasi, backup, restore, dan rollback lulus uji;
+  backup/restore adalah P0.
+- **K-12:** batas perangkat owner/karyawan, flag hub, hak menulis uang, dan
+  pencabutan lulus uji.
+- **K-13/K-14/K-15/K-16:** relay terenkripsi, TTL/snapshot, sinkronisasi,
+  konflik, tanda tangan delta, dan pending lulus uji.
+- **K-17:** satu paket per platform, ukuran terukur, tanpa paket layout/kode;
+  opsi paket aset statis diuji jika dipakai.
+- **K-18/K-19/K-20:** privacy/UU PDP, hapus akun, arsip Python, dan unit
+  economics lulus.
+- **K-22:** distribusi kunci, re-key, pemulihan kunci owner, dan replay
+  snapshot+outbox lulus uji.
+- **Pilot:** 1–3 bengkel nyata memakai alur gratis sebelum akun/lisensi/relay;
+  hasilnya dicatat dan keputusan lanjut/tidak lanjut eksplisit.
+- Tidak ada kontradiksi terbuka antara implementasi dan `K-xx`.
 
 ## Risiko
 
 - Isolasi data lemah dapat mencampur nota/stok antar toko.
-- Registry rusak dapat menyembunyikan toko; butuh pemulihan yang aman.
+- Registry rusak dapat menyembunyikan toko; butuh pemulihan aman.
+- Web loopback-only tidak dapat membuktikan multi-device, secure storage,
+  Play Billing, notifikasi, atau relay; jangan menganggap web sebagai bukti
+  kesiapan sync premium.
+- Premium dirilis bertahap di balik flag; pengguna dapat salah mengira tahap
+  hub sebagai tier berbeda. Halaman harga wajib menegaskan hanya ada Gratis dan
+  Premium.
+- Protokol sync/kripto yang ditulis dua kali (Python lalu Dart) berisiko
+  berbeda; spesifikasi + test vector wajib selesai sebelum kode Dart.
 - Restore semua toko memperbesar dampak kegagalan; wajib all-or-nothing.
 - Arsip multi-toko cepat membesar dan dapat melewati batas Telegram.
-- Aplikasi owner tanpa core logic bergantung pada relay; jika data belum
-  diterima, ringkasan bisa kosong atau tertinggal dan aplikasi tidak dapat
-  menghitung ulang.
-- Login Google menambah ketergantungan jaringan; kasir tetap harus offline
-  setelah login awal.
+- Aplikasi owner thin client bergantung pada ringkasan bertanda tangan; saat
+  offline hanya menampilkan cache basi dan tidak dapat menghitung ulang.
+- Jika hub hilang, pemulihan hanya lewat backup lokal; cache aplikasi owner
+  bukan cadangan.
+- Login Google menambah ketergantungan jaringan; kasir tetap offline setelah
+  login awal.
+- Login gratis membuat pengguna menyerahkan identitas; manfaatnya harus jelas
+  (upgrade mulus dan pemulihan lisensi) dan login tetap opsional (K-07).
+- Pengguna gratis tidak dapat dibatasi slot perangkatnya karena salin file
+  database tidak bisa dicegah; ini risiko yang diterima, bukan alasan memaksa
+  login atau mendaftarkan perangkat gratis (K-12).
+- Backup otomatis hanya untuk premium; pengguna gratis yang tidak pernah
+  menjalankan backup manual kehilangan jaring pengaman. Aplikasi wajib mengingatkan
+  backup manual secara berkala.
 - Gating premium yang salah dapat mengunci pengguna gratis dari toko tunggal
   atau membuka multi-toko tanpa lisensi.
 - Izin tambahan dapat menumpuk dan terlupakan; aplikasi owner wajib menampilkan
-  ringkasan izin per karyawan dan riwayat perubahannya.
-- Pencabutan izin saat karyawan offline baru berlaku setelah sinkron; pemilik
-  harus dapat mencabut perangkat untuk menghentikan akses segera.
+  ringkasan izin dan riwayat.
+- Pencabutan izin saat karyawan offline baru berlaku setelah sinkron; pencabutan
+  perangkat menghentikan akses lebih cepat.
 - Izin yang hanya disembunyikan di UI bisa ditembus lewat permintaan langsung;
-  pemeriksaan wajib ada di lapisan data dan tetap memakai izin terakhir yang
-  sah.
-- Batas perangkat dapat diakali dengan menyalin database atau token; perangkat
-  harus terdaftar dan token perangkat terikat, sedangkan penegakan offline
-  memakai hitung mundur dan daftar perangkat terakhir.
+  pemeriksaan wajib di lapisan data.
+- Batas perangkat dapat diakali dengan menyalin database/token; perangkat harus
+  terdaftar, token terikat, dan penegakan offline memakai daftar terakhir. Untuk
+  pengguna gratis, penegakan ini tidak berlaku.
+- Perangkat hilang tanpa akses ke perangkat lama tetap dapat dicabut lewat akun
+  web selama owner bisa login Google. Batas pelepasan satu kali per 72 jam dapat
+  menahan owner yang benar-benar kehilangan dua perangkat berdekatan; dukungan
+  tidak boleh melewati batas, jadi alur darurat harus dijelaskan di UI.
+- Pencabutan perangkat lama tidak menghapus data yang sudah diunduh; jika
+  perangkat hilang, anggap data itu bocor dan re-key toko terkait (K-22).
+- Flag hub yang berpindah saat hub lama masih offline dapat menghasilkan dua
+  penulis uang; perpindahan wajib menunggu ack atau memaksa dengan karantina
+  delta lama.
+- Kunci owner yang hilang bersama kode pemulihan membuat izin baru tidak dapat
+  diterbitkan; pengguna harus diberi peringatan saat membuat kode.
+- Re-key setelah pencabutan bergantung pada hub online; sampai selesai, delta
+  sensitif harus ditahan.
+- Perangkat yang dicabut tetap memegang kunci lama dan data yang sudah
+  diunduhnya; re-key tidak menghapus data itu.
+- Snapshot yang diterapkan tanpa memutar ulang outbox dapat menghilangkan delta
+  lokal yang belum terkirim.
+- TTL antrean dan snapshot yang lebih tua dari outbox dapat menimbulkan konflik;
+  urutan replay dan deduplikasi wajib diuji.
+- Pilot yang dilewati dapat menghasilkan fitur premium yang tidak dibutuhkan;
+  gerbang pilot wajib dijalankan sebelum akun/lisensi.
+- Estimasi 140–220 hari masih bisa meleset; buffer dan uji perangkat nyata
+  ditambahkan sebelum tanggal rilis dijanjikan.
+- Perangkat karyawan tidak dihitung dalam batas owner dapat disalahgunakan untuk
+  menambah perangkat; mitigasi: uang tetap hub-only, akun harus aktif, perangkat
+  terdaftar, dapat dicabut, dan pemakaian diaudit.
+- Antrean relay terenkripsi menambah biaya penyimpanan dan bandwidth; TTL, kuota,
+  dan batching wajib dipantau.
+- TTL antrean dapat membuat penerima yang offline sangat lama kehilangan delta;
+  snapshot dari hub atau backup lokal menjadi jalur pemulihan.
+- Delta dari klien yang dimodifikasi dapat dipalsukan jika tidak ditandatangani;
+  tanda tangan per perangkat dan verifikasi penerima wajib.
+- Perangkat yang dicabut tetapi offline dapat memakai izin terakhir sampai
+  mencoba sinkron; pencabutan dan notifikasi harus jelas.
 - Hitung mundur lisensi offline bergantung pada jam perangkat; jam mundur tidak
-  boleh memperpanjang masa aktif, dan koreksi dilakukan saat online.
-- Data fitur terkunci sengaja tetap dapat dibaca/diekspor; ini bukan kebocoran,
-  tetapi akses tulis dan aksi premium tetap harus diblokir.
-- Langganan lewat Play Billing/IAP harus direkonsiliasi saat online; pembatalan,
-  refund, atau chargeback tidak boleh menghapus data lokal.
-- Play Asset Delivery hanya berjalan lewat Play; APK sideload memakai APK
-  penuh/split dan tidak ringan. Login pertama peran juga membutuhkan internet.
-- Base shell tetap memuat Flutter engine, layar, logika, dan aksi; ukuran base
-  harus diukur dan tidak boleh membengkak oleh paket resource peran.
-- Windows tidak punya Play Asset Delivery; paket resource bertanda tangan tidak
-  menghapus logika dari shell, jadi EXE tidak sekecil base APK.
-- iOS (App Store) melarang unduhan kode yang dieksekusi; paket peran harus tetap
-  resource/aset lewat unduhan aset/ODR dan tidak boleh menambah fitur di luar
-  shell (App Store 2.5.2).
-- Versi shell dan paket resource dapat berbeda; paket lama harus ditolak dan
-  unduhan gagal/korup harus dapat diulang tanpa merusak data.
-- Banyak peran di satu perangkat dapat menumpuk cache paket; sediakan pembersihan
-  cache tanpa menghapus data.
-- Paket terpasang dapat disalahartikan sebagai izin; shell tetap wajib menolak
-  akses di luar peran.
-- Multi-device pada satu owner dapat menimbulkan dua penulis uang jika
-  penetapan hub gagal; perangkat non-hub harus ditolak di lapisan izin untuk
-  uang, bukan hanya dinonaktifkan di UI.
-- 100 akun yang offline lama dapat menghasilkan antrean besar; unggahan harus
-  dibatching, dapat dilanjutkan, dan tidak memblokir kasir.
-- Jam perangkat yang berbeda dapat mengacaukan urutan; urutan wajib memakai jam
-  logis, bukan jam dinding.
-- Notifikasi pending yang berulang dapat diabaikan; banner tetap dan status
-  perangkat harus selalu terlihat.
-- Pending berbulan-bulan dapat hilang jika perangkat rusak atau hilang; backup
-  lokal wajib menyertakan outbox pending.
-- Karyawan tanpa Google harus tetap dapat membuka toko yang ditugaskan tanpa
-  membocorkan toko lain.
-- ID owner yang salah ketik atau tertukar membuat login karyawan gagal; UI harus
-  mudah menyalin/membagikan ID dan menampilkan pesan yang jelas.
-- Karyawan tidak punya email pemulihan; reset password sepenuhnya lewat pemilik,
-  sehingga akun pemilik wajib aman.
-- Tombol salin semua menyalin password dalam bentuk teks biasa; pemilik harus
-  mengirim lewat kanal pribadi dan karyawan wajib menggantinya saat login
-  pertama. Clipboard tidak dibersihkan otomatis oleh sistem.
-- ID database tidak mengikat siapa pun; membuat database baru selalu memberi
-  trial baru, jadi hanya pemakaian ulang database yang sama yang bisa dicegah.
-- Kuota per database dapat diakali dengan menghapus aplikasi lalu membuat
-  database baru; ini keterbatasan yang diterima.
-- Kesalahan input di mode karyawan langsung memengaruhi komisi dan gaji;
-  koreksi harus tercatat dan disetujui pemilik.
-- Menyembunyikan menu saja tidak cukup; izin harus diperiksa di lapisan data
-  agar mode karyawan tidak bisa membuka data owner lewat permintaan langsung.
+  boleh memperpanjang masa aktif.
+- Data fitur terkunci sengaja tetap dibaca/diekspor; ini bukan kebocoran, tetapi
+  akses tulis dan aksi premium tetap harus diblokir.
+- Play Billing/IAP harus direkonsiliasi saat online; refund/chargeback tidak
+  boleh menghapus data lokal.
+- Ukuran aplikasi Flutter bisa lebih besar dari perkiraan; ukur dulu, jangan
+  menjanjikan angka.
+- Paket aset opsional dapat disalahartikan sebagai izin atau menambah fitur;
+  paket hanya aset statis dan shell tetap memeriksa izin.
+- Windows/iOS tidak punya padanan Play Asset Delivery; paket aset harus bertanda
+  tangan dan tidak menghapus logika dari shell.
+- 100 akun offline lama dapat menghasilkan antrean besar; unggahan harus
+  dibatching dan tidak memblokir kasir.
+- Jam perangkat berbeda dapat mengacaukan urutan; wajib HLC.
+- Notifikasi pending berulang dapat diabaikan; banner dan badge harus selalu
+  terlihat.
+- Pending berbulan-bulan dapat hilang jika perangkat rusak; backup wajib
+  menyertakan outbox.
+- Password yang diketik manual bisa lemah; tombol acak menjadi default dan
+  karyawan wajib mengganti saat login pertama.
+- Tombol salin semua menyalin password teks biasa; kirim lewat kanal pribadi dan
+  karyawan wajib mengganti saat login pertama.
 - ID owner yang mudah ditebak dapat dipakai mencoba username; rate limit dan
   lockout wajib aktif.
-- Kuota lokal bisa diakali jika tidak terikat ID owner/lisensi.
-- `wa.me` tidak bisa memastikan pesan terkirim; kuota dihitung saat klik.
-- Konflik multi-device jika uang/stok ditulis dari beberapa perangkat.
-- Biaya API relay, akun, dan dukungan.
-- Delta salah kirim atau bocor saat transit jika isolasi akses lemah.
+- Kuota per database dapat diakali dengan membuat database baru; keterbatasan
+  diterima.
+- Kesalahan input di mode karyawan memengaruhi komisi/gaji; koreksi harus
+  tercatat dan disetujui pemilik.
+- Metadata akun, perangkat, dan amplop relay adalah data pribadi; retensi,
+  penghapusan, dan insiden wajib ditangani sesuai UU PDP.
+- Harga Rp10.000/bulan dapat tipis setelah komisi Play Billing, relay, dan
+  dukungan; unit economics wajib dihitung sebelum rilis.
+- Biaya API relay, penyimpanan antrean, akun, dan dukungan.
+- Delta bocor saat transit jika isolasi akses lemah; enkripsi E2E dan tanda
+  tangan wajib.
 - API/VPS mati membuat sinkronisasi berhenti; data lokal tetap aman.
 - Data lama 2.x tidak dibawa; database baru dibuat dari nol.
 
-## Keputusan tambahan (2026-11-03)
+## Di luar lingkup
 
-- **Harga dan model:** premium adalah langganan bulanan, bukan sekali bayar.
-  Harga/daftar paket final ditentukan saat implementasi; arah awal
-  Rp10.000/bulan untuk 2 perangkat.
-- **Batas perangkat:** mengikuti paket langganan; gratis/trial 1 perangkat, dan
-  perangkat di atas batas ditolak sampai logout atau dicabut.
-- **Data terkunci:** data Karyawan, Supplier, dan Follow up lama tetap dapat
-  dibaca dan diekspor saat fitur terkunci; hanya tambah/ubah data dan aksi
-  premium yang diblokir.
-- **Verifikasi offline:** token bertanda tangan + hitung mundur di perangkat;
-  VPS tidak menyimpan data bengkel. Delta pending dikirim lebih dulu saat online
-  setelah langganan berakhir, lalu pengiriman berhenti sampai aktif kembali.
-- **ID owner:** 8 karakter acak (minimum 7), huruf kecil/angka tanpa `0`, `1`,
-  `l`, `o`; ditampilkan sebagai kartu teks + tombol salin + QR.
-- **Password/PIN karyawan:** password minimal 8 karakter, unik per owner,
-  diganti saat login pertama, tanpa kedaluwarsa otomatis, reset oleh pemilik;
-  tombol acak mengisi password otomatis dan tombol salin semua menyalin ID
-  owner + username + password siap kirim; password hanya tampil sekali. PIN 6
-  digit diatur karyawan sendiri dan direset pemilik jika lupa.
-- **Aplikasi Python lama:** disimpan sebagai arsip/acuan; tidak dihapus dan tidak
-  diberi fitur baru setelah Flutter stabil.
+- Penyimpanan data bengkel yang dapat dibaca di VPS atau cloud; API hanya relay
+  dan antrean terenkripsi sementara.
+- Backup ke Google Drive.
+- Paket layout per peran, server-driven UI, atau unduhan kode yang dieksekusi.
+- iOS sebagai target rilis tahap ini.
+- Penghapusan atau pemindahan kepemilikan toko.
+- Migrasi otomatis data 2.x satu toko ke multi-toko; belum ada user, database baru
+  dibuat dari nol.
+- Modul WebView yang mengeksekusi kode dari CDN, Play Feature Delivery, atau
+  self-update.
+- LAN/hub lokal; jika dibutuhkan, menjadi keputusan dan pekerjaan terpisah
+  (K-21).
+- Penjualan terpisah untuk sync, perangkat karyawan, atau aplikasi owner;
+  semuanya bagian dari satu tier premium (K-21).
+- Sinkronisasi kuota gratis ke server; kuota hanya lokal (K-04).
