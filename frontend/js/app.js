@@ -10103,10 +10103,22 @@
       '</div></div>';
   }
 
+  function supplierResellerItemIds(supplierId, fallbackItemId) {
+    const ids = (state.resellerItems || [])
+      .filter((row) =>
+        (row.suppliers || []).some(
+          (supplier) => supplier.supplier_id === supplierId
+        )
+      )
+      .map((row) => row.id);
+    return ids.length ? ids : [fallbackItemId];
+  }
+
   async function openSupplierItemChat(supplierId, itemId) {
+    const itemIds = supplierResellerItemIds(supplierId, itemId);
     try {
       const preview = await API.supplierWhatsappPreview(supplierId, {
-        stock_item_ids: [itemId],
+        stock_item_ids: itemIds,
       });
       openWaPreview({
         judul: 'Stok supplier · ' + preview.nama,
@@ -10118,7 +10130,7 @@
           'Kasir tetap menekan kirim di WhatsApp.',
         onOpen: async (text) => {
           await API.supplierWhatsapp(supplierId, {
-            stock_item_ids: [itemId],
+            stock_item_ids: itemIds,
             pesan: text,
           });
           toast('Pertanyaan stok tercatat.', 'success');
