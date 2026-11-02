@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261163">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261165">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -1305,6 +1305,7 @@
             </div>
             <div class="page-actions">
               <label class="switch-row feature-switch"><span>Fitur supplier</span><input type="checkbox" id="supplierFeatureToggle"><span class="switch-ui" aria-hidden="true"></span></label>
+              <button type="button" class="btn btn-outline" id="btnSupplierArchive">Lihat arsip</button>
               <button type="button" class="btn btn-ghost" id="btnRefreshSuppliers">Muat ulang</button>
               <button type="button" class="btn btn-primary" id="btnAddSupplier">+ Supplier</button>
             </div>
@@ -1312,7 +1313,7 @@
           <div class="table-wrap">
             <table class="table">
               <thead>
-                <tr><th>Nama</th><th>WhatsApp</th><th>Barang disuplai</th><th>Status</th><th></th></tr>
+                <tr><th>Nama</th><th>WhatsApp</th><th>Barang disuplai</th><th></th></tr>
               </thead>
               <tbody id="supplierBody"></tbody>
             </table>
@@ -2271,6 +2272,28 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="supplierArchiveModal" role="dialog" aria-modal="true" aria-labelledby="supplierArchiveTitle">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <div>
+          <h3 id="supplierArchiveTitle">Arsip supplier</h3>
+          <p class="muted" id="supplierArchiveSubtitle">Supplier yang sudah diarsipkan. Data tetap tersimpan.</p>
+        </div>
+        <button type="button" class="icon-btn" id="supplierArchiveClose" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="table">
+          <thead><tr><th>Nama</th><th>WhatsApp</th><th>Barang disuplai</th><th></th></tr></thead>
+          <tbody id="supplierArchiveBody"></tbody>
+        </table>
+        <div class="empty-state hidden" id="supplierArchiveEmpty">Belum ada supplier di arsip.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="supplierArchiveDismiss">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================ STOCK MODAL ============================ -->
   <div class="modal-backdrop hidden" id="stockModal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
     <div class="modal">
@@ -2571,15 +2594,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261163"></script>
-  <script src="/static/js/api-client.js?v=20261163"></script>
-  <script src="/static/js/printer-manager.js?v=20261163"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261163"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261163"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261163"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261163"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261163"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261163"></script>
-  <script src="/static/js/app.js?v=20261163"></script>
+  <script src="/static/js/native-bridge.js?v=20261165"></script>
+  <script src="/static/js/api-client.js?v=20261165"></script>
+  <script src="/static/js/printer-manager.js?v=20261165"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261165"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261165"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261165"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261165"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261165"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261165"></script>
+  <script src="/static/js/app.js?v=20261165"></script>
 </body>
 </html>

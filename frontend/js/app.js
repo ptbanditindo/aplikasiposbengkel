@@ -227,6 +227,7 @@
     stock: [],
     stockFilter: 'all',
     suppliers: [],
+    archivedSuppliers: [],
     supplierGroups: [],
     resellerItems: [],
     supplierItemSelection: [],
@@ -1249,18 +1250,28 @@
       });
     }
 
+    openStatListModal({
+      title: config.title,
+      subtitle: config.subtitle,
+      head: config.head,
+      rows,
+      empty: config.empty,
+    });
+  }
+
+  function openStatListModal(config) {
     $('#customerStatTitle').textContent = config.title;
     $('#customerStatSubtitle').textContent = config.subtitle;
     $('#customerStatHead').innerHTML = config.head;
     const body = $('#customerStatBody');
     const empty = $('#customerStatEmpty');
-    if (!rows.length) {
+    if (!config.rows.length) {
       body.innerHTML = '';
       empty.textContent = config.empty;
       empty.classList.remove('hidden');
     } else {
       empty.classList.add('hidden');
-      body.innerHTML = rows.join('');
+      body.innerHTML = config.rows.join('');
     }
     openModal('#customerStatModal');
   }
@@ -7177,6 +7188,78 @@
     openNotaList('Nota ' + fmtDate(date), list, { showProfit: true });
   }
 
+  async function openStockLevelModal(kind) {
+    try {
+      if (!state.stock.length) await loadStock();
+      const low = kind === 'low';
+      const rows = state.stock.filter(
+        low ? isLowStockItem : isOutOfStockItem
+      );
+      openStatListModal({
+        title: low ? 'Stok menipis' : 'Stok habis',
+        subtitle:
+          rows.length +
+          (low ? ' barang perlu dibeli.' : ' barang tidak tersedia.'),
+        head:
+          '<tr><th>Barang</th><th class="text-center">Stok</th><th class="text-center">Minimum</th></tr>',
+        rows: rows.map(
+          (item) =>
+            '<tr><td><span class="cell-primary">' +
+            esc(item.nama) +
+            '</span></td><td class="text-center">' +
+            intValue(item.jumlah, 0) +
+            '</td><td class="text-center">' +
+            effectiveStockMinimum(item) +
+            '</td></tr>'
+        ),
+        empty: low
+          ? 'Tidak ada stok menipis.'
+          : 'Tidak ada stok habis.',
+      });
+    } catch (err) {
+      toast('Data stok gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  async function openSoldPartsModal() {
+    try {
+      const sold = await API.soldParts(todayISO(), todayISO());
+      const items = sold && Array.isArray(sold.items) ? sold.items : [];
+      openStatListModal({
+        title: 'Sparepart keluar hari ini',
+        subtitle:
+          intValue(sold && sold.total_qty, 0) +
+          ' sparepart dari nota servis dan pembelian part · ' +
+          fmtDate(todayISO()),
+        head:
+          '<tr><th>Barang</th><th class="text-center">Qty</th><th class="text-right">Harga akhir</th><th class="text-right">Subtotal</th><th>Waktu</th><th>No. nota</th></tr>',
+        rows: items.map(
+          (item) =>
+            '<tr class="is-clickable" data-action="record-detail" data-id="' +
+            item.service_record_id +
+            '"><td><span class="cell-primary">' +
+            esc(item.nama_part || '-') +
+            '</span><span class="cell-sub">' +
+            esc(item.customer_nama || '-') +
+            '</span></td><td class="text-center">' +
+            intValue(item.jumlah, 0) +
+            '</td><td class="text-right money">' +
+            fmtRp(item.harga_satuan) +
+            '</td><td class="text-right money">' +
+            fmtRp(item.subtotal) +
+            '</td><td>' +
+            esc(fmtDateTime(item.waktu_service)) +
+            '</td><td>' +
+            esc(item.no_nota) +
+            '</td></tr>'
+        ),
+        empty: 'Belum ada sparepart keluar hari ini.',
+      });
+    } catch (err) {
+      toast('Sparepart keluar hari ini gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
   async function refreshAfterRecordChange(id) {
     await openRecordDetail(id);
     loadHistory($('#historySearch').value.trim());
@@ -7225,8 +7308,7 @@
       return;
     }
     if (action === 'open-sold-parts') {
-      navigate('report');
-      setReportTab('sold');
+      await openSoldPartsModal();
       return;
     }
     if (action === 'employee-detail') {
@@ -7288,12 +7370,12 @@
       if (supplier) openSupplierModal(supplier);
       return;
     }
-    if (action === 'deactivate-supplier') {
-      await setSupplierActive(id, false);
+    if (action === 'archive-supplier') {
+      await archiveSupplier(id);
       return;
     }
     if (action === 'reactivate-supplier') {
-      await setSupplierActive(id, true);
+      await reactivateSupplier(id);
       return;
     }
     if (action === 'delete-supplier') {
@@ -7359,15 +7441,11 @@
       return;
     }
     if (action === 'open-low-stock') {
-      state.stockFilter = 'low';
-      navigate('stock');
-      loadStock();
+      await openStockLevelModal('low');
       return;
     }
     if (action === 'open-stock-out') {
-      state.stockFilter = 'out';
-      navigate('stock');
-      loadStock();
+      await openStockLevelModal('out');
       return;
     }
     if (action === 'open-pengerjaan') {
@@ -9429,19 +9507,22 @@
   function renderSuppliers() {
     const body = $('#supplierBody');
     if (!body) return;
+    const active = state.suppliers.filter((row) => row.aktif);
+    const archivedCount = state.suppliers.length - active.length;
     const summary = $('#supplierSummary');
     if (summary) {
-      const aktifCount = state.suppliers.filter((row) => row.aktif).length;
       summary.textContent =
-        aktifCount + ' supplier aktif · ' + state.suppliers.length + ' total';
+        active.length +
+        ' supplier aktif' +
+        (archivedCount ? ' · ' + archivedCount + ' diarsip' : '');
     }
-    if (!state.suppliers.length) {
+    if (!active.length) {
       body.innerHTML = '';
       $('#supplierEmpty').classList.remove('hidden');
       return;
     }
     $('#supplierEmpty').classList.add('hidden');
-    body.innerHTML = state.suppliers
+    body.innerHTML = active
       .map((supplier) => {
         const items = (supplier.items || [])
           .map((item) => item.nama)
@@ -9457,22 +9538,13 @@
           '<td class="cell-sub">' +
           esc(items) +
           '</td>' +
-          '<td><span class="badge ' +
-          (supplier.aktif ? 'green' : 'gray') +
-          '">' +
-          (supplier.aktif ? 'Aktif' : 'Nonaktif') +
-          '</span></td>' +
           '<td class="row-actions">' +
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-supplier" data-id="' +
           supplier.id +
           '">Edit</button>' +
-          (supplier.aktif
-            ? '<button type="button" class="btn btn-ghost btn-xs" data-action="deactivate-supplier" data-id="' +
-              supplier.id +
-              '">Nonaktifkan</button>'
-            : '<button type="button" class="btn btn-outline btn-xs" data-action="reactivate-supplier" data-id="' +
-              supplier.id +
-              '">Aktifkan</button>') +
+          '<button type="button" class="btn btn-ghost btn-xs" data-action="archive-supplier" data-id="' +
+          supplier.id +
+          '">Arsipkan</button>' +
           '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-supplier" data-id="' +
           supplier.id +
           '">Hapus</button>' +
@@ -9612,23 +9684,93 @@
     }
   }
 
-  async function setSupplierActive(id, aktif) {
+  async function archiveSupplier(id) {
     const supplier = state.suppliers.find((row) => row.id === id);
     if (!supplier) return;
-    const message = aktif
-      ? 'Aktifkan kembali ' +
-        supplier.nama +
-        '? Supplier akan muncul lagi sebagai pilihan barang.'
-      : 'Nonaktifkan ' +
-        supplier.nama +
-        '? Data supplier tetap tersimpan dan bisa diaktifkan kembali.';
-    if (!window.confirm(message)) return;
+    if (
+      !window.confirm(
+        'Arsipkan ' +
+          supplier.nama +
+          '? Data supplier tetap tersimpan dan bisa diaktifkan kembali.'
+      )
+    ) {
+      return;
+    }
     try {
-      await API.updateSupplier(id, { aktif });
-      toast(
-        aktif ? 'Supplier diaktifkan.' : 'Supplier dinonaktifkan.',
-        'success'
+      await API.updateSupplier(id, { aktif: false });
+      toast('Supplier dipindahkan ke arsip.', 'success');
+      await loadSuppliers();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function openSupplierArchive() {
+    try {
+      const all = await API.suppliers('');
+      state.archivedSuppliers = all.filter((supplier) => !supplier.aktif);
+      renderSupplierArchive();
+      openModal('#supplierArchiveModal');
+    } catch (err) {
+      toast('Arsip supplier gagal dimuat. Coba lagi.', 'error', 6000);
+    }
+  }
+
+  function renderSupplierArchive() {
+    const body = $('#supplierArchiveBody');
+    const empty = $('#supplierArchiveEmpty');
+    if (!body) return;
+    const suppliers = state.archivedSuppliers || [];
+    $('#supplierArchiveSubtitle').textContent =
+      suppliers.length + ' supplier di arsip. Data tetap tersimpan.';
+    if (!suppliers.length) {
+      body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+    body.innerHTML = suppliers
+      .map((supplier) => {
+        const items = (supplier.items || [])
+          .map((item) => item.nama)
+          .join(', ') || '-';
+        return (
+          '<tr><td><span class="cell-primary">' +
+          esc(supplier.nama) +
+          '</span></td><td>' +
+          esc(supplier.nomor_hp || '-') +
+          '</td><td class="cell-sub">' +
+          esc(items) +
+          '</td><td class="row-actions">' +
+          '<button type="button" class="btn btn-primary btn-xs" data-action="reactivate-supplier" data-id="' +
+          supplier.id +
+          '">Aktifkan kembali</button></td></tr>'
+        );
+      })
+      .join('');
+  }
+
+  async function reactivateSupplier(id) {
+    const supplier =
+      (state.archivedSuppliers || []).find((row) => row.id === id) ||
+      state.suppliers.find((row) => row.id === id);
+    if (!supplier) return;
+    if (
+      !window.confirm(
+        'Aktifkan kembali ' +
+          supplier.nama +
+          '? Supplier akan muncul lagi di daftar aktif.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await API.updateSupplier(id, { aktif: true });
+      toast('Supplier diaktifkan kembali.', 'success');
+      state.archivedSuppliers = (state.archivedSuppliers || []).filter(
+        (row) => row.id !== id
       );
+      renderSupplierArchive();
       await loadSuppliers();
     } catch (err) {
       toast(err.message, 'error', 6000);
@@ -10746,6 +10888,13 @@
     );
     $('#btnAddSupplier').addEventListener('click', () => openSupplierModal(null));
     $('#btnRefreshSuppliers').addEventListener('click', loadSuppliers);
+    $('#btnSupplierArchive').addEventListener('click', openSupplierArchive);
+    $('#supplierArchiveClose').addEventListener('click', () =>
+      closeModal('#supplierArchiveModal')
+    );
+    $('#supplierArchiveDismiss').addEventListener('click', () =>
+      closeModal('#supplierArchiveModal')
+    );
     $('#supplierForm').addEventListener('submit', handleSupplierSubmit);
     $('#btnAddSupplierItem').addEventListener('click', addSupplierItem);
     $('#supplierPickClose').addEventListener('click', () =>
