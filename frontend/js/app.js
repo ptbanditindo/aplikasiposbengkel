@@ -621,8 +621,9 @@
       });
     }
     if (toggle) {
-      toggle.textContent = enabled ? 'Selesai atur menu' : 'Atur menu';
-      toggle.classList.toggle('active', enabled);
+      toggle.textContent = enabled ? 'Selesai atur menu' : 'Atur urutan menu';
+      toggle.classList.toggle('btn-primary', enabled);
+      toggle.classList.toggle('btn-outline', !enabled);
     }
   }
 
@@ -10893,7 +10894,7 @@
     $('#menuToggleGrid').addEventListener('change', handleMenuToggleChange);
     $$('.nav-tab').forEach((tab) =>
       tab.addEventListener('click', () => {
-        if (state.navEdit) return;
+        if (state.navEdit) setNavEdit(false);
         navigate(tab.dataset.view);
       })
     );

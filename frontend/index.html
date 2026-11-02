@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261171">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261172">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -137,13 +137,10 @@
       </div>
 
       <div class="sidebar-foot">
-        <div class="sidebar-actions">
-          <button type="button" class="printer-pill offline" id="printerBtn" title="Buka pengaturan printer">
-            <span class="status-dot" id="printerDot"></span>
-            <span id="printerLabel">Printer belum siap</span>
-          </button>
-          <button type="button" class="nav-order-toggle" id="navOrderToggle">Atur menu</button>
-        </div>
+        <button type="button" class="printer-pill offline" id="printerBtn" title="Buka pengaturan printer">
+          <span class="status-dot" id="printerDot"></span>
+          <span id="printerLabel">Printer belum siap</span>
+        </button>
         <div class="clock" id="clock">
           <span class="clock-date" id="clockDate">-</span>
           <span class="clock-time" id="clockTime">--:--</span>
@@ -842,6 +839,7 @@
               <h2>Menu navigasi</h2>
               <p class="muted">Pilih menu yang ditampilkan. Ringkasan, Kasir, dan Pengaturan selalu tampil.</p>
             </div>
+            <button type="button" class="btn btn-outline btn-sm" id="navOrderToggle">Atur urutan menu</button>
           </div>
           <div class="form-grid" id="menuToggleGrid"></div>
           <p class="tiny muted">Menu yang dimatikan tidak hilang — bisa ditampilkan lagi kapan saja. Pilihan tersimpan di perangkat ini.</p>
@@ -2610,15 +2608,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261171"></script>
-  <script src="/static/js/api-client.js?v=20261171"></script>
-  <script src="/static/js/printer-manager.js?v=20261171"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261171"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261171"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261171"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261171"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261171"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261171"></script>
-  <script src="/static/js/app.js?v=20261171"></script>
+  <script src="/static/js/native-bridge.js?v=20261172"></script>
+  <script src="/static/js/api-client.js?v=20261172"></script>
+  <script src="/static/js/printer-manager.js?v=20261172"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261172"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261172"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261172"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261172"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261172"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261172"></script>
+  <script src="/static/js/app.js?v=20261172"></script>
 </body>
 </html>
