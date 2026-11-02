@@ -10154,9 +10154,14 @@
     const view = $('#' + viewId);
     if (!view) return;
     $$('#' + viewId + ' .card').forEach((card) => {
-      card.classList.toggle('feature-frozen', frozen);
-      if (frozen) card.setAttribute('inert', '');
-      else card.removeAttribute('inert');
+      card.classList.remove('feature-frozen');
+      card.removeAttribute('inert');
+      Array.from(card.children).forEach((child) => {
+        if (child.classList.contains('card-head')) return;
+        child.classList.toggle('feature-frozen', frozen);
+        if (frozen) child.setAttribute('inert', '');
+        else child.removeAttribute('inert');
+      });
     });
   }
 
