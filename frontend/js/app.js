@@ -243,6 +243,8 @@
     employeePerfName: '',
     employeePerfMode: 'unpaid',
     followupTab: 'customer',
+    reportTab: 'kas',
+    partsOutToday: 0,
     jasa: [],
     history: [],
     customerDirectory: [],
@@ -546,9 +548,12 @@
       fillTelegramForm();
       initPrinterSettings();
     }
-    if (view === 'pos' && !state.selectedCustomer) {
-      const search = $('#customerSearch');
-      if (search) search.focus();
+    if (view === 'pos') {
+      loadPartsOutToday();
+      if (!state.selectedCustomer) {
+        const search = $('#customerSearch');
+        if (search) search.focus();
+      }
     }
   }
 
@@ -2351,13 +2356,24 @@
       if (printAfter) showReceipt(result.receipt);
       resetPosState();
 
-      await Promise.all([loadDashboard(), loadStock()]);
+      await Promise.all([loadDashboard(), loadStock(), loadPartsOutToday()]);
     } catch (err) {
       toast(err.message, 'error', 7000);
     } finally {
       state.saving = false;
       setBusy(button, false);
     }
+  }
+
+  async function loadPartsOutToday() {
+    try {
+      const sold = await API.soldParts(todayISO(), todayISO());
+      state.partsOutToday = intValue(sold && sold.total_qty, 0);
+    } catch (err) {
+      state.partsOutToday = 0;
+    }
+    const el = $('#partsOutToday');
+    if (el) el.textContent = String(state.partsOutToday);
   }
 
   /* ------------------------------ Receipt --------------------------------- */
@@ -7904,6 +7920,14 @@
           fmtRp(day.total_transfer) +
           '</td>' +
           '<td class="text-right money">' +
+          fmtRp(
+            Math.max(
+              0,
+              Number(day.total_part || 0) - Number(day.laba_kotor || 0)
+            )
+          ) +
+          '</td>' +
+          '<td class="text-right money">' +
           fmtRp(day.laba_kotor) +
           '</td>' +
           '<td class="text-right money">' +
@@ -7916,13 +7940,13 @@
   }
 
   function renderSoldParts(sold, periodLabel) {
-    const wrap = $('#soldPartsWrap');
     const items = sold && Array.isArray(sold.items) ? sold.items : [];
     if (!items.length) {
       $('#soldPartsBody').innerHTML = '';
-      wrap.classList.add('hidden');
+      $('#soldPartsEmpty')?.classList.remove('hidden');
       return;
     }
+    $('#soldPartsEmpty')?.classList.add('hidden');
     $('#soldPartsNote').textContent =
       periodLabel +
       ' · ' +
@@ -7963,10 +7987,29 @@
           '</tr>'
       )
       .join('');
-    wrap.classList.remove('hidden');
   }
 
   let reportRequestId = 0;
+
+  function setReportTab(tab) {
+    state.reportTab = tab || 'kas';
+    $$('#reportTabSwitch [data-report-tab]').forEach((button) => {
+      button.classList.toggle(
+        'active',
+        button.dataset.reportTab === state.reportTab
+      );
+    });
+    $('#reportPanelKas').classList.toggle('hidden', state.reportTab !== 'kas');
+    $('#reportPanelRecent').classList.toggle(
+      'hidden',
+      state.reportTab !== 'recent'
+    );
+    $('#reportPanelPeriod').classList.toggle(
+      'hidden',
+      state.reportTab !== 'period'
+    );
+    $('#reportPanelSold').classList.toggle('hidden', state.reportTab !== 'sold');
+  }
 
   function renderReportRecent(records) {
     const body = $('#reportRecentBody');
@@ -10686,6 +10729,9 @@
     $('#btnLoadReport').addEventListener('click', loadReport);
     $('#reportPeriod').addEventListener('change', loadReport);
     $('#btnRefreshReportRecent').addEventListener('click', loadReport);
+    $$('#reportTabSwitch [data-report-tab]').forEach((button) =>
+      button.addEventListener('click', () => setReportTab(button.dataset.reportTab))
+    );
 
     $('#receiptWidthSwitch').addEventListener('click', onReceiptWidthClick);
     $('#btnBrowserPrint').addEventListener('click', () => {

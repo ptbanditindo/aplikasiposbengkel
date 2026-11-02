@@ -411,6 +411,7 @@
               <div class="summary-rows">
                 <div class="summary-row" id="jobSubtotalRow"><span>Subtotal jasa</span><strong id="jobSubtotal">Rp 0</strong></div>
                 <div class="summary-row"><span>Subtotal sparepart</span><strong id="partSubtotal">Rp 0</strong></div>
+                <div class="summary-row"><span>Sparepart keluar hari ini</span><strong id="partsOutToday">0</strong></div>
                 <div class="summary-row total"><span>Total nota</span><strong id="grandTotalValue">Rp 0</strong></div>
               </div>
               <p class="tiny muted hidden" id="summaryPreviewNote"></p>
@@ -695,6 +696,13 @@
           </div>
         </div>
 
+        <div class="segmented" id="reportTabSwitch" aria-label="Bagian laporan">
+          <button type="button" data-report-tab="kas" class="active">Laporan kas</button>
+          <button type="button" data-report-tab="recent">Transaksi terakhir</button>
+          <button type="button" data-report-tab="period">Transaksi pada periode</button>
+          <button type="button" data-report-tab="sold">Stok pernah terjual</button>
+        </div>
+
         <div class="card report-controls">
           <label class="field inline">
             <span>Periode laporan</span>
@@ -709,7 +717,8 @@
           <button type="button" class="btn btn-primary" id="btnLoadReport">Tampilkan</button>
         </div>
 
-        <div class="stats-grid stats-grid--report">
+        <div id="reportPanelKas">
+          <div class="stats-grid stats-grid--report">
           <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat semua nota pada periode" data-action="report-notas" data-filter="omset">
             <span class="stat-label">Total omset</span>
             <strong id="reportOmset">Rp 0</strong>
@@ -736,9 +745,27 @@
           </article>
         </div>
 
-        <div class="report-meta hidden" id="reportMeta"></div>
+          <div class="report-meta hidden" id="reportMeta"></div>
 
-        <section class="card">
+          <div class="card hidden" id="periodWrap">
+            <div class="card-head">
+              <div>
+                <h2>Rekap harian periode</h2>
+                <p class="muted" id="periodNote">Hanya hari yang memiliki transaksi.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="table table-period">
+                <thead>
+                  <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Modal sparepart</th><th class="text-right">Laba bersih sparepart</th><th class="text-right">Laba bersih jasa</th></tr>
+                </thead>
+                <tbody id="periodBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <section class="card hidden" id="reportPanelRecent">
           <div class="card-head">
             <div>
               <h2>Transaksi terakhir</h2>
@@ -765,7 +792,7 @@
           </div>
         </section>
 
-        <section class="card">
+        <section class="card hidden" id="reportPanelPeriod">
           <div class="card-head">
             <div>
               <h2>Transaksi pada periode</h2>
@@ -783,24 +810,7 @@
           </div>
         </section>
 
-        <div class="card hidden" id="periodWrap">
-          <div class="card-head">
-            <div>
-              <h2>Rekap harian periode</h2>
-              <p class="muted" id="periodNote">Hanya hari yang memiliki transaksi.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="table table-period">
-              <thead>
-                <tr><th>Tanggal</th><th class="text-center">Transaksi</th><th class="text-right">Omset</th><th class="text-right">Tunai</th><th class="text-right">Transfer</th><th class="text-right">Laba bersih sparepart</th><th class="text-right">Laba bersih jasa</th></tr>
-              </thead>
-              <tbody id="periodBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <section class="card hidden" id="soldPartsWrap">
+        <section class="card hidden" id="reportPanelSold">
           <div class="card-head">
             <div>
               <h2>Stok pernah terjual</h2>
@@ -814,6 +824,7 @@
               </thead>
               <tbody id="soldPartsBody"></tbody>
             </table>
+            <div class="empty-state hidden" id="soldPartsEmpty">Tidak ada penjualan sparepart pada periode ini.</div>
           </div>
         </section>
       </section>
