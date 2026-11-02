@@ -47,8 +47,21 @@ class TcpNetworkTransport(
         if (!current.isConnected || current.isClosed) {
             throw IOException("Socket printer sudah tertutup.")
         }
-        stream.write(bytes)
-        stream.flush()
+        var offset = 0
+        while (offset < bytes.size) {
+            val chunk = minOf(bytes.size - offset, WRITE_CHUNK_BYTES)
+            stream.write(bytes, offset, chunk)
+            stream.flush()
+            offset += chunk
+            if (offset < bytes.size) {
+                try {
+                    Thread.sleep(WRITE_GAP_MS)
+                } catch (error: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw IOException("Pengiriman struk jaringan terhenti.", error)
+                }
+            }
+        }
     }
 
     override fun isConnected(): Boolean {
@@ -62,5 +75,10 @@ class TcpNetworkTransport(
         val current = socket
         socket = null
         runCatching { current?.close() }
+    }
+
+    companion object {
+        private const val WRITE_CHUNK_BYTES = 1024
+        private const val WRITE_GAP_MS = 5L
     }
 }

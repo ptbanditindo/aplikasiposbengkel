@@ -39,8 +39,22 @@ class ClassicSppTransport(private val device: BluetoothDevice) : BluetoothTransp
     override fun write(bytes: ByteArray) {
         val current = socket ?: throw IOException("Socket printer belum dibuka.")
         if (!current.isConnected) throw IOException("Socket printer sudah tertutup.")
-        current.outputStream.write(bytes)
-        current.outputStream.flush()
+        val stream = current.outputStream
+        var offset = 0
+        while (offset < bytes.size) {
+            val chunk = minOf(bytes.size - offset, WRITE_CHUNK_BYTES)
+            stream.write(bytes, offset, chunk)
+            stream.flush()
+            offset += chunk
+            if (offset < bytes.size) {
+                try {
+                    Thread.sleep(WRITE_GAP_MS)
+                } catch (error: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw IOException("Pengiriman struk Bluetooth terhenti.", error)
+                }
+            }
+        }
     }
 
     override fun isConnected(): Boolean {
@@ -58,5 +72,10 @@ class ClassicSppTransport(private val device: BluetoothDevice) : BluetoothTransp
 
     companion object {
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+        // Buffer SPP printer Bluetooth umumnya kecil; kirim per potongan agar
+        // struk panjang tidak terpotong setengah.
+        private const val WRITE_CHUNK_BYTES = 128
+        private const val WRITE_GAP_MS = 20L
     }
 }
