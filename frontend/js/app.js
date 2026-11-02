@@ -8023,48 +8023,11 @@
       );
     });
     $('#reportPanelKas').classList.toggle('hidden', state.reportTab !== 'kas');
-    $('#reportPanelRecent').classList.toggle(
-      'hidden',
-      state.reportTab !== 'recent'
-    );
     $('#reportPanelPeriod').classList.toggle(
       'hidden',
       state.reportTab !== 'period'
     );
     $('#reportPanelSold').classList.toggle('hidden', state.reportTab !== 'sold');
-  }
-
-  function renderReportRecent(records) {
-    const body = $('#reportRecentBody');
-    if (!body) return;
-    const empty = $('#reportRecentEmpty');
-    if (!records.length) {
-      body.innerHTML = '';
-      if (empty) empty.classList.remove('hidden');
-      return;
-    }
-    if (empty) empty.classList.add('hidden');
-    body.innerHTML = records
-      .map(
-        (record) =>
-          '<tr class="is-clickable" data-action="record-detail" data-id="' +
-          record.id +
-          '">' +
-          '<td>' + esc(fmtDateTime(record.waktu_service)) + '</td>' +
-          '<td><button type="button" class="cell-link" data-action="record-detail" data-id="' +
-          record.id + '">' + esc(record.no_nota) + '</button>' +
-          statusBadge(record) + '</td>' +
-          '<td><button type="button" class="cell-link" data-action="customer-detail" data-id="' +
-          record.customer_id + '">' + esc(record.customer_nama) +
-          '</button><span class="cell-sub">' + esc(record.customer_hp) +
-          '</span></td>' +
-          '<td>' + esc(record.unit_deskripsi) + '</td>' +
-          '<td class="text-right money">' + fmtRp(netTotal(record)) + '</td>' +
-          '<td>' + metodeBadge(record.metode_bayar) + paymentBadge(record) + '</td>' +
-          '<td class="row-actions"><button type="button" class="btn btn-outline btn-xs" data-action="reprint" data-id="' +
-          record.id + '">Cetak ulang</button></td></tr>'
-      )
-      .join('');
   }
 
   async function loadReport() {
@@ -8095,7 +8058,6 @@
 
       state.reportRows = rows;
       state.reportLabel = periodLabel;
-      renderReportRecent(rows.slice(0, 6));
 
       $('#reportOmset').textContent = fmtRp(data.total_omset);
       $('#reportCash').textContent = fmtRp(data.total_cash);
@@ -10756,7 +10718,6 @@
 
     $('#btnLoadReport').addEventListener('click', loadReport);
     $('#reportPeriod').addEventListener('change', loadReport);
-    $('#btnRefreshReportRecent').addEventListener('click', loadReport);
     $$('#reportTabSwitch [data-report-tab]').forEach((button) =>
       button.addEventListener('click', () => setReportTab(button.dataset.reportTab))
     );

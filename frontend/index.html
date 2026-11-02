@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261160">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261161">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -698,7 +698,6 @@
 
         <div class="segmented" id="reportTabSwitch" aria-label="Bagian laporan">
           <button type="button" data-report-tab="kas" class="active">Laporan kas</button>
-          <button type="button" data-report-tab="recent">Transaksi terakhir</button>
           <button type="button" data-report-tab="period">Transaksi pada periode</button>
           <button type="button" data-report-tab="sold">Stok pernah terjual</button>
         </div>
@@ -764,33 +763,6 @@
             </div>
           </div>
         </div>
-
-        <section class="card hidden" id="reportPanelRecent">
-          <div class="card-head">
-            <div>
-              <h2>Transaksi terakhir</h2>
-              <p class="muted">6 nota terbaru pada periode laporan.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" id="btnRefreshReportRecent">Muat ulang</button>
-          </div>
-          <div class="table-wrap">
-            <table class="table table-recent">
-              <thead>
-                <tr>
-                  <th>Waktu</th>
-                  <th>No. nota</th>
-                  <th>Pelanggan</th>
-                  <th>Unit</th>
-                  <th class="text-right">Total</th>
-                  <th>Metode</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="reportRecentBody"></tbody>
-            </table>
-            <div class="empty-state hidden" id="reportRecentEmpty">Tidak ada transaksi pada periode ini.</div>
-          </div>
-        </section>
 
         <section class="card hidden" id="reportPanelPeriod">
           <div class="card-head">
@@ -2594,15 +2566,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261160"></script>
-  <script src="/static/js/api-client.js?v=20261160"></script>
-  <script src="/static/js/printer-manager.js?v=20261160"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261160"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261160"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261160"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261160"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261160"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261160"></script>
-  <script src="/static/js/app.js?v=20261160"></script>
+  <script src="/static/js/native-bridge.js?v=20261161"></script>
+  <script src="/static/js/api-client.js?v=20261161"></script>
+  <script src="/static/js/printer-manager.js?v=20261161"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261161"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261161"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261161"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261161"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261161"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261161"></script>
+  <script src="/static/js/app.js?v=20261161"></script>
 </body>
 </html>
