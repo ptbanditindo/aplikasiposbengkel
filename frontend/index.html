@@ -43,8 +43,8 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261216">
-  <link rel="stylesheet" href="/static/css/world.css?v=20261216">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261218">
+  <link rel="stylesheet" href="/static/css/world.css?v=20261218">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -1198,8 +1198,22 @@
           </div>
 
           <p class="tiny muted">
-            Gunakan file backup dari perangkat lain saat memasang aplikasi baru. Data saat ini
-            akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan.
+            Gunakan file backup database (.db) dari perangkat lain saat memasang aplikasi baru.
+            Data saat ini akan diganti, tetapi salinan pengaman dibuat otomatis sebelum
+            pemulihan. File Excel atau CSV tidak dapat dipulihkan.
+          </p>
+
+          <label class="field">
+            <span>Format backup manual</span>
+            <select class="input" id="manualBackupFormat">
+              <option value="db">Database (.db) - bisa dipulihkan</option>
+              <option value="xlsx">Excel (.xlsx) - data per tabel</option>
+              <option value="csv">CSV (.zip) - teks spreadsheet per tabel</option>
+            </select>
+          </label>
+          <p class="tiny muted" id="manualBackupHint">
+            Database (.db) dapat dipulihkan lewat Pulihkan data. Excel dan CSV hanya untuk
+            dibaca atau diolah; file pemulihan tetap harus .db.
           </p>
 
           <div class="backup-actions">
@@ -1212,8 +1226,8 @@
               <span class="tiny muted" id="settingsBackupHint">Menyimpan ke folder terpilih.</span>
             </div>
             <div class="backup-action hidden" id="shareBackupWrap">
-              <button type="button" class="btn btn-outline" id="settingsShareBackup">Bagikan database</button>
-              <span class="tiny muted">Data terbaru saat ini.</span>
+              <button type="button" class="btn btn-outline" id="settingsShareBackup">Bagikan backup</button>
+              <span class="tiny muted">Data terbaru sesuai format manual.</span>
             </div>
           </div>
           <input type="file" id="settingsRestoreFile" accept=".db,application/x-sqlite3,application/octet-stream" hidden>
@@ -1254,14 +1268,27 @@
           </div>
 
           <label class="field">
+            <span>Format backup otomatis</span>
+            <select class="input" id="backupFormat">
+              <option value="db">Database (.db) - bisa dipulihkan</option>
+              <option value="xlsx">Excel (.xlsx) - data per tabel</option>
+              <option value="csv">CSV (.zip) - teks spreadsheet per tabel</option>
+            </select>
+          </label>
+          <p class="tiny muted" id="backupFormatHint">
+            Database (.db) dapat dipulihkan lewat Pulihkan data. Excel dan CSV hanya untuk
+            dibaca atau diolah; file pemulihan tetap harus .db.
+          </p>
+
+          <label class="field">
             <span>Bot token Telegram</span>
             <input type="password" class="input" id="telegramToken" maxlength="200" autocomplete="new-password" placeholder="Kosongkan jika token sudah ada">
           </label>
 
           <p class="tiny muted">
-            Setiap kiriman berisi satu file backup lengkap: pelanggan, unit, riwayat servis,
-            transaksi keuangan, stok, dan pengaturan bengkel. Nama file memakai rentang tanggal,
-            jadi tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet. Jika
+            Setiap kiriman berisi satu berkas sesuai format yang dipilih: pelanggan, unit,
+            riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel. Database (.db)
+            dapat dipulihkan; Excel dan CSV hanya untuk dibaca. Butuh koneksi internet. Jika
             jadwal terlewat, backup dikirim begitu internet tersedia.
           </p>
 
@@ -1597,7 +1624,7 @@
     </main>
 
       <footer class="app-footer">
-        <span>BengkelPOS Radiator v2.6.0</span>
+        <span>BengkelPOS Radiator v2.7.0</span>
         <span>Berjalan tanpa internet</span>
       </footer>
     </div>
@@ -2824,15 +2851,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261216"></script>
-  <script src="/static/js/api-client.js?v=20261216"></script>
-  <script src="/static/js/printer-manager.js?v=20261216"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261216"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261216"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261216"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261216"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261216"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261216"></script>
-  <script src="/static/js/app.js?v=20261216"></script>
+  <script src="/static/js/native-bridge.js?v=20261218"></script>
+  <script src="/static/js/api-client.js?v=20261218"></script>
+  <script src="/static/js/printer-manager.js?v=20261218"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261218"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261218"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261218"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261218"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261218"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261218"></script>
+  <script src="/static/js/app.js?v=20261218"></script>
 </body>
 </html>

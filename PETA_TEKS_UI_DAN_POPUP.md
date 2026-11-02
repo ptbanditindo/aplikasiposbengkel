@@ -51,7 +51,7 @@ Aturan copy yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Karyawan, Supplier, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum diatur |
 | Catatan sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.6.0 |
+| Versi | BengkelPOS Radiator v2.7.0 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -301,10 +301,12 @@ Aturan copy yang dipakai:
 | Printer | Printer. Belum ada printer tersimpan. + Tambah printer |
 | Kosong printer | Belum ada printer. Tambahkan printer Bluetooth, Wi-Fi atau LAN, USB OTG, cetak Android, atau cetak browser. |
 | Catatan printer | Menghapus printer hanya menghapus konfigurasinya. Data transaksi, pelanggan, dan stok tidak ikut terhapus. |
-| Backup | Folder backup, Belum dipilih, Pilih folder, Pulihkan data, Backup manual, Bagikan database |
-| Catatan backup | Gunakan file backup dari perangkat lain saat memasang aplikasi baru. Data saat ini akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan. |
-| Telegram | Backup otomatis Telegram & lokal, Belum diatur, Kirim backup otomatis setiap hari, Jam kirim (waktu lokal), Chat ID penerima, Bot token Telegram |
-| Catatan Telegram | Setiap kiriman berisi satu file backup lengkap. Nama file memakai rentang tanggal. Butuh koneksi internet. Jika jadwal terlewat, backup dikirim begitu internet tersedia. |
+| Backup | Folder backup, Belum dipilih, Pilih folder, Format backup manual, Pulihkan data, Backup manual, Bagikan backup |
+| Format manual | Database (.db) - bisa dipulihkan, Excel (.xlsx) - data per tabel, CSV (.zip) - teks spreadsheet per tabel |
+| Catatan backup | Gunakan file backup database (.db) dari perangkat lain saat memasang aplikasi baru. Data saat ini akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan. File Excel atau CSV tidak dapat dipulihkan. |
+| Telegram | Backup otomatis Telegram & lokal, Belum diatur, Kirim backup otomatis setiap hari, Jam kirim (waktu lokal), Chat ID penerima, Bot token Telegram, Format backup otomatis |
+| Format backup | Database (.db) - bisa dipulihkan, Excel (.xlsx) - data per tabel, CSV (.zip) - teks spreadsheet per tabel |
+| Catatan Telegram | Setiap kiriman berisi satu berkas sesuai format yang dipilih. Database (.db) dapat dipulihkan; Excel dan CSV hanya untuk dibaca. Butuh koneksi internet. Jika jadwal terlewat, backup dikirim begitu internet tersedia. |
 | Aksi Telegram | Simpan pengaturan, Kirim backup sekarang |
 | Keamanan | Keamanan aplikasi. PIN diminta setiap aplikasi dibuka dan setelah aplikasi lama di latar belakang. Kunci otomatis setelah di latar belakang. Kunci sekarang |
 

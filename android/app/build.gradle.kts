@@ -36,8 +36,8 @@ android {
         applicationId = "com.bengkelpos.radiator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "2.6.0"
+        versionCode = 19
+        versionName = "2.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -107,6 +107,8 @@ chaquopy {
             install("certifi==2024.8.30")
             install("python-multipart==0.0.9")
             install("python-dotenv==1.0.1")
+            install("openpyxl==3.1.5")
+            install("et-xmlfile==2.0.0")
         }
     }
 }

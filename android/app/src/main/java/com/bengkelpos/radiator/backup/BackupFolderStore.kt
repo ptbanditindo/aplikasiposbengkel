@@ -24,10 +24,8 @@ object BackupFolderStore {
     private const val KEY_URI = "tree_uri"
     private const val KEY_NAME = "display_name"
     private const val KEY_COPIED = "last_copied_name"
-    private const val MIME_TYPE = "application/x-sqlite3"
-    private val BACKUP_NAME = Regex("bengkel_radiator_[0-9_]+\\.db")
 
-    fun isValidBackupName(name: String): Boolean = BACKUP_NAME.matches(name)
+    fun isValidBackupName(name: String): Boolean = BackupFileFormat.isValidName(name)
 
     fun save(context: Context, uri: Uri, name: String?) {
         val label = name?.trim().takeUnless { it.isNullOrEmpty() }
@@ -73,7 +71,12 @@ object BackupFolderStore {
             .getOrElse { throw IOException("Folder backup tidak dapat dibaca.") }
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId)
         val name = uniqueName(context, tree, treeId, displayName)
-        val document = DocumentsContract.createDocument(resolver, parent, MIME_TYPE, name)
+        val document = DocumentsContract.createDocument(
+            resolver,
+            parent,
+            BackupFileFormat.mimeType(name),
+            name,
+        )
             ?: throw IOException("Tidak dapat membuat file di folder backup.")
 
         try {
@@ -155,12 +158,14 @@ object BackupFolderStore {
 
         if (displayName !in names) return displayName
 
-        val base = displayName.removeSuffix(".db")
+        val dot = displayName.lastIndexOf('.')
+        val base = if (dot > 0) displayName.substring(0, dot) else displayName
+        val extension = if (dot > 0) displayName.substring(dot) else ""
         var index = 1
-        while ("${base}_$index.db" in names) {
+        while ("${base}_$index$extension" in names) {
             index += 1
         }
-        return "${base}_$index.db"
+        return "${base}_$index$extension"
     }
 
     private fun clear(context: Context) {

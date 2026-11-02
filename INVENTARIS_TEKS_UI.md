@@ -52,7 +52,7 @@ Aturan yang dipakai:
 | Menu | Ringkasan, Kasir, Riwayat servis, Pelanggan, Follow up, Stok, Jasa, Laporan, Pengaturan |
 | Status printer | Printer belum siap |
 | Catatan kaki sidebar | Data tersimpan di perangkat ini |
-| Versi | BengkelPOS Radiator v2.6.0 |
+| Versi | BengkelPOS Radiator v2.7.0 |
 | Status koneksi | Berjalan tanpa internet |
 
 ## 3. Ringkasan
@@ -393,15 +393,17 @@ Aturan yang dipakai:
 | --- | --- |
 | Judul | Backup dan pemulihan |
 | Keterangan | Satu file berisi data pelanggan, unit, riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel. |
-| Petunjuk | Gunakan file backup dari perangkat lain saat memasang aplikasi baru. Data saat ini akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan. |
-| Tombol | Unduh backup, Bagikan backup, Pulihkan data |
+| Petunjuk | Gunakan file backup database (.db) dari perangkat lain saat memasang aplikasi baru. Data saat ini akan diganti, tetapi salinan pengaman dibuat otomatis sebelum pemulihan. File Excel atau CSV tidak dapat dipulihkan. |
+| Format manual | Format backup manual: Database (.db) - bisa dipulihkan; Excel (.xlsx) - data per tabel; CSV (.zip) - teks spreadsheet per tabel |
+| Petunjuk format manual | Database (.db) dapat dipulihkan lewat Pulihkan data. Excel dan CSV hanya untuk dibaca atau diolah; file pemulihan tetap harus .db. |
+| Tombol | Pulihkan data, Backup manual, Bagikan backup |
 | Konfirmasi pulihkan | Pulihkan data dari "<nama file>"? Seluruh data saat ini akan diganti. Salinan pengaman tetap dibuat otomatis. |
 | Proses | Memulihkan... |
 | Sukses | Data berhasil dipulihkan. Menyiapkan ulang aplikasi... Data berhasil dipulihkan. Memuat ulang aplikasi... |
 | Gagal muat ulang | Data sudah dipulihkan, tetapi aplikasi gagal dimuat ulang. Tutup lalu buka aplikasi. |
 | Gagal pulihkan | Data gagal dipulihkan. Periksa file backup lalu coba lagi. |
 | Proses backup | Membuat backup... |
-| Sukses backup | Backup tersimpan ke <lokasi>: <nama file>. |
+| Sukses backup | Backup <format> tersimpan ke <lokasi>: <nama file>. File ini bukan berkas pemulihan. |
 | Gagal backup | Backup gagal dibuat. Periksa ruang penyimpanan lalu coba lagi. |
 | Gagal bagikan | Backup gagal dibagikan. Coba lagi. |
 
@@ -415,15 +417,17 @@ Aturan yang dipakai:
 | Status backup | Belum ada backup terjadwal. Backup terakhir: <waktu>. Backup otomatis terakhir gagal. Periksa ruang penyimpanan dan izin aplikasi. |
 | Peringatan basi | Backup terakhir lebih dari 2 hari. Periksa jadwal dan ruang penyimpanan. |
 | Sakelar | Kirim backup otomatis setiap hari |
-| Kolom | Jam kirim (waktu lokal), Chat ID penerima, Bot token Telegram |
+| Kolom | Jam kirim (waktu lokal), Chat ID penerima, Bot token Telegram, Format backup otomatis |
+| Format backup | Database (.db) - bisa dipulihkan; Excel (.xlsx) - data per tabel; CSV (.zip) - teks spreadsheet per tabel |
+| Petunjuk format | Database (.db) dapat dipulihkan lewat Pulihkan data. Excel dan CSV hanya untuk dibaca atau diolah; file pemulihan tetap harus .db. |
 | Status jadwal | Aktif, mengirim otomatis setiap hari pukul <jam>. Pengiriman otomatis nonaktif (jadwal <jam>). |
 | Riwayat | Terakhir dikirim <waktu>. Belum pernah dikirim. Pengiriman terakhir gagal. Periksa token, Chat ID, dan koneksi internet. |
-| Penjelasan | Setiap kiriman berisi satu file backup lengkap: pelanggan, unit, riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel. Nama file memakai rentang tanggal, jadi tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet. Jika jadwal terlewat, backup dikirim begitu internet tersedia. |
+| Penjelasan | Setiap kiriman berisi satu berkas sesuai format yang dipilih: pelanggan, unit, riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel. Database (.db) dapat dipulihkan; Excel dan CSV hanya untuk dibaca. Butuh koneksi internet. Jika jadwal terlewat, backup dikirim begitu internet tersedia. |
 | Tombol | Kirim backup sekarang, Simpan pengaturan Telegram |
 | Validasi kirim | Simpan bot token dan chat ID terlebih dahulu. |
 | Sukses kirim | Backup terkirim: <nama file> (N nota). |
 | Gagal kirim | Backup gagal dikirim. Periksa token, Chat ID, dan koneksi internet. |
-| Sukses simpan | Pengaturan Telegram tersimpan. |
+| Sukses simpan | Pengaturan backup tersimpan. |
 | Gagal simpan | Pengaturan Telegram gagal disimpan. Coba lagi. |
 
 ### 12.6 Keamanan aplikasi

@@ -35,7 +35,8 @@ WorkManager (ScheduledBackupWorker)
   `files/data/bengkel_radiator.db`, backup di `files/backups/`, dan konfigurasi
   printer di `files/data/printer_config.json`. Salinan backup tambahan ditulis
   ke folder yang dipilih pengguna lewat Storage Access Framework; tanpa
-  pilihan folder, salinan jatuh ke Unduhan.
+  pilihan folder, salinan jatuh ke Unduhan. Format backup otomatis dan manual
+  mengikuti Pengaturan: `.db` (dapat dipulihkan), `.xlsx`, atau `.zip` berisi CSV.
 - **Server** hanya mendengarkan `127.0.0.1` pada port bebas pertama di
   8000-8010. `BackendManager` baru menandai server siap setelah `/api/health`
   menjawab, sehingga tombol "Coba lagi" benar-benar memulai ulang bila port
@@ -134,15 +135,16 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
 ## Hasil build terakhir
 
 - Berkas: `android/app/build/outputs/apk/debug/app-debug.apk`
-- Ukuran: 45.215.484 byte
-- SHA-256: `200760f7693a4ca041abfc4c7a5d98f71a62a9d47f5012294ee9334db1a7348b`
-- Paket: `com.bengkelpos.radiator`, versionName `2.6.0`, versionCode `18`,
+- Ukuran: 45.481.988 byte
+- SHA-256: `0291019d580546f868e5253018f887c716559103841f1000162ad647a3095ca2`
+- Paket: `com.bengkelpos.radiator`, versionName `2.7.0`, versionCode `19`,
   minSdk 26, targetSdk 35, debug-signed.
-- Asset `assets/bengkel_backend.zip`: 387.630 byte, SHA-256
-  `13ba86cdd2d58c9bcf8733953c29aa53090ffaff177057b3da41bcfe18a32cab`.
-  ZIP ini memuat desain workbench ledger, lima tema warna (navy-oranye,
-  charcoal-kuning, biru-teal, putih, hitam) dengan mode terang/gelap, font Plus Jakarta Sans
-  lokal, serta logika follow-up, supplier/reseller, karyawan, struk, dan
+- Asset `assets/bengkel_backend.zip`: 392.493 byte, SHA-256
+  `c828bc713ad410554c8a2f216abccffec6e71d0933614730bd979a1ffb46858c`.
+  ZIP ini memuat ekspor backup Excel/CSV, pilihan format manual, desain
+  workbench ledger, lima tema warna (navy-oranye, charcoal-kuning, biru-teal,
+  putih, hitam) dengan mode terang/gelap, font Plus Jakarta Sans lokal, serta
+  logika follow-up, supplier/reseller, karyawan, struk, dan
   estimasi laba bersih.
 - Pytest dua stack lulus 363 test. Unit test Kotlin debug lulus 154 test.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada

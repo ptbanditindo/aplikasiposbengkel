@@ -1238,6 +1238,7 @@ class TelegramSettingsIn(CompatBase):
     jam: str = Field(default="21:00", **_pattern(r"^([01]\d|2[0-3]):[0-5]\d$"))
     chat_id: str = Field(default="", max_length=64)
     bot_token: str = Field(default="", max_length=200)
+    format: Optional[str] = None
 
 
 class TelegramInfoOut(CompatBase):
@@ -1256,6 +1257,7 @@ class BackupStatusOut(CompatBase):
     last_status: Optional[str] = None
     last_error: Optional[str] = None
     last_telegram_at: Optional[str] = None
+    format: str = "db"
     stale: bool = False
     stale_days: int = 2
 

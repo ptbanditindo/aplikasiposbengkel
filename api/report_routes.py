@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 UPLOAD_PREFIX = "upload_restore_"
-BACKUP_DOWNLOAD_NAME = re.compile(r"bengkel_radiator_[0-9_]+\.db")
+BACKUP_DOWNLOAD_NAME = re.compile(
+    r"bengkel_radiator_[0-9_]+(?:_csv)?\.(?:db|xlsx|zip)"
+)
 
 router = APIRouter(
     tags=["Laporan & Administrasi"], dependencies=[Depends(require_auth)]
@@ -91,12 +93,23 @@ def sold_parts(
     response_class=FileResponse,
     dependencies=[Depends(require_owner)],
 )
-def backup_database():
-    """Unduh salinan database SQLite (Ref: PRD TC-20)."""
-    path = backup_service.create_backup()
+def backup_database(
+    backup_format: str = Query(default="db", alias="format"),
+):
+    """Unduh salinan database atau ekspor spreadsheet (Ref: PRD TC-20)."""
+    fmt = backup_format.strip().lower()
+    if fmt not in backup_service.BACKUP_FORMATS:
+        raise HTTPException(
+            status_code=400, detail="Format backup harus db, xlsx, atau csv."
+        )
+    path = (
+        backup_service.create_backup()
+        if fmt == "db"
+        else backup_service.create_export(fmt)
+    )
     return FileResponse(
         path=str(path),
-        media_type="application/x-sqlite3",
+        media_type=backup_service.mime_type_for(path),
         filename=path.name,
     )
 
@@ -115,7 +128,7 @@ def download_backup_file(filename: str):
         raise HTTPException(status_code=404, detail="File backup tidak ditemukan.")
     return FileResponse(
         path=str(path),
-        media_type="application/x-sqlite3",
+        media_type=backup_service.mime_type_for(path),
         filename=filename,
     )
 

@@ -42,6 +42,7 @@ MAX_DOCUMENT_BYTES = 50 * 1024 * 1024  # batas kirim dokumen Bot API Telegram
 PENDING_BACKUP_KEY = "telegram.pending_backup_path"
 PENDING_BACKUP_DATE_KEY = "telegram.pending_backup_date"
 PENDING_BACKUP_STAMP_KEY = "telegram.pending_backup_stamp"
+PENDING_BACKUP_FORMAT_KEY = "telegram.pending_backup_format"
 
 # Tabel berisi data yang harus ikut snapshot. Jumlah baris mendeteksi data
 # baru; `updated_at` mendeteksi perubahan pada baris yang sudah ada.
@@ -85,6 +86,7 @@ def _clear_pending_backup(db: Session) -> None:
     settings_service.set_setting(db, PENDING_BACKUP_KEY, "")
     settings_service.set_setting(db, PENDING_BACKUP_DATE_KEY, "")
     settings_service.set_setting(db, PENDING_BACKUP_STAMP_KEY, "")
+    settings_service.set_setting(db, PENDING_BACKUP_FORMAT_KEY, "")
 
 
 def _data_stamp(db: Session) -> str:
@@ -118,11 +120,15 @@ def _pending_backup(db: Session) -> Optional[Path]:
     path = _safe_backup_path(raw)
     stored_date = settings_service.get_setting(db, PENDING_BACKUP_DATE_KEY)
     stored_stamp = settings_service.get_setting(db, PENDING_BACKUP_STAMP_KEY)
+    stored_format = settings_service.get_setting(db, PENDING_BACKUP_FORMAT_KEY)
+    active_format = settings_service.get_backup_format(db)
     if (
         path is None
         or stored_date != date.today().isoformat()
         or not path.exists()
         or stored_stamp != _data_stamp(db)
+        or stored_format != active_format
+        or backup_service.format_of(path) != active_format
     ):
         _clear_pending_backup(db)
         db.commit()
@@ -133,12 +139,17 @@ def _pending_backup(db: Session) -> Optional[Path]:
 def _create_snapshot(db: Session) -> Path:
     """Buat snapshot baru dan catat stempel data saat snapshot diambil."""
     stamp = _data_stamp(db)
-    path = backup_service.create_backup()
+    active_format = settings_service.get_backup_format(db)
+    if active_format == "db":
+        path = backup_service.create_backup()
+    else:
+        path = backup_service.create_export(active_format)
     settings_service.set_setting(db, PENDING_BACKUP_KEY, str(path))
     settings_service.set_setting(
         db, PENDING_BACKUP_DATE_KEY, date.today().isoformat()
     )
     settings_service.set_setting(db, PENDING_BACKUP_STAMP_KEY, stamp)
+    settings_service.set_setting(db, PENDING_BACKUP_FORMAT_KEY, active_format)
     db.commit()
     return path
 
@@ -152,18 +163,22 @@ def data_range(db: Session) -> tuple[date, date]:
     return start, end
 
 
-def backup_filename(start: date, end: date) -> str:
-    return f"bengkel_radiator_{start:%Y%m%d}-{end:%Y%m%d}.db"
+def backup_filename(start: date, end: date, fmt: str = "db") -> str:
+    suffix = {"db": ".db", "xlsx": ".xlsx", "csv": "_csv.zip"}.get(fmt, ".db")
+    return f"bengkel_radiator_{start:%Y%m%d}-{end:%Y%m%d}{suffix}"
 
 
-def _caption(db: Session, start: date, end: date) -> str:
+def _caption(db: Session, start: date, end: date, fmt: str = "db") -> str:
     nama = sanitize_ascii(settings_service.get_bengkel_info(db)["nama"])
     jumlah = db.scalar(select(func.count()).select_from(ServiceRecord)) or 0
-    return (
+    caption = (
         f"Backup {nama}\n"
         f"Data {start:%d/%m/%Y} s/d {end:%d/%m/%Y}\n"
         f"{jumlah} nota tersimpan"
     )
+    if fmt != "db":
+        caption += "\nFormat spreadsheet; bukan berkas pemulihan."
+    return caption
 
 
 def _send_document(
@@ -174,11 +189,12 @@ def _send_document(
     caption: str,
 ) -> None:
     url = f"{settings.telegram_api_base.rstrip('/')}/bot{token}/sendDocument"
+    mime_type = backup_service.mime_type_for(Path(filename))
     with path.open("rb") as handle:
         response = httpx.post(
             url,
             data={"chat_id": chat_id, "caption": caption},
-            files={"document": (filename, handle, "application/x-sqlite3")},
+            files={"document": (filename, handle, mime_type)},
             timeout=60.0,
         )
 
@@ -234,6 +250,7 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
     with BACKUP_LOCK:
         config = settings_service.get_telegram_config(db)
         ready = bool(config["bot_token"] and config["chat_id"])
+        active_format = settings_service.get_backup_format(db)
         now = datetime.now()
         try:
             path = _pending_backup(db) or _create_snapshot(db)
@@ -249,6 +266,7 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
                 "status": "ok",
                 "local_saved": True,
                 "filename": path.name,
+                "format": active_format,
                 "size_bytes": path.stat().st_size,
                 "created_at": now.isoformat(timespec="seconds"),
                 "telegram_ready": False,
@@ -267,6 +285,7 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
                 "status": "failed",
                 "local_saved": True,
                 "filename": path.name,
+                "format": active_format,
                 "size_bytes": path.stat().st_size,
                 "created_at": now.isoformat(timespec="seconds"),
                 "telegram_ready": True,
@@ -281,6 +300,7 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
             "status": "ok",
             "local_saved": True,
             "filename": path.name,
+            "format": active_format,
             "size_bytes": path.stat().st_size,
             "created_at": now.isoformat(timespec="seconds"),
             "telegram_ready": True,
@@ -299,6 +319,7 @@ def _send_snapshot(db: Session, backup_path: Path) -> Dict[str, Any]:
         )
 
     start, end = data_range(db)
+    active_format = settings_service.get_backup_format(db)
     if backup_path.stat().st_size > MAX_DOCUMENT_BYTES:
         # Snapshot lokal tetap disimpan; hanya pengiriman Telegram yang batal.
         _clear_pending_backup(db)
@@ -308,8 +329,8 @@ def _send_snapshot(db: Session, backup_path: Path) -> Dict[str, Any]:
             "bot Telegram). Unduh backup manual dari menu Pengaturan."
         )
 
-    filename = backup_filename(start, end)
-    caption = _caption(db, start, end)
+    filename = backup_filename(start, end, active_format)
+    caption = _caption(db, start, end, active_format)
     now = datetime.now()
 
     try:
@@ -354,6 +375,7 @@ def _same_day_backup(db: Session, moment: datetime) -> Optional[Path]:
     if pending is not None:
         return pending
 
+    active_format = settings_service.get_backup_format(db)
     stored_name = settings_service.get_setting(
         db, settings_service.BACKUP_LAST_FILENAME_KEY
     )
@@ -369,6 +391,7 @@ def _same_day_backup(db: Session, moment: datetime) -> Optional[Path]:
     if (
         path is not None
         and path.exists()
+        and backup_service.format_of(path) == active_format
         and last_at[:10] == moment.date().isoformat()
     ):
         return path

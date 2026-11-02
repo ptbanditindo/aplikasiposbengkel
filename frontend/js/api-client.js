@@ -111,7 +111,7 @@
 
   const qs = (value) => encodeURIComponent(value == null ? '' : String(value));
 
-  async function downloadBackupBlob(path, method) {
+  async function downloadBackupBlob(path, method, extension) {
     const headers = {};
     const token = installToken();
     if (token) headers['X-Install-Token'] = token;
@@ -154,9 +154,13 @@
     const blob = await response.blob();
     const disposition = response.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/i);
+    const fallbackSuffix =
+      extension === 'xlsx' ? '.xlsx' : extension === 'csv' ? '_csv.zip' : '.db';
     const filename =
       (match && match[1]) ||
-      'bengkel_radiator_backup_' + new Date().toISOString().slice(0, 10) + '.db';
+      'bengkel_radiator_backup_' +
+        new Date().toISOString().slice(0, 10) +
+        fallbackSuffix;
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -482,16 +486,25 @@
             : '')
       ),
 
-    downloadBackup: async () => {
+    downloadBackup: async (format) => {
+      const fmt = format || 'db';
       // APK: file ditulis native ke folder pilihan (atau Unduhan) dan ukurannya diverifikasi.
       if (window.BengkelBridge && window.BengkelBridge.available()) {
-        const result = await window.BengkelBridge.call('saveBackup', {}, 180000);
+        const result = await window.BengkelBridge.call(
+          'saveBackup',
+          { format: fmt },
+          180000
+        );
         return {
           filename: result.filename,
           location: result.location || 'folder Unduhan',
         };
       }
-      return downloadBackupBlob('/api/admin/backup', 'POST');
+      return downloadBackupBlob(
+        '/api/admin/backup?format=' + encodeURIComponent(fmt),
+        'POST',
+        fmt
+      );
     },
 
     downloadBackupFile: (filename) =>

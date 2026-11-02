@@ -183,8 +183,7 @@ build step) di `http://127.0.0.1:8000`.
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
   tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build
-  kode terbaru adalah **2.6.0**; APK debug yang sudah dibangun juga **2.6.0**
-  (versionCode 18).
+  kode terbaru dan APK debug terakhir adalah **2.7.0** (versionCode 19).
 
 ## Menjalankan versi web/desktop
 
@@ -234,8 +233,11 @@ Backup lokal harian selalu dibuat. Di versi desktop, penjadwal berjalan selama
 aplikasi terbuka; di APK, WorkManager menjalankan jadwal harian dan dapat
 menyalakan backend sebentar untuk membuat snapshot. Pengiriman Telegram adalah
 tambahan opsional: bila token dan Chat ID diisi, file snapshot yang sama dikirim
-ke chat bot. Nilai `APP_ENV=test` mematikan penjadwal agar test tidak berjalan
-latar.
+ke chat bot. Format backup otomatis dapat dipilih di Pengaturan: database
+(`.db`), Excel (`.xlsx`), atau CSV dalam ZIP. Database dapat dipulihkan; Excel
+dan CSV hanya untuk dibaca atau diolah. Backup manual dan bagikan mengikuti
+pilihan format manual di Pengaturan; pemulihan tetap memakai `.db`. Nilai
+`APP_ENV=test` mematikan penjadwal agar test tidak berjalan latar.
 
 `.env` **tidak pernah** ikut di-commit; hanya `.env.example`. Identitas bengkel
 dan konfigurasi Telegram yang disimpan lewat UI berada di database dan
@@ -282,7 +284,7 @@ tidak tersedia di PATH.
 Detail arsitektur, versi dependensi, hasil build, dan batasan ada di
 [`android/README_APK.md`](android/README_APK.md). Perilaku PIN, lockout, dan
 alur reset ada di [`android/README_PIN.md`](android/README_PIN.md). Build debug
-terakhir yang dibangun adalah versi **2.6.0** (versionCode 18).
+terakhir yang dibangun adalah versi **2.7.0** (versionCode 19).
 
 Di APK, backend berjalan dengan `AUTH_MODE=install-token`: setiap request
 membawa header `X-Install-Token` dari token acak per instalasi yang disimpan
@@ -354,9 +356,10 @@ alur pendaftaran dapat dicoba dari awal.
   rahasia yang tersimpan di database, sehingga reset PIN membatalkan sesi lama.
 - Server hanya mendengar loopback, memvalidasi `Host`, menolak `Origin` asing
   untuk permintaan tulis, dan tidak membuka dokumentasi API otomatis.
-- File backup meredaksi token bot Telegram; database aktif tetap menyimpan
-  token karena dibutuhkan untuk pengiriman. Konfigurasi printer disimpan di
-  berkas terpisah dan tidak ikut masuk database atau backup.
+- File backup database meredaksi PIN, sesi, dan token bot Telegram. Ekspor
+  Excel/CSV juga meredaksi nilai rahasia tersebut; database aktif tetap
+  menyimpan token karena dibutuhkan untuk pengiriman. Konfigurasi printer
+  disimpan di berkas terpisah dan tidak ikut masuk database atau backup.
 - Di APK: hash PIN + salt di EncryptedSharedPreferences, layar PIN memakai
   `FLAG_SECURE`, `allowBackup=false`, dan server hanya mendengar `127.0.0.1`.
 - Data transaksi tidak dikirim ke layanan pihak ketiga; Telegram hanya dipakai

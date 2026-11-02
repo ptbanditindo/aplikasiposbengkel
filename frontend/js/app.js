@@ -11052,12 +11052,61 @@
     status.textContent = parts.join(' ');
   }
 
+  const BACKUP_FORMAT_HINTS = {
+    db: 'Database (.db) dapat dipulihkan lewat Pulihkan data.',
+    xlsx:
+      'Excel berisi satu lembar per tabel dan bisa dibuka di Excel atau Google Sheets. ' +
+      'Bukan berkas pemulihan; pemulihan tetap memakai .db.',
+    csv:
+      'ZIP berisi satu CSV per tabel dan bisa diimpor ke spreadsheet. ' +
+      'Bukan berkas pemulihan; pemulihan tetap memakai .db.',
+  };
+  const MANUAL_BACKUP_FORMAT_KEY = 'bengkel.manualBackupFormat';
+
+  function backupFormatLabel(format) {
+    return { db: 'database', xlsx: 'Excel', csv: 'CSV' }[format] || 'database';
+  }
+
+  function manualBackupFormat() {
+    const select = $('#manualBackupFormat');
+    return select && BACKUP_FORMAT_HINTS[select.value] ? select.value : 'db';
+  }
+
+  function renderManualBackupHint() {
+    const hint = $('#manualBackupHint');
+    if (!hint) return;
+    hint.textContent = BACKUP_FORMAT_HINTS[manualBackupFormat()] || BACKUP_FORMAT_HINTS.db;
+  }
+
+  function initManualBackupFormat() {
+    const select = $('#manualBackupFormat');
+    if (!select) return;
+    let saved = '';
+    try {
+      saved = window.localStorage.getItem(MANUAL_BACKUP_FORMAT_KEY) || '';
+    } catch (err) {
+      saved = '';
+    }
+    select.value = BACKUP_FORMAT_HINTS[saved] ? saved : 'db';
+    renderManualBackupHint();
+  }
+
+  function renderBackupFormatHint() {
+    const select = $('#backupFormat');
+    const hint = $('#backupFormatHint');
+    if (!select || !hint) return;
+    hint.textContent = BACKUP_FORMAT_HINTS[select.value] || BACKUP_FORMAT_HINTS.db;
+  }
+
   function fillTelegramForm() {
     const telegram = state.config && state.config.telegram;
     if (!telegram) return;
     $('#telegramAktif').checked = Boolean(telegram.enabled);
     $('#telegramJam').value = telegram.jam || '21:00';
     $('#telegramChatId').value = telegram.chat_id || '';
+    const backup = (state.config && state.config.backup) || {};
+    $('#backupFormat').value = backup.format || 'db';
+    renderBackupFormatHint();
     renderTelegramStatus(telegram);
     renderBackupStatus();
     syncBackupPlatformUi();
@@ -11140,9 +11189,12 @@
     const backup = (state.config && state.config.backup) || {};
 
     const parts = [];
+    const kind = backup.format && backup.format !== 'db'
+      ? ' (' + backupFormatLabel(backup.format) + ')'
+      : '';
     parts.push(
       backup.last_local_at
-        ? 'Backup terakhir: ' + fmtDateTime(backup.last_local_at) + '.'
+        ? 'Backup terakhir' + kind + ': ' + fmtDateTime(backup.last_local_at) + '.'
         : 'Belum ada backup otomatis tersimpan.'
     );
     if (backup.last_status === 'failed' && backup.last_error) {
@@ -11206,14 +11258,16 @@
       jam: jam,
       chat_id: $('#telegramChatId').value.trim(),
       bot_token: $('#telegramToken').value.trim(),
+      format: $('#backupFormat').value || 'db',
     };
 
     setBusy(button, true, 'Menyimpan...');
     try {
       state.config.telegram = await API.updateTelegram(payload);
+      if (state.config.backup) state.config.backup.format = payload.format;
       $('#telegramToken').value = '';
       fillTelegramForm();
-      toast('Pengaturan Telegram tersimpan.', 'success');
+      toast('Pengaturan backup tersimpan.', 'success');
     } catch (err) {
       toast('Pengaturan Telegram gagal disimpan. Coba lagi.', 'error', 6000);
     } finally {
@@ -11246,21 +11300,32 @@
         }
       }
       const notes = result.jumlah_nota != null ? result.jumlah_nota + ' nota' : '';
+      const formatName = backupFormatLabel(result.format);
+      const restoreNote =
+        result.format && result.format !== 'db'
+          ? ' File ini bukan berkas pemulihan.'
+          : '';
       if (result.telegram_sent) {
         toast(
-          'Backup terkirim ke Telegram' +
+          'Backup ' +
+            formatName +
+            ' terkirim ke Telegram' +
             (local ? ' dan ' + target : '') +
             (notes ? ' (' + notes + ')' : '') +
-            '.',
+            '.' +
+            restoreNote,
           'success',
           7000
         );
       } else if (local) {
         toast(
-          'Backup tersimpan di ' +
+          'Backup ' +
+            formatName +
+            ' tersimpan di ' +
             target +
             '. Telegram belum dikirim: ' +
-            (result.telegram_error || 'token dan chat ID belum lengkap.'),
+            (result.telegram_error || 'token dan chat ID belum lengkap.') +
+            restoreNote,
           'warning',
           9000
         );
@@ -11338,17 +11403,25 @@
 
   async function handleBackup() {
     const button = $('#settingsBackup');
+    const format = manualBackupFormat();
+    const formatName = backupFormatLabel(format);
+    const restoreNote =
+      format !== 'db' ? ' File ini bukan berkas pemulihan.' : '';
     setBusy(button, true, 'Membuat backup...');
     try {
-      const result = (await API.downloadBackup()) || {};
+      const result = (await API.downloadBackup(format)) || {};
       const locationText = result.location ? ' ke ' + result.location : '';
       toast(
-        'Backup tersimpan' +
+        'Backup ' +
+          formatName +
+          ' tersimpan' +
           locationText +
           ': ' +
-          (result.filename || 'file backup'),
+          (result.filename || 'file backup') +
+          '.' +
+          restoreNote,
         'success',
-        6000
+        7000
       );
       refreshBackupFolder();
     } catch (err) {
@@ -11363,7 +11436,11 @@
     const button = $('#settingsShareBackup');
     setBusy(button, true, 'Menyiapkan...');
     try {
-      await window.BengkelBridge.call('shareBackupNow', {}, 180000);
+      await window.BengkelBridge.call(
+        'shareBackupNow',
+        { format: manualBackupFormat() },
+        180000
+      );
     } catch (err) {
       toast(
         (err && err.message) || 'Backup gagal dibagikan. Coba lagi.',
@@ -11976,6 +12053,14 @@
     $('#receiptSettingsForm').addEventListener('submit', handleReceiptSettingsSubmit);
 
     $('#settingsBackup').addEventListener('click', handleBackup);
+    $('#manualBackupFormat').addEventListener('change', () => {
+      try {
+        window.localStorage.setItem(MANUAL_BACKUP_FORMAT_KEY, manualBackupFormat());
+      } catch (err) {
+        // Pilihan tetap berlaku selama halaman terbuka bila penyimpanan diblokir.
+      }
+      renderManualBackupHint();
+    });
     $('#backupFolderChoose').addEventListener('click', chooseBackupFolder);
     $('#autoBackupFolderChoose').addEventListener('click', chooseBackupFolder);
     $('#settingsShareBackup').addEventListener('click', handleShareBackup);
@@ -11984,6 +12069,7 @@
 
     $('#telegramForm').addEventListener('submit', handleTelegramSubmit);
     $('#telegramSendNow').addEventListener('click', handleTelegramSendNow);
+    $('#backupFormat').addEventListener('change', renderBackupFormatHint);
 
     $('#authSetupForm').addEventListener('submit', handleAuthSetupSubmit);
     $('#authLoginForm').addEventListener('submit', handleAuthLoginSubmit);
@@ -12304,6 +12390,7 @@
   async function init() {
     initTheme();
     initFontSizes();
+    initManualBackupFormat();
     bindEvents();
     initSettingsAccordion();
     $$('.money-input').forEach(formatMoneyField);

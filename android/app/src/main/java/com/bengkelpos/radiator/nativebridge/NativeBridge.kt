@@ -14,6 +14,7 @@ import android.webkit.WebView
 import com.bengkelpos.radiator.ExternalLinkPolicy
 import com.bengkelpos.radiator.R
 import com.bengkelpos.radiator.backend.BackendManager
+import com.bengkelpos.radiator.backup.BackupFileFormat
 import com.bengkelpos.radiator.backup.BackupFolder
 import com.bengkelpos.radiator.backup.BackupFolderStore
 import com.bengkelpos.radiator.backup.BackupScheduler
@@ -73,9 +74,9 @@ class NativeBridge(
         ioExecutor.execute {
             try {
                 when (method) {
-                    "saveBackup" -> saveBackup(requestId)
+                    "saveBackup" -> saveBackup(requestId, args)
                     "saveBackupFile" -> saveBackupFile(requestId, args)
-                    "shareBackupNow" -> shareBackupNow(requestId)
+                    "shareBackupNow" -> shareBackupNow(requestId, args)
                     "backupFolderState" -> backupFolderState(requestId)
                     "chooseBackupFolder" -> chooseBackupFolder(requestId)
                     "restartBackend" -> restartBackend(requestId)
@@ -117,17 +118,18 @@ class NativeBridge(
         }
     }
 
-    private fun saveBackup(requestId: String) {
+    private fun saveBackup(requestId: String, args: JSONObject) {
+        val format = normalizeBackupFormat(args.optString("format", "db"))
         val needsPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
             PackageManager.PERMISSION_GRANTED
         if (!needsPermission) {
-            runSave(requestId)
+            runSave(requestId, format)
             return
         }
         requestLegacyStoragePermission { granted ->
             if (granted) {
-                ioExecutor.execute { runSaveSafely(requestId) }
+                ioExecutor.execute { runSaveSafely(requestId, format) }
             } else {
                 fail(
                     requestId,
@@ -138,9 +140,9 @@ class NativeBridge(
         }
     }
 
-    private fun runSaveSafely(requestId: String) {
+    private fun runSaveSafely(requestId: String, format: String) {
         try {
-            runSave(requestId)
+            runSave(requestId, format)
         } catch (error: BridgeError) {
             fail(requestId, error.code, error.message ?: "Backup gagal.")
         } catch (error: Throwable) {
@@ -149,9 +151,9 @@ class NativeBridge(
         }
     }
 
-    private fun runSave(requestId: String) {
-        val bytes = fetchBackup()
-        val saved = saveBytes(bytes, backupDisplayName())
+    private fun runSave(requestId: String, format: String) {
+        val bytes = fetchBackup(format)
+        val saved = saveBytes(bytes, backupDisplayName(format))
         replySaved(requestId, saved)
     }
 
@@ -183,13 +185,25 @@ class NativeBridge(
         )
     }
 
-    private fun backupDisplayName(): String {
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return "bengkel_radiator_$stamp.db"
+    private fun normalizeBackupFormat(raw: String?): String {
+        val value = raw?.trim()?.lowercase().orEmpty()
+        return if (value == "xlsx" || value == "csv") value else "db"
     }
 
-    private fun fetchBackup(): ByteArray {
-        val connection = URL("${BackendManager.baseUrl}/api/admin/backup")
+    private fun backupDisplayName(format: String): String {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val suffix = when (format) {
+            "xlsx" -> ".xlsx"
+            "csv" -> "_csv.zip"
+            else -> ".db"
+        }
+        return "bengkel_radiator_$stamp$suffix"
+    }
+
+    private fun fetchBackup(format: String): ByteArray {
+        val connection = URL(
+            "${BackendManager.baseUrl}/api/admin/backup?format=$format"
+        )
             .openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.connectTimeout = 15_000
@@ -264,17 +278,23 @@ class NativeBridge(
         }
     }
 
-    private fun shareBackupNow(requestId: String) {
-        val bytes = fetchBackup()
-        val uri = BackupStore.cacheForSharing(activity, bytes, backupDisplayName())
+    private fun shareBackupNow(requestId: String, args: JSONObject) {
+        val format = normalizeBackupFormat(args.optString("format", "db"))
+        val displayName = backupDisplayName(format)
+        val bytes = fetchBackup(format)
+        val uri = BackupStore.cacheForSharing(activity, bytes, displayName)
         activity.runOnUiThread {
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/octet-stream"
+                type = BackupFileFormat.mimeType(displayName)
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, "Backup BengkelPOS Radiator")
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "File backup database BengkelPOS Radiator.",
+                    if (format == "db") {
+                        "File backup database BengkelPOS Radiator."
+                    } else {
+                        "File backup spreadsheet BengkelPOS Radiator."
+                    },
                 )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }

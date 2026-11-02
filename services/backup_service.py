@@ -38,12 +38,21 @@ REQUIRED_COLUMNS = {
     "service_parts": {"id", "service_record_id", "nama_part"},
 }
 
-BACKUP_GLOB = "bengkel_radiator_*.db"
+BACKUP_FORMATS = ("db", "xlsx", "csv")
+BACKUP_GLOB = "bengkel_radiator_*"
 RESTORE_GLOB = "sebelum_restore_*.db"
 MIGRATION_GLOB = "sebelum_migrasi_*.db"
 RESTORE_BACKUP_KEEP = 3
 MIGRATION_BACKUP_KEEP = 3
 MIN_FREE_MARGIN_BYTES = 20 * 1024 * 1024
+
+MIME_BY_FORMAT = {
+    "db": "application/x-sqlite3",
+    "xlsx": (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ),
+    "csv": "application/zip",
+}
 
 # Rahasia yang tidak boleh ikut ke berkas backup yang dapat dibagikan.
 # Konfigurasi bisnis (bengkel.*) dan data transaksi tetap disalin apa adanya.
@@ -118,6 +127,22 @@ def prune_backups() -> None:
     _prune(BACKUP_GLOB, settings.backup_keep)
     _prune(RESTORE_GLOB, RESTORE_BACKUP_KEEP)
     _prune(MIGRATION_GLOB, MIGRATION_BACKUP_KEEP)
+
+
+def format_of(path: Path) -> str:
+    """Format artefak backup dari nama berkasnya."""
+    name = path.name
+    if name.endswith("_csv.zip"):
+        return "csv"
+    if name.endswith(".xlsx"):
+        return "xlsx"
+    if name.endswith(".db"):
+        return "db"
+    return ""
+
+
+def mime_type_for(path: Path) -> str:
+    return MIME_BY_FORMAT.get(format_of(path), "application/octet-stream")
 
 
 def _ensure_free_space(source: Path) -> None:
@@ -211,6 +236,60 @@ def create_backup() -> Path:
         source.close()
 
     _redact_secrets(destination)
+    prune_backups()
+    return destination
+
+
+def create_export(fmt: str) -> Path:
+    """Buat backup Excel/CSV dari snapshot database yang konsisten.
+
+    Ekspor dibaca dari salinan sementara agar penulisan transaksi yang sedang
+    berjalan tidak membuat isi antar tabel saling tidak cocok. Berkas ini tidak
+    dapat dipulihkan; pemulihan tetap memakai `create_backup()`.
+    """
+    if fmt not in ("xlsx", "csv"):
+        raise BusinessValidationError(
+            "Format ekspor harus xlsx atau csv."
+        )
+
+    source_path = database_file_path()
+    if not source_path.exists():
+        raise BusinessValidationError("Berkas basis data belum tersedia.")
+
+    settings.backup_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_free_space(source_path)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    suffix = ".xlsx" if fmt == "xlsx" else "_csv.zip"
+    destination = settings.backup_dir / f"bengkel_radiator_{stamp}{suffix}"
+    staging = settings.backup_dir / f".ekspor_{stamp}.db"
+
+    source = sqlite3.connect(str(source_path))
+    try:
+        target = sqlite3.connect(str(staging))
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+    try:
+        from services import spreadsheet_export
+
+        redacted = set(SENSITIVE_SETTING_KEYS) | set(AUTH_ROLLBACK_KEYS)
+        try:
+            if fmt == "xlsx":
+                spreadsheet_export.write_xlsx(staging, destination, redacted)
+            else:
+                spreadsheet_export.write_csv_zip(staging, destination, redacted)
+        except spreadsheet_export.SpreadsheetLimitError as exc:
+            raise BusinessValidationError(str(exc)) from exc
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        staging.unlink(missing_ok=True)
+
     prune_backups()
     return destination
 

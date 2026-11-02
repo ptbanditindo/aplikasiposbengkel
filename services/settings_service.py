@@ -49,9 +49,17 @@ BACKUP_LAST_FILENAME_KEY = "backup.last_local_filename"
 BACKUP_LAST_STATUS_KEY = "backup.last_status"
 BACKUP_LAST_ERROR_KEY = "backup.last_error"
 BACKUP_LAST_TELEGRAM_KEY = "backup.last_telegram_at"
+BACKUP_FORMAT_KEY = "backup.format"
+BACKUP_FORMAT_DEFAULT = "db"
+BACKUP_FORMATS = ("db", "xlsx", "csv")
 _TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 _BOT_TOKEN_PATTERN = re.compile(r"^\d+:[A-Za-z0-9_-]{10,}$")
 _CHAT_ID_PATTERN = re.compile(r"^(-?\d+|@[A-Za-z0-9_]{4,})$")
+
+
+def get_backup_format(db: Session) -> str:
+    value = str(get_setting(db, BACKUP_FORMAT_KEY) or "").strip().lower()
+    return value if value in BACKUP_FORMATS else BACKUP_FORMAT_DEFAULT
 
 
 def default_bengkel_info() -> Dict[str, str]:
@@ -311,6 +319,7 @@ def get_telegram_config(db: Session) -> Dict[str, Any]:
         "chat_id": stored.get("chat_id") or settings.telegram_chat_id,
         "enabled": _stored_bool(stored.get("enabled"), enabled_default),
         "jam": jam,
+        "format": get_backup_format(db),
         "needs_reconfig": _stored_bool(stored.get("needs_reconfig")),
         "last_sent_at": stored.get("last_sent_at", ""),
         "last_attempt_at": stored.get("last_attempt_at", ""),
@@ -369,6 +378,7 @@ def get_backup_status(
             or telegram.get("last_sent_at")
             or None
         ),
+        "format": get_backup_format(db),
         "stale": stale,
         "stale_days": BACKUP_STALE_DAYS,
     }
@@ -379,6 +389,15 @@ def update_telegram_config(db: Session, payload: Dict[str, Any]) -> Dict[str, An
     jam = clean_text(payload.get("jam"), max_length=5) or "21:00"
     if not _TIME_PATTERN.match(jam):
         raise BusinessValidationError("Jam backup harus berformat HH:MM (contoh 21:00).")
+
+    format_value = payload.get("format")
+    backup_format = None
+    if format_value is not None:
+        backup_format = clean_text(format_value, max_length=10).lower()
+        if backup_format not in BACKUP_FORMATS:
+            raise BusinessValidationError(
+                "Format backup harus db, xlsx, atau csv."
+            )
 
     token = clean_text(payload.get("bot_token"), max_length=200)
     chat_id = clean_text(payload.get("chat_id"), max_length=64)
@@ -399,6 +418,8 @@ def update_telegram_config(db: Session, payload: Dict[str, Any]) -> Dict[str, An
     set_setting(db, f"{TELEGRAM_PREFIX}enabled", "1" if enabled else "0")
     set_setting(db, f"{TELEGRAM_PREFIX}jam", jam)
     set_setting(db, f"{TELEGRAM_PREFIX}last_error", "")
+    if backup_format is not None:
+        set_setting(db, BACKUP_FORMAT_KEY, backup_format)
     db.commit()
 
     config = get_telegram_config(db)

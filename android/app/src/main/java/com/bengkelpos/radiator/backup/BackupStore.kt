@@ -25,7 +25,6 @@ data class SavedBackup(
  */
 object BackupStore {
 
-    private const val MIME_TYPE = "application/x-sqlite3"
     private const val SHARE_DIR = "backup-share"
 
     fun save(context: Context, bytes: ByteArray, displayName: String): SavedBackup {
@@ -47,7 +46,7 @@ object BackupStore {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, displayName)
-            put(MediaStore.Downloads.MIME_TYPE, MIME_TYPE)
+            put(MediaStore.Downloads.MIME_TYPE, BackupFileFormat.mimeType(displayName))
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
@@ -93,17 +92,19 @@ object BackupStore {
         MediaScannerConnection.scanFile(
             context,
             arrayOf(file.absolutePath),
-            arrayOf(MIME_TYPE),
+            arrayOf(BackupFileFormat.mimeType(displayName)),
             null,
         )
     }
 
     private fun uniqueFile(directory: File, displayName: String): File {
-        val base = displayName.removeSuffix(".db")
+        val dot = displayName.lastIndexOf('.')
+        val base = if (dot > 0) displayName.substring(0, dot) else displayName
+        val extension = if (dot > 0) displayName.substring(dot) else ""
         var candidate = File(directory, displayName)
         var index = 1
         while (candidate.exists()) {
-            candidate = File(directory, "${base}_$index.db")
+            candidate = File(directory, "${base}_$index$extension")
             index += 1
         }
         return candidate
