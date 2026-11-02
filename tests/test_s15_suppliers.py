@@ -194,3 +194,44 @@ def test_status_followup_reseller_per_supplier(client):
         )
         for row in listing
     )
+
+
+def test_followup_reseller_abaikan_supplier_nonaktif(client):
+    item = _stock(client, "Barang Nonaktif Reseller", 0, 5)
+    active = client.post(
+        "/api/suppliers",
+        json={
+            "nama": "Reseller Aktif",
+            "nomor_hp": "081200006666",
+            "stock_item_ids": [item["id"]],
+        },
+    ).json()
+    inactive = client.post(
+        "/api/suppliers",
+        json={
+            "nama": "Reseller Nonaktif",
+            "nomor_hp": "081200007777",
+            "stock_item_ids": [item["id"]],
+        },
+    ).json()
+    updated = client.put(
+        f"/api/suppliers/{inactive['id']}", json={"aktif": False}
+    )
+    assert updated.status_code == 200, updated.text
+
+    groups = client.get("/api/suppliers/followup-low-stock").json()
+    group_ids = {row["supplier_id"] for row in groups}
+    assert active["id"] in group_ids
+    assert inactive["id"] not in group_ids
+
+    preview = client.post(
+        f"/api/suppliers/{inactive['id']}/whatsapp-preview",
+        json={"stock_item_ids": [item["id"]]},
+    )
+    assert preview.status_code == 400, preview.text
+
+    chat = client.post(
+        f"/api/suppliers/{inactive['id']}/whatsapp",
+        json={"stock_item_ids": [item["id"]]},
+    )
+    assert chat.status_code == 409, chat.text

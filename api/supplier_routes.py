@@ -23,6 +23,7 @@ from api.schemas import (
 from database.session import get_db
 from services import settings_service, supplier_service, whatsapp_service
 from services.auth_service import Operator
+from services.errors import BusinessValidationError
 
 router = APIRouter(
     tags=["Supplier"], dependencies=[Depends(require_auth)]
@@ -126,6 +127,10 @@ def supplier_whatsapp_preview(
     _operator: Operator = Depends(require_auth),
 ):
     supplier = supplier_service.get_supplier(db, supplier_id)
+    if not supplier.aktif:
+        raise BusinessValidationError(
+            "Supplier sedang nonaktif. Aktifkan kembali di halaman Supplier."
+        )
     items = supplier_service.low_stock_items_for_supplier(
         db, supplier_id, payload.stock_item_ids
     )

@@ -235,6 +235,10 @@ def log_supplier_attempt(
         supplier = db.get(Supplier, supplier_id)
         if supplier is None:
             raise NotFoundError("Supplier tidak ditemukan.")
+        if not supplier.aktif:
+            raise ConflictError(
+                "Supplier sedang nonaktif. Aktifkan kembali di halaman Supplier."
+            )
         if normalized == STATUS_OPENED:
             ops = settings_service.get_ops_settings(db)
             if not settings_service.within_followup_window(ops, moment):
