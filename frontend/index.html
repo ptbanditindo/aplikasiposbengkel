@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261161">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261162">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -172,6 +172,11 @@
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
               <span class="stat-label">Unit diservis</span>
               <strong id="statUnit">0</strong>
+            </article>
+            <article class="stat-card is-clickable" role="button" tabindex="0" title="Jumlah sparepart keluar hari ini dari nota servis dan pembelian sparepart saja" data-action="open-sold-parts">
+              <span class="stat-label">Sparepart keluar hari ini</span>
+              <strong id="statPartsOut">0</strong>
+              <span class="stat-sub">Servis + pembelian part</span>
             </article>
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota tunai hari ini" data-action="dashboard-notas" data-filter="cash">
               <span class="stat-label">Tunai masuk</span>
@@ -2566,15 +2571,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261161"></script>
-  <script src="/static/js/api-client.js?v=20261161"></script>
-  <script src="/static/js/printer-manager.js?v=20261161"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261161"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261161"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261161"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261161"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261161"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261161"></script>
-  <script src="/static/js/app.js?v=20261161"></script>
+  <script src="/static/js/native-bridge.js?v=20261162"></script>
+  <script src="/static/js/api-client.js?v=20261162"></script>
+  <script src="/static/js/printer-manager.js?v=20261162"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261162"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261162"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261162"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261162"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261162"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261162"></script>
+  <script src="/static/js/app.js?v=20261162"></script>
 </body>
 </html>

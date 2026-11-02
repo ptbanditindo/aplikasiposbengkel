@@ -4090,14 +4090,20 @@
       const results = await Promise.all([
         API.daily(todayISO()),
         employeeAktif ? API.payrollSummary(todayISO()) : Promise.resolve(null),
+        API.soldParts(todayISO(), todayISO()),
       ]);
       const daily = results[0];
       state.payrollSummary = results[1];
+      const soldToday = results[2];
       renderPayrollCard();
 
       state.dashboardToday = daily.transaksi || [];
 
       $('#statUnit').textContent = daily.jumlah_unit_servis;
+      $('#statPartsOut').textContent = intValue(
+        soldToday && soldToday.total_qty,
+        0
+      );
       $('#statCash').textContent = fmtRp(daily.total_cash);
       $('#statTransfer').textContent = fmtRp(daily.total_transfer);
       $('#statTotalDebt').textContent = fmtRp(daily.piutang_total || 0);
@@ -7216,6 +7222,11 @@
     }
     if (action === 'open-receivables') {
       openReceivables(null);
+      return;
+    }
+    if (action === 'open-sold-parts') {
+      navigate('report');
+      setReportTab('sold');
       return;
     }
     if (action === 'employee-detail') {
