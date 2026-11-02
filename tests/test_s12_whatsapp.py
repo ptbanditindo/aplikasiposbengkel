@@ -29,7 +29,6 @@ def test_config_menyertakan_pengaturan_ops_default(client):
     response = client.get("/api/config")
     assert response.status_code == 200, response.text
     ops = response.json()["ops"]
-    assert ops["tempo_hari"] == 7
     assert ops["prospek_hari"] == 7
     assert ops["cooldown_hari"] == 7
     assert ops["garansi_akan_habis_hari"] == 7
@@ -59,7 +58,6 @@ def test_jendela_jam_followup_default_dan_overnight():
 
 def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
     payload = {
-        "tempo_hari": 14,
         "prospek_hari": 10,
         "cooldown_hari": 3,
         "garansi_akan_habis_hari": 5,
@@ -68,12 +66,12 @@ def test_pengaturan_ops_dapat_diubah_dan_divalidasi(client):
     updated = client.put("/api/settings/ops", json=payload)
     assert updated.status_code == 200, updated.text
     body = updated.json()
-    assert body["tempo_hari"] == 14
+    assert body["prospek_hari"] == 10
 
     config = client.get("/api/config").json()["ops"]
-    assert config["tempo_hari"] == 14
+    assert config["prospek_hari"] == 10
 
-    invalid = client.put("/api/settings/ops", json={**payload, "tempo_hari": 0})
+    invalid = client.put("/api/settings/ops", json={**payload, "prospek_hari": 0})
     assert invalid.status_code == 422, invalid.text
 
     invalid_time = client.put(

@@ -146,7 +146,6 @@ with SessionLocal() as db:
         "bengkel.bank_nama": "BCA",
         "bengkel.no_rekening": "1234567890",
         "bengkel.atas_nama": "Bengkel Radiator Berkah",
-        "ops.tempo_hari": "7",
         "ops.prospek_hari": "7",
         "ops.cooldown_hari": "3",
         "ops.garansi_akan_habis_hari": "14",

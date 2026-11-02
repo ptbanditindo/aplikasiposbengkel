@@ -10690,7 +10690,6 @@
   }
 
   const OPS_INT_FIELDS = [
-    { id: 'opsTempoHari', key: 'tempo_hari', low: 1, high: 365, label: 'Tempo piutang' },
     { id: 'opsStokMinimum', key: 'stok_minimum_default', low: 0, high: 1000000, label: 'Batas minimum stok' },
     { id: 'opsSupplierJumlah', key: 'supplier_tanya_jumlah', low: 1, high: 10000, label: 'Jumlah ditanyakan ke supplier', unit: 'buah' },
     { id: 'opsProspek1', key: 'prospek_hari_1', low: 7, high: 180, label: 'Prospek tahap 1' },

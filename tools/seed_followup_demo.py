@@ -101,7 +101,6 @@ with SessionLocal() as db:
         stok[nama] = row
 
     for key, value in {
-        "ops.tempo_hari": "7",
         "ops.prospek_hari": "7",
         "ops.cooldown_hari": "7",
         "ops.garansi_akan_habis_hari": "7",

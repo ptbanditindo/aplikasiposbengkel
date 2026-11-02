@@ -297,26 +297,40 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Simpan pengaturan
 - Pengingat dan follow-up
 - Batas hari untuk piutang, garansi, prospek, dan pesan WhatsApp.
-- Tempo piutang bawaan (hari)
 - Batas minimum stok bawaan
 - Dipakai untuk barang yang batas minimumnya dikosongkan. 0 berarti peringatan stok menipis nonaktif.
 - Jumlah ditanyakan ke supplier
 - Pesan WhatsApp ke supplier menanyakan ketersediaan sebanyak ini untuk setiap barang.
 - Prospek tahap 1 (hari)
+- Pengingat kabar unit setelah servis, tahap 1.
 - Prospek tahap 2 (hari)
+- Pengingat tahap 2 bila tahap 1 belum dijawab.
 - Prospek tahap 3 (hari)
+- Pengingat tahap 3, terakhir.
 - Jeda follow-up WhatsApp (hari)
+- Setelah satu pesan terkirim, item yang sama tidak bisa diingatkan lagi selama ini.
 - Ingatkan garansi H- (hari)
+- Pengingat garansi muncul sekian hari sebelum masa garansi habis.
 - Tampilkan servis berkala H- (hari)
+- Pengingat servis berkala muncul sekian hari sebelum jadwal servis berikutnya.
 - Jeda pengingat piutang (hari)
+- Jarak minimal antar pengingat piutang ke pelanggan yang sama.
 - Maksimal pengingat piutang
+- Setelah batas ini, pengingat WA berhenti dan pelanggan perlu ditelepon.
 - Arsip garansi setelah (hari)
+- Garansi diarsipkan sekian hari setelah masa garansinya berakhir.
 - Belum bisa dihubungi lagi (hari)
+- Nilai tombol Tunda saat pelanggan belum bisa dihubungi.
 - Belum bisa, pilihan panjang (hari)
+- Pilihan tunda yang lebih panjang pada tombol Tunda.
 - Batas tidak merespons (kali)
+- Setelah sekian pesan tanpa balasan, item prospek/servis/garansi diarsipkan otomatis.
 - Batas pesan per hari
+- Maksimal pesan WhatsApp ke satu pelanggan dalam sehari.
 - Batas pesan per bulan
+- Maksimal pesan prospek/servis ke satu pelanggan dalam 30 hari.
 - Jeda prospek dan servis (hari)
+- Jarak minimal antar pesan prospek/servis ke pelanggan yang sama.
 - Jam mulai follow up
 - Jam selesai follow up
 - Di luar jam ini tombol Ingatkan dan pengingat piutang tidak bisa dipakai.

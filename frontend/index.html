@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261191">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261192">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -916,10 +916,6 @@
 
           <div class="form-grid form-grid--ops">
             <label class="field">
-              <span>Tempo piutang bawaan (hari)</span>
-              <input type="number" class="input" id="opsTempoHari" min="1" max="365" step="1" inputmode="numeric">
-            </label>
-            <label class="field">
               <span>Batas minimum stok bawaan</span>
               <input type="number" class="input" id="opsStokMinimum" min="0" max="1000000" step="1" inputmode="numeric">
               <small class="tiny muted">Dipakai untuk barang yang batas minimumnya dikosongkan. 0 berarti peringatan stok menipis nonaktif.</small>
@@ -932,62 +928,77 @@
             <label class="field">
               <span>Prospek tahap 1 (hari)</span>
               <input type="number" class="input" id="opsProspek1" min="7" max="180" step="1" inputmode="numeric">
+              <small class="tiny muted">Pengingat kabar unit setelah servis, tahap 1.</small>
             </label>
             <label class="field">
               <span>Prospek tahap 2 (hari)</span>
               <input type="number" class="input" id="opsProspek2" min="30" max="365" step="1" inputmode="numeric">
+              <small class="tiny muted">Pengingat tahap 2 bila tahap 1 belum dijawab.</small>
             </label>
             <label class="field">
               <span>Prospek tahap 3 (hari)</span>
               <input type="number" class="input" id="opsProspek3" min="60" max="540" step="1" inputmode="numeric">
+              <small class="tiny muted">Pengingat tahap 3, terakhir.</small>
             </label>
             <label class="field">
               <span>Jeda follow-up WhatsApp (hari)</span>
               <input type="number" class="input" id="opsCooldownHari" min="0" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Setelah satu pesan terkirim, item yang sama tidak bisa diingatkan lagi selama ini.</small>
             </label>
             <label class="field">
               <span>Ingatkan garansi H- (hari)</span>
               <input type="number" class="input" id="opsGaransiHari" min="1" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Pengingat garansi muncul sekian hari sebelum masa garansi habis.</small>
             </label>
             <label class="field">
               <span>Tampilkan servis berkala H- (hari)</span>
               <input type="number" class="input" id="opsServisHari" min="1" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Pengingat servis berkala muncul sekian hari sebelum jadwal servis berikutnya.</small>
             </label>
             <label class="field">
               <span>Jeda pengingat piutang (hari)</span>
               <input type="number" class="input" id="opsPiutangJeda" min="1" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Jarak minimal antar pengingat piutang ke pelanggan yang sama.</small>
             </label>
             <label class="field">
               <span>Maksimal pengingat piutang</span>
               <input type="number" class="input" id="opsPiutangMaks" min="1" max="12" step="1" inputmode="numeric">
+              <small class="tiny muted">Setelah batas ini, pengingat WA berhenti dan pelanggan perlu ditelepon.</small>
             </label>
             <label class="field">
               <span>Arsip garansi setelah (hari)</span>
               <input type="number" class="input" id="opsGaransiArsip" min="1" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Garansi diarsipkan sekian hari setelah masa garansinya berakhir.</small>
             </label>
             <label class="field">
               <span>Belum bisa dihubungi lagi (hari)</span>
               <input type="number" class="input" id="opsBelumBisa" min="1" max="60" step="1" inputmode="numeric">
+              <small class="tiny muted">Nilai tombol Tunda saat pelanggan belum bisa dihubungi.</small>
             </label>
             <label class="field">
               <span>Belum bisa, pilihan panjang (hari)</span>
               <input type="number" class="input" id="opsBelumBisaPanjang" min="7" max="120" step="1" inputmode="numeric">
+              <small class="tiny muted">Pilihan tunda yang lebih panjang pada tombol Tunda.</small>
             </label>
             <label class="field">
               <span>Batas tidak merespons (kali)</span>
               <input type="number" class="input" id="opsMaksTidakRespon" min="1" max="10" step="1" inputmode="numeric">
+              <small class="tiny muted">Setelah sekian pesan tanpa balasan, item prospek/servis/garansi diarsipkan otomatis.</small>
             </label>
             <label class="field">
               <span>Batas pesan per hari</span>
               <input type="number" class="input" id="opsMaksHari" min="1" max="5" step="1" inputmode="numeric">
+              <small class="tiny muted">Maksimal pesan WhatsApp ke satu pelanggan dalam sehari.</small>
             </label>
             <label class="field">
               <span>Batas pesan per bulan</span>
               <input type="number" class="input" id="opsMaksBulan" min="1" max="20" step="1" inputmode="numeric">
+              <small class="tiny muted">Maksimal pesan prospek/servis ke satu pelanggan dalam 30 hari.</small>
             </label>
             <label class="field">
               <span>Jeda prospek dan servis (hari)</span>
               <input type="number" class="input" id="opsJedaProspek" min="1" max="90" step="1" inputmode="numeric">
+              <small class="tiny muted">Jarak minimal antar pesan prospek/servis ke pelanggan yang sama.</small>
             </label>
             <label class="field">
               <span>Jam mulai follow up</span>
@@ -2659,15 +2670,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261191"></script>
-  <script src="/static/js/api-client.js?v=20261191"></script>
-  <script src="/static/js/printer-manager.js?v=20261191"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261191"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261191"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261191"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261191"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261191"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261191"></script>
-  <script src="/static/js/app.js?v=20261191"></script>
+  <script src="/static/js/native-bridge.js?v=20261192"></script>
+  <script src="/static/js/api-client.js?v=20261192"></script>
+  <script src="/static/js/printer-manager.js?v=20261192"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261192"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261192"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261192"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261192"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261192"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261192"></script>
+  <script src="/static/js/app.js?v=20261192"></script>
 </body>
 </html>

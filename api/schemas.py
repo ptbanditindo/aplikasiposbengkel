@@ -1316,7 +1316,6 @@ class ReceiptSettingsIn(CompatBase):
 
 
 class OpsSettingsIn(CompatBase):
-    tempo_hari: int = Field(default=7, ge=1, le=365)
     prospek_hari: int = Field(default=7, ge=1, le=365)
     cooldown_hari: int = Field(default=7, ge=0, le=90)
     garansi_akan_habis_hari: int = Field(default=7, ge=1, le=90)
