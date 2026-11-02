@@ -1,142 +1,121 @@
-# Rencana Pengembangan Baru
+# Rencana Pengembangan Akhir
 
-Status: **ada rencana aktif yang belum diimplementasikan**. Seluruh butir
-Tahap 1-8 sudah tersedia di aplikasi; rencana onboarding dan perluasan cakupan
-bengkel dicatat di bawah dan belum dikerjakan.
+Status: **final** — 2026-11-03. Belum diimplementasikan.
 
-- Acuan versi: web/desktop dan APK **2.6.0** (versionCode 18)
-- Skema database: **38**
-- Audit dilakukan terhadap kode backend, UI, dan tes yang ada.
+## Tujuan
 
-## Aturan kerja
+Aplikasi kasir bengkel yang berjalan di **Android, Windows (EXE), dan Mac**.
+Semua platform **offline-first**: kasir, stok, nota, struk, laporan, dan backup
+berjalan penuh tanpa internet. Sinkronisasi cloud hanya lapisan premium dan
+tidak pernah menjadi syarat transaksi.
 
-- Hanya rencana yang **belum ada** di aplikasi yang dicatat di sini.
-- Tidak ada implementasi kode tanpa perintah eksplisit seperti "kerjakan"
-  atau "implementasikan".
-- Butir yang sudah selesai **dihapus** dari dokumen ini, bukan ditandai selesai.
-- Dokumen ini bukan persetujuan implementasi.
+APK/EXE/aplikasi Mac tidak lagi membawa runtime Python, FastAPI, Chaquopy,
+site-packages, backend zip, atau frontend web. Aplikasi dibangun sebagai
+aplikasi lintas platform yang nyata, bukan WebView wrapper.
 
-## Rencana aktif — Onboarding dan bengkel umum
+## Keputusan final
 
-Status: **rencana, belum diimplementasikan**. Tidak ada kode yang diubah untuk
-bagian ini.
+- **Teknologi:** Flutter + Dart untuk UI dan logika bisnis.
+- **Database lokal:** SQLite melalui drift/FFI. Satu sumber kebenaran lokal di
+  semua platform.
+- **Paket:** APK/AAB Android, installer EXE Windows, `.app`/`.dmg` macOS.
+- **Tanpa Python:** backend Python tidak ikut ke paket baru. Versi lama hanya
+  menjadi acuan perilaku dan migrasi data.
+- **Gratis:** satu perangkat, lokal penuh, tanpa panggilan API.
+- **Premium:** sinkronisasi API dan multi-device; tetap offline-first.
+- **Apple:** target tahap ini macOS. iOS bukan target tahap ini.
 
-### Tujuan
+## Arsitektur
 
-Aplikasi tidak lagi hanya untuk bengkel radiator. Aplikasi harus bisa dipakai
-bengkel mobil, bengkel motor, atau keduanya, dengan 10 kelompok keahlian.
-Pemilik memilih profil bengkel saat pertama kali memakai aplikasi; profil itu
-bisa diubah lagi di Pengaturan. Login karyawan dikembangkan paling akhir.
+- **UI dan logika bisnis** berada di Dart dan dipakai bersama ketiga platform.
+- **Lapisan data** memakai repository/service di atas SQLite; semua perhitungan
+  uang memakai decimal dan pembulatan yang sama dengan versi Python.
+- **Platform adapter** menangani printer, pemilih folder, file backup, PIN,
+  autostart, update, dan integrasi sistem. Android dapat memakai kembali
+  sebagian kode Kotlin lama lewat platform channel; Windows dan Mac memakai
+  adapter masing-masing.
+- **Sinkronisasi premium** memakai antrean lokal (outbox), idempotency, dan
+  retry. API mati atau kuota habis tidak menghentikan kasir.
+- **Lisensi premium** memiliki masa tenggang offline; kegagalan API tidak
+  mengunci transaksi.
+- **Backup lokal** tetap menjadi cadangan utama. Sinkronisasi bukan pengganti
+  backup.
 
-### Alur pertama kali
+## Platform
 
-1. **Pengenalan aplikasi — 3 layar.**
-   - Layar 1: pengenalan aplikasi dan manfaatnya.
-   - Layar 2: gambaran alur kerja bengkel.
-   - Layar 3: penjelasan data lokal, backup, dan pilihan akses.
-   - Setiap layar memiliki tombol **Lanjut**; layar terakhir masuk ke pilihan
-     akses.
-2. **Pilihan akses.**
-   - **Login tanpa akun** — memakai aplikasi secara lokal. PIN pemilik yang
-     sudah ada tetap dipertahankan sebagai pengunci data.
-   - **Daftar menggunakan akun Gmail** — tombol Google. Identitas akun dipakai
-     untuk pendaftaran; keputusan apakah data ikut cloud masih terbuka.
-   - **Login karyawan** — hanya front-end pada tahap ini; autentikasi dan hak
-     akses sebenarnya menyusul di tahap akhir.
-3. **Profil bengkel** — wajib dijawab saat pertama kali, kecuali login
-   karyawan.
-   - Jenis bengkel: **Mobil saja**, **Motor saja**, atau **Mobil dan motor**.
-   - Keahlian: pilih satu atau beberapa dari 10 keahlian, atau **Semua
-     keahlian**.
-4. **Login karyawan** langsung masuk tanpa memilih jenis bengkel dan keahlian.
+| Platform | Paket | Catatan |
+| --- | --- | --- |
+| Android | APK per ABI atau AAB | minSdk 26; printer Bluetooth/USB/Wi-Fi; backup folder/SAF; WorkManager pengganti |
+| Windows | Installer EXE | printer USB/jaringan/cetak sistem; file backup; autostart opsional |
+| Mac | `.app` dan `.dmg` | universal Intel/Apple Silicon; printer jaringan/sistem; signing dan notarization |
 
-Jenis bengkel dan keahlian wajib dijawab pada first run, lalu dapat diedit di
-Pengaturan.
+## Aturan offline-first
 
-### 10 keahlian bengkel
+- Tidak ada panggilan API di jalur simpan nota, stok, pembayaran, atau struk.
+- Semua data inti tersedia setelah aplikasi dibuka tanpa internet.
+- Sinkronisasi premium berjalan di latar belakang; status “belum tersinkron”
+  terlihat dan dapat dicoba ulang.
+- Free tidak memanggil API developer. Premium hanya mengaktifkan sync,
+  multi-device, owner, dan fitur cloud.
+- Backup lokal dan restore harus tetap berfungsi tanpa akun dan tanpa internet.
+- Jam transaksi memakai waktu lokal; saat sync, waktu server dipakai untuk
+  urutan perubahan.
 
-1. **Radiator dan pendingin** — servis, kuras/kored, tambal, ganti core,
-   water pump, dan sistem pendingin mesin.
-2. **Mesin (engine/overhaul)** — turun mesin, piston, skir klep, korter
-   silinder, dan komponen pembakaran.
-3. **Transmisi dan kaki-kaki** — kemudi, suspensi, roda, rem, transmisi manual,
-   matic, dan CVT.
-4. **Kelistrikan dan AC** — kelistrikan bodi, alternator, aki, ECU/sensor,
-   pengapian, serta AC mobil/motor.
-5. **Spooring dan balancing** — sudut roda, keseimbangan ban, dan kestabilan
-   laju.
-6. **Cat, ketok magic, dan body repair** — bodi penyok, las sasis, dempul, dan
-   cat ulang.
-7. **Kaca film dan aksesoris** — kaca film, kaca retak, dan aksesoris interior
-   atau eksterior.
-8. **Bubut (machining)** — bubut piringan rem, facing blok/head, bushing, dan
-   komponen logam presisi.
-9. **Knalpot (exhaust)** — header, pipa, resonator, dan muffler.
-10. **Injeksi dan ECU tuning (remap)** — injector ultrasonik, diagnostic
-    scanner, dan kalibrasi ECU.
+## Ruang lingkup MVP
 
-### Perluasan data dan UI
+1. Kasir: pelanggan, unit, jasa, sparepart, pembayaran, nota, dan struk.
+2. Stok: masuk/keluar, minimum stok, ringkasan, dan peringatan.
+3. Riwayat servis, retur, void, garansi, dan laporan harian.
+4. Backup lokal, restore, dan format database/Excel/CSV.
+5. PIN/keamanan lokal dan pengaturan bengkel.
+6. Printer pada Android dan Windows; Mac menyusul di tahap Mac.
+7. Migrasi database APK/desktop lama.
+8. Uji parity uang, stok, nomor nota, retur, dan laporan dengan versi Python.
+9. Fitur lanjutan—follow-up, supplier, karyawan, komisi—setelah inti stabil.
+10. Premium sync dan multi-device setelah versi lokal stabil.
 
-- Jenis unit minimal: **mobil** dan **motor**.
-- Barang/unit copotan minimal: **mesin copotan**, **AC copotan**, **aki
-  copotan**, dan kategori copotan lain yang ditentukan kemudian.
-- Stok tidak lagi hanya sparepart radiator; kategori barang mengikuti keahlian
-  dan jenis bengkel.
-- Form unit, form servis, stok, follow-up, dan label struk menyesuaikan jenis
-  bengkel serta keahlian yang dipilih.
-- Data radiator yang sudah ada tetap dipertahankan; bengkel radiator lama
-  mendapat profil awal Radiator dan pendingin tanpa kehilangan data.
-- "Semua keahlian" menandai seluruh 10 keahlian aktif; pemilik dapat
-  mempersempitnya lagi di Pengaturan.
+## Tahapan
 
-### Login dan offline
+1. **Fondasi Flutter:** struktur proyek, SQLite, model data, uang decimal, dan
+   kerangka tes lintas platform.
+2. **Inti kasir:** pelanggan, unit, jasa, sparepart, pembayaran, nota, struk.
+3. **Stok dan laporan:** pergerakan stok, ringkasan, laporan, retur, void,
+   garansi.
+4. **Backup dan migrasi:** backup lokal, restore, impor database APK/desktop
+   lama, rollback.
+5. **Android:** PIN, printer, folder backup, WorkManager, APK per ABI/AAB.
+6. **Windows EXE:** printer, file backup, installer, dan update.
+7. **Mac:** `.app`/`.dmg`, printer, signing, notarization.
+8. **Premium:** lisensi, outbox, API sync, multi-device, owner/karyawan.
+9. **Uji akhir:** matriks Android/Windows/Mac, offline, migrasi, dan parity.
 
-- Login tanpa akun tetap menjadi jalur utama dan harus bekerja penuh offline.
-- Google memerlukan internet. Perlu diputuskan apakah akun hanya untuk
-  identitas/pendaftaran atau juga untuk backup cloud.
-- Login karyawan hanya berupa tampilan pada tahap ini; belum ada akun, PIN
-  karyawan, atau pembatasan hak akses.
+## Migrasi dan keamanan data
 
-### Tahapan yang direncanakan
-
-1. **Onboarding dan pilihan akses** — 3 layar, tombol Lanjut, dan tiga pilihan
-   akses (karyawan masih placeholder).
-2. **Profil bengkel** — first-run wajib memilih jenis bengkel dan keahlian;
-   dapat diedit di Pengaturan.
-3. **Generalisasi unit dan barang** — kategori mobil/motor, copotan mesin/AC/
-   aki, kategori stok, dan penyesuaian form/struk.
-4. **Google sign-in** — backend/OAuth, penanganan offline, dan keputusan data
-   cloud.
-5. **Login karyawan dan hak akses** — tahap akhir.
-6. **Uji matriks** — mobil, motor, keduanya, 10 keahlian, semua keahlian,
-   offline, dan migrasi data radiator lama.
-
-### Keputusan yang perlu dikunci sebelum implementasi
-
-- Apakah PIN pemilik tetap dipakai setelah "Login tanpa akun".
-- Fungsi akun Google: hanya identitas/pendaftaran atau termasuk backup cloud.
-- Pemetaan data lama: unit `MOBIL`/`RADIATOR_ONLY` dan label radiator menjadi
-  jenis bengkel/keahlian baru.
-- Daftar kategori unit dan barang copotan yang final.
-- Apakah "Semua keahlian" boleh dipersempit kapan saja tanpa mengubah data
+- Backup database lama wajib dibuat sebelum impor.
+- Impor harus mempertahankan pelanggan, unit, nota, pembayaran, stok, retur,
+  pengaturan, dan riwayat.
+- Migrasi harus dapat diulang dan gagal dengan aman tanpa merusak database
   lama.
-- Hak akses karyawan yang akan datang: kasir, mekanik, atau keduanya.
+- PIN disimpan di penyimpanan aman platform; token premium tidak pernah masuk
+  database biasa.
+- Data cloud premium dienkripsi dan dipisahkan per tenant.
 
-## Audit butir yang dihapus
+## Risiko utama
 
-| Butir lama | Bukti sudah ada di aplikasi |
-| --- | --- |
-| Total hutang dan stok menipis/habis di Ringkasan | `stock_items.stok_minimum`, perhitungan di `services/report_service.py`, kartu Ringkasan, filter stok, pengaturan batas minimum |
-| Supplier dan Follow up Reseller | `suppliers`, `supplier_items`, `supplier_followups`, `api/supplier_routes.py`, menu Supplier, tab Reseller, chat WhatsApp supplier |
-| Hasil follow up pelanggan (garansi, servis, prospek) | `followup_result_service` menghitung jumlah pesan follow-up, kembali ke bengkel beserta persentase, serta Masih bagus/Bermasalah/Menolak di halaman Follow up |
-| Filter periode hasil follow-up | `followup_result_service.summary(start, end)`, query `start`/`end` di `/api/followup/results`, dan pilihan periode di kartu hasil Follow up |
-| Nomor nota angka berurutan | `nota_counters` dan generator nomor di repository/nota baru |
-| Karyawan, penugasan nota, performa, komisi, dan gaji | `employees`, `service_record_mechanics`, `service_record_commissions`, `salary_payments`, menu Karyawan, laporan performa |
-| Pengaturan struk per bagian | `RECEIPT_FIELDS` di `services/settings_service.py`, toggle di Pengaturan, pembacaan toggle di layanan struk |
+- Rewrite besar; parity uang/stok harus diuji terhadap versi Python.
+- Printer dan file picker berbeda di tiap platform; adapter tidak bisa
+  disamakan mentah-mentah.
+- macOS membutuhkan mesin Mac, Xcode, signing, dan notarization.
+- Multi-device premium tetap rawan konflik jika beberapa perangkat menulis
+  transaksi saat offline; aturan konflik harus selesai sebelum fitur itu
+  dirilis.
+- APK/EXE/Mac akan lebih kecil dari versi Python, tetapi bukan “tanpa kode”;
+  ukuran tetap bergantung pada dependensi dan aset.
 
-## Catatan
+## Non-goals tahap ini
 
-- Rencana rinci Tahap 1-8 beserta titik sentuh kode, daftar tes, migrasi, dan
-  risiko dihapus karena fiturnya sudah terverifikasi.
-- `PETA_PENGEMBANGAN.md` lama tetap disimpan sebagai dokumen historis.
-- `RENCANA_PERBAIKAN.md` sudah dihapus dan tidak dipakai lagi.
+- iOS.
+- Web sebagai target aplikasi.
+- Multi-device gratis.
+- Sinkronisasi cloud sebagai syarat transaksi.
+- Mempertahankan Python/Chaquopy di paket baru.
