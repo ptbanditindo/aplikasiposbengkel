@@ -17,7 +17,7 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261159">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261160">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -1232,6 +1232,13 @@
             <button type="button" class="btn btn-ghost" id="btnRefreshEmployees">Muat ulang</button>
           </div>
         </div>
+        <div class="segmented" id="employeeTabSwitch" aria-label="Bagian karyawan">
+          <button type="button" data-employee-tab="list" class="active">Daftar karyawan</button>
+          <button type="button" data-employee-tab="debt">Hutang karyawan</button>
+          <button type="button" data-employee-tab="salary">Riwayat pembayaran gaji</button>
+        </div>
+
+        <div id="employeePanelList">
         <div class="card">
           <div class="card-head">
             <div>
@@ -1253,7 +1260,9 @@
             <div class="empty-state hidden" id="employeeEmpty">Belum ada karyawan.</div>
           </div>
         </div>
+        </div>
 
+        <div id="employeePanelDebt" class="hidden">
         <div class="card">
           <div class="card-head">
             <div>
@@ -1275,7 +1284,9 @@
             <div class="empty-state hidden" id="debtEmpty">Belum ada hutang karyawan.</div>
           </div>
         </div>
+        </div>
 
+        <div id="employeePanelSalary" class="hidden">
         <div class="card">
           <div class="card-head">
             <div>
@@ -1295,6 +1306,7 @@
             </table>
             <div class="empty-state hidden" id="salaryEmpty">Belum ada pembayaran gaji.</div>
           </div>
+        </div>
         </div>
       </section>
 
@@ -2579,15 +2591,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261159"></script>
-  <script src="/static/js/api-client.js?v=20261159"></script>
-  <script src="/static/js/printer-manager.js?v=20261159"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261159"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261159"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261159"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261159"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261159"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261159"></script>
-  <script src="/static/js/app.js?v=20261159"></script>
+  <script src="/static/js/native-bridge.js?v=20261160"></script>
+  <script src="/static/js/api-client.js?v=20261160"></script>
+  <script src="/static/js/printer-manager.js?v=20261160"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261160"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261160"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261160"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261160"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261160"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261160"></script>
+  <script src="/static/js/app.js?v=20261160"></script>
 </body>
 </html>

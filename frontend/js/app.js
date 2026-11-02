@@ -245,6 +245,7 @@
     followupTab: 'customer',
     reportTab: 'kas',
     partsOutToday: 0,
+    employeeTab: 'list',
     jasa: [],
     history: [],
     customerDirectory: [],
@@ -7991,6 +7992,28 @@
 
   let reportRequestId = 0;
 
+  function setEmployeeTab(tab) {
+    state.employeeTab = tab || 'list';
+    $$('#employeeTabSwitch [data-employee-tab]').forEach((button) => {
+      button.classList.toggle(
+        'active',
+        button.dataset.employeeTab === state.employeeTab
+      );
+    });
+    $('#employeePanelList').classList.toggle(
+      'hidden',
+      state.employeeTab !== 'list'
+    );
+    $('#employeePanelDebt').classList.toggle(
+      'hidden',
+      state.employeeTab !== 'debt'
+    );
+    $('#employeePanelSalary').classList.toggle(
+      'hidden',
+      state.employeeTab !== 'salary'
+    );
+  }
+
   function setReportTab(tab) {
     state.reportTab = tab || 'kas';
     $$('#reportTabSwitch [data-report-tab]').forEach((button) => {
@@ -10593,6 +10616,11 @@
       closeModal('#employeeArchiveModal')
     );
     $('#btnRefreshEmployees').addEventListener('click', loadEmployees);
+    $$('#employeeTabSwitch [data-employee-tab]').forEach((button) =>
+      button.addEventListener('click', () =>
+        setEmployeeTab(button.dataset.employeeTab)
+      )
+    );
     $('#employeeForm').addEventListener('submit', handleEmployeeSubmit);
     $('#employeeJenisImbalan').addEventListener('change', syncEmployeeImbalanFields);
     $('#employeeKomisiMode').addEventListener('change', syncEmployeeImbalanFields);
