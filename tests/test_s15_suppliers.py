@@ -73,11 +73,12 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     assert response.status_code == 200, response.text
     body = response.json()
     text = body["wa_text"].lower()
+    assert "pengelola supplier preview" in text
     assert "barang preview" in text
     assert "sisa" not in text
     assert "minimum" not in text
-    assert "harga" in text
-    assert "dikirim" in text
+    assert "harga per satuan" in text
+    assert "pengiriman" in text
     from database.session import SessionLocal
 
     with SessionLocal() as db:

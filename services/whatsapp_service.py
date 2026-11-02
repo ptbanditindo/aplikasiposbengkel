@@ -204,15 +204,23 @@ def supplier_wa_text(
     supplier: Supplier, items: List[Dict[str, Any]], bengkel: Dict[str, str]
 ) -> str:
     """Pesan formal untuk menanyakan ketersediaan stok ke supplier/reseller."""
-    opening = formal_opening(bengkel, supplier.nama)
+    nama = (supplier.nama or "").strip()
+    sapaan = f"Bapak/Ibu pengelola {nama}," if nama else "Bapak/Ibu pengelola,"
+    bengkel_nama = (bengkel.get("nama") or "").strip()
+    perkenalan = (
+        f"Perkenalkan, kami dari {bengkel_nama}."
+        if bengkel_nama
+        else "Perkenalkan, kami dari bengkel kami."
+    )
     names = [item.get("nama") or "-" for item in items]
     body = (
-        "Kami ingin menanyakan ketersediaan barang berikut:\n"
+        f"{sapaan}\n\n{perkenalan} Kami ingin menanyakan ketersediaan "
+        "barang berikut:\n"
         + "\n".join(f"- {nama}" for nama in names)
-        + "\n\nMohon informasikan apakah stok tersedia, berapa harganya, "
-        "dan kapan barang dapat dikirim. Terima kasih."
+        + "\n\nMohon informasikan apakah stok tersedia, harga per satuan, "
+        "dan perkiraan waktu pengiriman. Terima kasih atas perhatiannya."
     )
-    return f"{opening} {body}"
+    return body
 
 
 def log_supplier_attempt(
