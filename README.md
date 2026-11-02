@@ -176,7 +176,7 @@ build step) di `http://127.0.0.1:8000`.
   Kontrol memakai satu geometri: 40 px di desktop dan 44 px di layar sempit
   atau perangkat sentuh. Navigasi mobile menjadi satu baris yang dapat digeser,
   modal panjang memakai footer aksi tetap, dan tabel tidak keluar dari layar.
-  Daftar lengkap teks dan popup ada di `PETA_TEKS_UI_DAN_POPUP.md`.
+  Daftar lengkap teks dan popup ada di `docs/UI_COPY_INVENTORY.md`.
 - **APK Android** — gerbang PIN 4-12 angka native (PBKDF2 + salt, lockout
   bertingkat), shell WebView, backend berjalan di dalam aplikasi. Saat server
   disiapkan, layar menampilkan indikator loading lingkaran. Layar utama
@@ -367,9 +367,5 @@ alur pendaftaran dapat dicoba dari awal.
 
 Dokumen pendukung:
 
-- [`AUDIT_REPORT.md`](AUDIT_REPORT.md) — audit menyeluruh backend, frontend,
-  keamanan, dan APK (potret kondisi sebelum rangkaian perbaikan ARC-*).
-- [`INVENTARIS_TEKS_UI.md`](INVENTARIS_TEKS_UI.md) — inventaris seluruh teks
-  UI, popup, dan pesan kesalahan.
-- [`ATURAN_PEKERJAAN.md`](ATURAN_PEKERJAAN.md) — aturan kerja dan kompatibilitas
-  dua lingkungan.
+- [`docs/UI_COPY_INVENTORY.md`](docs/UI_COPY_INVENTORY.md) — inventaris seluruh
+  teks UI, popup, dan pesan kesalahan.
