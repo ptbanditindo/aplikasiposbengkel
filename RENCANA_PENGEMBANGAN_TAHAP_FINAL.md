@@ -1,4 +1,4 @@
-# Rencana Pengembangan Akhir
+# Rencana Pengembangan Tahap Final
 
 Status: **final** — 2026-11-03. Belum diimplementasikan.
 
