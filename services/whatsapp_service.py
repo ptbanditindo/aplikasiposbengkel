@@ -203,24 +203,25 @@ def pengerjaan_status_wa_text(
 def supplier_wa_text(
     supplier: Supplier, items: List[Dict[str, Any]], bengkel: Dict[str, str]
 ) -> str:
-    """Pesan formal untuk menanyakan stok ke supplier/reseller."""
+    """Pesan formal untuk menanyakan stok kosong/menipis ke supplier/reseller."""
     opening = formal_opening(bengkel, supplier.nama)
     rows = []
     for item in items:
-        status = "habis" if item.get("status") == "HABIS" else "menipis"
+        habis = item.get("status") == "HABIS"
         rows.append(
             "- {nama} ({status}, sisa {jumlah}, minimum {minimum})".format(
                 nama=item.get("nama") or "-",
-                status=status,
+                status="stok habis" if habis else "stok menipis",
                 jumlah=int(item.get("jumlah") or 0),
                 minimum=int(item.get("minimum_efektif") or 0),
             )
         )
     body = (
-        "Kami ingin menanyakan ketersediaan barang berikut untuk stok bengkel:\n"
+        "Kami ingin menanyakan stok barang berikut yang kosong atau menipis "
+        "di bengkel:\n"
         + "\n".join(rows)
-        + "\n\nMohon informasi ketersediaan dan perkiraan waktu pengiriman. "
-        "Terima kasih."
+        + "\n\nMohon informasi ketersediaan stok dan perkiraan waktu "
+        "pengiriman. Terima kasih."
     )
     return f"{opening} {body}"
 

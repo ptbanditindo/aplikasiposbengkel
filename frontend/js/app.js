@@ -9884,8 +9884,10 @@
             (item.status === 'HABIS' ? 'Habis' : 'Menipis') +
             '</span>' +
             (clickable
-              ? ''
-              : '<span class="cell-sub">Supplier belum diatur</span>') +
+              ? '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-chat" data-id="' +
+                item.id +
+                '">WA</button>'
+              : '<button type="button" class="btn btn-outline btn-xs" disabled title="Supplier belum diatur atau nomor WhatsApp tidak valid">WA</button>') +
             '</div></div>'
           );
         })
