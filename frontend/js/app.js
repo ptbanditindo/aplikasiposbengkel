@@ -232,6 +232,7 @@
     supplierFollowupStatuses: [],
     supplierStatusItemId: null,
     supplierStatusSupplierId: null,
+    resellerListFilter: 'all',
     resellerItems: [],
     supplierItemSelection: [],
     employees: [],
@@ -5901,7 +5902,7 @@
     if (statsGrid) statsGrid.classList.toggle('hidden', reseller);
     if (resultGrid && reseller) resultGrid.classList.add('hidden');
     if (resellerStats) resellerStats.classList.toggle('hidden', !reseller);
-    if (resellerSection) resellerSection.classList.toggle('hidden', !reseller);
+    if (resellerSection) resellerSection.classList.add('hidden');
     $$('#followupTabSwitch [data-followup-tab]').forEach((button) => {
       button.classList.toggle(
         'active',
@@ -7621,6 +7622,22 @@
         Number(data.id),
         Number(data.itemId)
       );
+      return;
+    }
+    if (action === 'open-reseller-list') {
+      openResellerList(data.filter || 'all');
+      return;
+    }
+    if (action === 'supplier-item-chat-for') {
+      await openSupplierItemChat(Number(data.supplierId), id);
+      return;
+    }
+    if (action === 'supplier-item-wa-for') {
+      await openSupplierDirectChat(Number(data.supplierId));
+      return;
+    }
+    if (action === 'supplier-item-status-for') {
+      openSupplierStatusModal(Number(data.supplierId), id);
       return;
     }
     if (action === 'supplier-item-remove') {
@@ -10064,7 +10081,7 @@
 
   function renderFollowupReseller() {
     const section = $('#followupResellerSection');
-    if (!section) return;
+    if (section) section.innerHTML = '';
     const statusMap = new Map(
       (state.supplierFollowupStatuses || []).map((row) => [
         row.supplier_id + ':' + row.stock_item_id,
@@ -10092,7 +10109,6 @@
             supplierStatus(supplier.supplier_id, item.id)?.status !== 'ARSIP'
         )
       )
-      .map((item) => item)
       .sort((a, b) =>
         a.status === b.status
           ? a.nama.localeCompare(b.nama, 'id')
@@ -10100,93 +10116,178 @@
             ? -1
             : 1
       );
-    const visibleItems = state.resellerItems.length;
     let visibleLow = 0;
     let visibleOut = 0;
+    const activeSupplierIds = new Set();
     state.resellerItems.forEach((item) => {
       if (item.status === 'HABIS') visibleOut += 1;
       else visibleLow += 1;
+      item.suppliers.forEach((supplier) => {
+        if (
+          supplierStatus(supplier.supplier_id, item.id)?.status !== 'ARSIP'
+        ) {
+          activeSupplierIds.add(supplier.supplier_id);
+        }
+      });
     });
     const set = (id, value) => {
       const el = $('#' + id);
       if (el) el.textContent = value;
     };
-    set('resellerStatSuppliers', state.supplierGroups.length);
+    set('resellerStatSuppliers', activeSupplierIds.size);
     set('resellerStatLow', visibleLow);
     set('resellerStatOut', visibleOut);
-    set('resellerStatItems', visibleItems);
+    set('resellerStatItems', state.resellerItems.length);
+  }
 
-    if (!state.resellerItems.length) {
-      section.innerHTML =
-        '<div class="empty-state">Tidak ada barang menipis atau habis.</div>';
+  function resellerItemRowHtml(item, fixedSupplier) {
+    const suppliers = fixedSupplier ? [fixedSupplier] : item.suppliers;
+    const waSuppliers = suppliers.filter((row) => waLink(row.nomor_hp));
+    const clickable = waSuppliers.length > 0;
+    const supplierLine = suppliers
+      .map((supplier) => {
+        const status = supplierStatusFor(supplier.supplier_id, item.id);
+        const badge = status && SUPPLIER_STATUS_BADGES[status.status];
+        return (
+          esc(supplier.nama) +
+          (badge ? ' (' + esc(badge.label) + ')' : '')
+        );
+      })
+      .join(' · ');
+    const disabled = clickable
+      ? ''
+      : ' disabled title="Supplier belum diatur atau nomor WhatsApp tidak valid"';
+    const actions = fixedSupplier
+      ? '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-item-chat-for" data-id="' +
+        item.id +
+        '" data-supplier-id="' +
+        fixedSupplier.supplier_id +
+        '"' +
+        disabled +
+        '>Tanyakan</button>' +
+        '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-wa-for" data-id="' +
+        item.id +
+        '" data-supplier-id="' +
+        fixedSupplier.supplier_id +
+        '"' +
+        disabled +
+        '>WA</button>' +
+        '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-status-for" data-id="' +
+        item.id +
+        '" data-supplier-id="' +
+        fixedSupplier.supplier_id +
+        '">Status</button>'
+      : '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-item-chat" data-id="' +
+        item.id +
+        '"' +
+        disabled +
+        '>Tanyakan</button>' +
+        '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-wa" data-id="' +
+        item.id +
+        '"' +
+        disabled +
+        '>WA</button>' +
+        '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-status" data-id="' +
+        item.id +
+        '">Status</button>';
+    return (
+      '<div class="pengerjaan-row"><div class="pengerjaan-meta"><strong>' +
+      esc(item.nama) +
+      '</strong><span class="cell-sub">Sisa ' +
+      intValue(item.jumlah, 0) +
+      ' · minimum ' +
+      intValue(item.minimum_efektif, 0) +
+      '</span><span class="cell-sub">' +
+      supplierLine +
+      '</span></div><div class="pengerjaan-actions">' +
+      '<span class="badge ' +
+      (item.status === 'HABIS' ? 'red' : 'amber') +
+      '">' +
+      (item.status === 'HABIS' ? 'Habis' : 'Menipis') +
+      '</span>' +
+      actions +
+      (clickable ? '' : '<span class="cell-sub">Supplier belum diatur</span>') +
+      '</div></div>'
+    );
+  }
+
+  function openResellerList(filter, retried) {
+    if (!state.supplierGroups.length && !retried) {
+      loadFollowupReseller().then(() => openResellerList(filter, true));
       return;
     }
-    section.innerHTML =
-      '<div class="receivable-list"><div class="receivable-group">' +
-      state.resellerItems
-        .map((item) => {
-          const suppliers = item.suppliers.filter((row) =>
-            waLink(row.nomor_hp)
-          );
-          const clickable = suppliers.length > 0;
-          const supplierLine = item.suppliers
-            .map((supplier) => {
-              const status = supplierStatus(supplier.supplier_id, item.id);
-              const badge = status && SUPPLIER_STATUS_BADGES[status.status];
-              return (
-                esc(supplier.nama) +
-                (badge ? ' (' + esc(badge.label) + ')' : '')
-              );
-            })
-            .join(' · ');
-          return (
-            '<div class="pengerjaan-row' +
-            (clickable ? ' is-clickable' : '') +
-            '"' +
-            (clickable
-              ? ' role="button" tabindex="0" data-action="supplier-item-chat" data-id="' +
-                item.id +
-                '"'
-              : '') +
-            '><div class="pengerjaan-meta"><strong>' +
-            esc(item.nama) +
-            '</strong><span class="cell-sub">Sisa ' +
-            intValue(item.jumlah, 0) +
-            ' · minimum ' +
-            intValue(item.minimum_efektif, 0) +
-            '</span><span class="cell-sub">' +
-            supplierLine +
-            '</span></div><div class="pengerjaan-actions">' +
-            '<span class="badge ' +
-            (item.status === 'HABIS' ? 'red' : 'amber') +
-            '">' +
-            (item.status === 'HABIS' ? 'Habis' : 'Menipis') +
-            '</span>' +
-            '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-item-chat" data-id="' +
-            item.id +
-            '"' +
-            (clickable
-              ? ''
-              : ' disabled title="Supplier belum diatur atau nomor WhatsApp tidak valid"') +
-            '>Tanyakan</button>' +
-            '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-wa" data-id="' +
-            item.id +
-            '"' +
-            (clickable
-              ? ''
-              : ' disabled title="Supplier belum diatur atau nomor WhatsApp tidak valid"') +
-            '>WA</button>' +
-            '<button type="button" class="btn btn-outline btn-xs" data-action="supplier-item-status" data-id="' +
-            item.id +
-            '">Status</button>' +
-            (clickable
-              ? ''
-              : '<span class="cell-sub">Supplier belum diatur</span>') +
-            '</div></div>'
-          );
-        })
-        .join('') +
-      '</div></div>';
+    const mode = filter || 'all';
+    const items = state.resellerItems || [];
+    const titles = {
+      suppliers: 'Supplier perlu dihubungi',
+      low: 'Barang menipis',
+      out: 'Barang habis',
+      all: 'Total barang',
+    };
+    const subtitles = {
+      suppliers: 'Pilih supplier untuk menanyakan stok.',
+      low: 'Barang di bawah batas minimum. Pilih tindakan.',
+      out: 'Barang dengan stok nol. Pilih tindakan.',
+      all: 'Semua barang yang perlu dipasok.',
+    };
+    state.resellerListFilter = mode;
+    $('#followupListTitle').textContent = titles[mode] || 'Follow up reseller';
+    $('#followupListSubtitle').textContent =
+      subtitles[mode] || 'Pilih tindakan.';
+    const body = $('#followupListBody');
+    const empty = $('#followupListEmpty');
+    let html = '';
+    if (mode === 'suppliers') {
+      state.supplierGroups.forEach((group) => {
+        const groupItems = items.filter(
+          (item) =>
+            item.suppliers.some(
+              (supplier) => supplier.supplier_id === group.supplier_id
+            ) &&
+            supplierStatusFor(group.supplier_id, item.id)?.status !== 'ARSIP'
+        );
+        if (!groupItems.length) return;
+        html +=
+          '<div class="receivable-group"><div class="receivable-head"><div class="receivable-title"><strong>' +
+          esc(group.nama) +
+          '</strong><span>' +
+          esc(group.nomor_hp || '-') +
+          '</span></div><div class="receivable-head-right"><span>' +
+          groupItems.length +
+          ' barang</span></div></div>' +
+          groupItems
+            .map((item) =>
+              resellerItemRowHtml(item, {
+                supplier_id: group.supplier_id,
+                nama: group.nama,
+                nomor_hp: group.nomor_hp,
+              })
+            )
+            .join('') +
+          '</div>';
+      });
+    } else {
+      const list =
+        mode === 'low'
+          ? items.filter((item) => item.status !== 'HABIS')
+          : mode === 'out'
+            ? items.filter((item) => item.status === 'HABIS')
+            : items;
+      html =
+        '<div class="receivable-group">' +
+        list.map((item) => resellerItemRowHtml(item)).join('') +
+        '</div>';
+    }
+    if (body) body.innerHTML = html;
+    if (empty) empty.classList.toggle('hidden', Boolean(html));
+    openModal('#followupListModal');
+  }
+
+  function refreshResellerListIfOpen() {
+    const modal = $('#followupListModal');
+    if (modal && !modal.classList.contains('hidden')) {
+      openResellerList(state.resellerListFilter || 'all');
+    }
   }
 
   function supplierResellerItemIds(supplierId, fallbackItemId) {
@@ -10355,6 +10456,7 @@
       if (saved) state.supplierFollowupStatuses.push(saved);
       closeModal('#supplierStatusModal');
       renderFollowupReseller();
+      refreshResellerListIfOpen();
       toast('Status follow up reseller disimpan.', 'success');
     } catch (err) {
       toast(err.message, 'error', 6000);

@@ -3615,6 +3615,10 @@ a.btn { text-decoration: none; }
 }
 .pengerjaan-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .pengerjaan-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#followupListBody .pengerjaan-row { padding: 8px 0; }
+#followupListBody .pengerjaan-row + .pengerjaan-row {
+  border-top: 1px solid var(--border);
+}
 
 /* WhatsApp */
 #waModalNumber { font-family: var(--mono); }
