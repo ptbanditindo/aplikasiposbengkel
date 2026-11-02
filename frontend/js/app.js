@@ -10165,14 +10165,28 @@
     });
   }
 
+  function freezeViewContent(viewId, frozen) {
+    const view = $('#' + viewId);
+    if (!view) return;
+    Array.from(view.children).forEach((child) => {
+      if (child.classList.contains('page-head')) return;
+      child.classList.toggle('feature-frozen', frozen);
+      if (frozen) child.setAttribute('inert', '');
+      else child.removeAttribute('inert');
+    });
+  }
+
   function syncFeatureToggles() {
     const ops = (state.config && state.config.ops) || {};
     const employeeAktif = ops.karyawan_aktif !== false;
     const supplierAktif = ops.supplier_aktif !== false;
+    const followupAktif = ops.followup_aktif !== false;
     const employeeToggle = $('#employeeFeatureToggle');
     const supplierToggle = $('#supplierFeatureToggle');
+    const followupToggle = $('#followupFeatureToggle');
     if (employeeToggle) employeeToggle.checked = employeeAktif;
     if (supplierToggle) supplierToggle.checked = supplierAktif;
+    if (followupToggle) followupToggle.checked = followupAktif;
     $('#posEmployeeFields')?.classList.toggle('hidden', !employeeAktif);
     $('#dashboardEmployeeStats')?.classList.toggle('hidden', !employeeAktif);
     $('#dashboardPayrollCard')?.classList.toggle(
@@ -10194,6 +10208,7 @@
     if ($('#btnAddSupplier')) $('#btnAddSupplier').disabled = !supplierAktif;
     freezeFeatureSection('view-employees', !employeeAktif);
     freezeFeatureSection('view-suppliers', !supplierAktif);
+    freezeViewContent('view-followup', !followupAktif);
     if (!employeeAktif) {
       if ($('#posCashier')) $('#posCashier').value = '';
       $$('#posMechanics input').forEach((input) => {
@@ -10211,16 +10226,27 @@
       closeModal('#payrollPayModal');
     }
     if (!supplierAktif) closeModal('#supplierModal');
+    if (!followupAktif) {
+      closeModal('#followupListModal');
+      closeModal('#followupModal');
+      closeModal('#followupStatusModal');
+      closeModal('#followupRescheduleModal');
+    }
   }
 
   async function updateFeatureToggle(key, enabled) {
+    const labels = {
+      karyawan_aktif: 'Fitur karyawan',
+      supplier_aktif: 'Fitur supplier',
+      followup_aktif: 'Fitur follow up',
+    };
     try {
       const ops = await API.updateOpsSettings({ [key]: Boolean(enabled) });
       if (state.config) state.config.ops = ops;
       syncFeatureToggles();
       if (key === 'karyawan_aktif' && enabled) loadDashboard();
       toast(
-        (key === 'karyawan_aktif' ? 'Fitur karyawan' : 'Fitur supplier') +
+        (labels[key] || 'Fitur') +
           (enabled ? ' diaktifkan.' : ' dinonaktifkan.'),
         'success'
       );
@@ -11051,6 +11077,9 @@
     );
     $('#supplierFeatureToggle').addEventListener('change', (event) =>
       updateFeatureToggle('supplier_aktif', event.target.checked)
+    );
+    $('#followupFeatureToggle').addEventListener('change', (event) =>
+      updateFeatureToggle('followup_aktif', event.target.checked)
     );
     $('#employeeModalClose').addEventListener('click', () =>
       closeModal('#employeeModal')

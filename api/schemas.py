@@ -1299,6 +1299,7 @@ class OpsSettingsIn(CompatBase):
     stok_minimum_default: int = Field(default=3, ge=0, le=1000000)
     karyawan_aktif: bool = True
     supplier_aktif: bool = True
+    followup_aktif: bool = True
     followup_jam_mulai: str = Field(
         default="08:00", **_pattern(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     )

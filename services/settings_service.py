@@ -168,6 +168,7 @@ OPS_TIME_KEYS = {
 OPS_BOOL_KEYS = {
     "karyawan_aktif": True,
     "supplier_aktif": True,
+    "followup_aktif": True,
 }
 OPS_TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
