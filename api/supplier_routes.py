@@ -64,19 +64,20 @@ def supplier_followup_statuses(db: Session = Depends(get_db)):
 
 
 @router.put(
-    "/suppliers/followup-status/{stock_item_id}",
+    "/suppliers/{supplier_id}/followup-status/{stock_item_id}",
     response_model=Optional[SupplierFollowupOut],
 )
 def supplier_followup_status(
+    supplier_id: int,
     stock_item_id: int,
     payload: SupplierFollowupIn,
     db: Session = Depends(get_db),
 ):
     row = supplier_service.set_followup_status(
         db,
+        supplier_id,
         stock_item_id,
         payload.status,
-        supplier_id=payload.supplier_id,
         catatan=payload.catatan,
     )
     return SupplierFollowupOut(**row) if row else None

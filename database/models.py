@@ -101,19 +101,24 @@ class SupplierItem(Base):
 
 
 class SupplierFollowup(Base):
-    """Status follow up reseller per barang stok (halaman Follow up)."""
+    """Status follow up reseller per pasangan supplier + barang stok."""
 
     __tablename__ = "supplier_followups"
     __table_args__ = (
-        Index("ux_supplier_followups_item", "stock_item_id", unique=True),
+        Index(
+            "ux_supplier_followups_pair",
+            "supplier_id",
+            "stock_item_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    supplier_id: Mapped[int] = mapped_column(
+        ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False
+    )
     stock_item_id: Mapped[int] = mapped_column(
         ForeignKey("stock_items.id", ondelete="CASCADE"), nullable=False
-    )
-    supplier_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     catatan: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

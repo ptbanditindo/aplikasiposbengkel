@@ -261,11 +261,14 @@
       request('/api/suppliers/followup-low-stock'),
     supplierFollowupStatuses: () =>
       request('/api/suppliers/followup-statuses'),
-    setSupplierFollowupStatus: (stockItemId, data) =>
-      request('/api/suppliers/followup-status/' + stockItemId, {
-        method: 'PUT',
-        body: data,
-      }),
+    setSupplierFollowupStatus: (supplierId, stockItemId, data) =>
+      request(
+        '/api/suppliers/' +
+          supplierId +
+          '/followup-status/' +
+          stockItemId,
+        { method: 'PUT', body: data }
+      ),
     supplierWhatsapp: (id, data) =>
       request('/api/suppliers/' + id + '/whatsapp', {
         method: 'POST',

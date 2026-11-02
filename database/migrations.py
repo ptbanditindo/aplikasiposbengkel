@@ -1160,16 +1160,17 @@ def _migrate_038_supplier_followups(cursor: Cursor) -> None:
     cursor.execute(
         "CREATE TABLE IF NOT EXISTS supplier_followups ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "supplier_id INTEGER NOT NULL "
+        "REFERENCES suppliers(id) ON DELETE CASCADE, "
         "stock_item_id INTEGER NOT NULL "
         "REFERENCES stock_items(id) ON DELETE CASCADE, "
-        "supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL, "
         "status VARCHAR(32) NOT NULL, "
         "catatan VARCHAR(255), "
         "updated_at DATETIME NOT NULL)"
     )
     cursor.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS ux_supplier_followups_item "
-        "ON supplier_followups (stock_item_id)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_supplier_followups_pair "
+        "ON supplier_followups (supplier_id, stock_item_id)"
     )
 
 

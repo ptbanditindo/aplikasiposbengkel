@@ -292,20 +292,34 @@ def list_followup_statuses(db: Session) -> List[Dict[str, Any]]:
 
 def set_followup_status(
     db: Session,
+    supplier_id: int,
     stock_item_id: int,
     status: str,
-    supplier_id: Optional[int] = None,
     catatan: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     normalized = (status or "").strip().upper()
     if normalized and normalized not in FOLLOWUP_STATUSES:
         raise BusinessValidationError("Status follow up reseller tidak dikenal.")
     with db.begin():
+        supplier = db.get(Supplier, supplier_id)
+        if supplier is None:
+            raise NotFoundError("Supplier tidak ditemukan.")
         if db.get(StockItem, stock_item_id) is None:
             raise NotFoundError("Barang tidak ditemukan.")
+        pair = db.scalar(
+            select(SupplierItem).where(
+                SupplierItem.supplier_id == supplier_id,
+                SupplierItem.stock_item_id == stock_item_id,
+            )
+        )
+        if pair is None:
+            raise BusinessValidationError(
+                "Barang ini tidak terhubung dengan supplier tersebut."
+            )
         row = db.scalar(
             select(SupplierFollowup).where(
-                SupplierFollowup.stock_item_id == stock_item_id
+                SupplierFollowup.supplier_id == supplier_id,
+                SupplierFollowup.stock_item_id == stock_item_id,
             )
         )
         if not normalized:
@@ -313,10 +327,11 @@ def set_followup_status(
                 db.delete(row)
             return None
         if row is None:
-            row = SupplierFollowup(stock_item_id=stock_item_id)
+            row = SupplierFollowup(
+                supplier_id=supplier_id, stock_item_id=stock_item_id
+            )
             db.add(row)
         row.status = normalized
-        row.supplier_id = supplier_id or None
         row.catatan = clean_text(catatan, max_length=255) or None
         db.flush()
     db.refresh(row)

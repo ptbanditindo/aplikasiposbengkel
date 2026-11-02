@@ -231,6 +231,7 @@
     supplierGroups: [],
     supplierFollowupStatuses: [],
     supplierStatusItemId: null,
+    supplierStatusSupplierId: null,
     resellerItems: [],
     supplierItemSelection: [],
     employees: [],
@@ -7510,7 +7511,7 @@
       return;
     }
     if (action === 'customer-contact-save') {
-      await saveCustomerContact(Number(target.dataset.id));
+      await saveCustomerContact(id);
       return;
     }
     if (action === 'open-receivables') {
@@ -7598,8 +7599,8 @@
     }
     if (action === 'supplier-item-chat-pick') {
       await openSupplierItemChat(
-        Number(target.dataset.id),
-        Number(target.dataset.itemId)
+        Number(data.id),
+        Number(data.itemId)
       );
       return;
     }
@@ -7612,7 +7613,14 @@
       return;
     }
     if (action === 'supplier-item-status') {
-      openSupplierStatusModal(id);
+      chatSupplierStatus(id);
+      return;
+    }
+    if (action === 'supplier-status-pick') {
+      openSupplierStatusModal(
+        Number(data.id),
+        Number(data.itemId)
+      );
       return;
     }
     if (action === 'supplier-item-remove') {
@@ -10045,25 +10053,29 @@
     DIPESAN: { label: 'Sudah dipesan', tone: 'green' },
     DIKIRIM: { label: 'Akan dikirim', tone: 'amber' },
     TIDAK_TERSEDIA: { label: 'Tidak tersedia', tone: 'red' },
+    ARSIP: { label: 'Tidak perlu', tone: 'gray' },
   };
+
+  function supplierStatusFor(supplierId, itemId) {
+    return (state.supplierFollowupStatuses || []).find(
+      (row) => row.supplier_id === supplierId && row.stock_item_id === itemId
+    );
+  }
 
   function renderFollowupReseller() {
     const section = $('#followupResellerSection');
     if (!section) return;
-    const statusByItem = new Map(
+    const statusMap = new Map(
       (state.supplierFollowupStatuses || []).map((row) => [
-        row.stock_item_id,
+        row.supplier_id + ':' + row.stock_item_id,
         row,
       ])
     );
-    let lowCount = 0;
-    let outCount = 0;
+    const supplierStatus = (supplierId, itemId) =>
+      statusMap.get(supplierId + ':' + itemId);
     const byItem = new Map();
     state.supplierGroups.forEach((group) => {
       group.items.forEach((item) => {
-        if (statusByItem.get(item.id)?.status === 'ARSIP') return;
-        if (item.status === 'HABIS') outCount += 1;
-        else lowCount += 1;
         const entry = byItem.get(item.id) || { ...item, suppliers: [] };
         entry.suppliers.push({
           supplier_id: group.supplier_id,
@@ -10073,21 +10085,36 @@
         byItem.set(item.id, entry);
       });
     });
-    state.resellerItems = Array.from(byItem.values()).sort((a, b) =>
-      a.status === b.status
-        ? a.nama.localeCompare(b.nama, 'id')
-        : a.status === 'HABIS'
-          ? -1
-          : 1
-    );
+    state.resellerItems = Array.from(byItem.values())
+      .filter((item) =>
+        item.suppliers.some(
+          (supplier) =>
+            supplierStatus(supplier.supplier_id, item.id)?.status !== 'ARSIP'
+        )
+      )
+      .map((item) => item)
+      .sort((a, b) =>
+        a.status === b.status
+          ? a.nama.localeCompare(b.nama, 'id')
+          : a.status === 'HABIS'
+            ? -1
+            : 1
+      );
+    const visibleItems = state.resellerItems.length;
+    let visibleLow = 0;
+    let visibleOut = 0;
+    state.resellerItems.forEach((item) => {
+      if (item.status === 'HABIS') visibleOut += 1;
+      else visibleLow += 1;
+    });
     const set = (id, value) => {
       const el = $('#' + id);
       if (el) el.textContent = value;
     };
     set('resellerStatSuppliers', state.supplierGroups.length);
-    set('resellerStatLow', lowCount);
-    set('resellerStatOut', outCount);
-    set('resellerStatItems', lowCount + outCount);
+    set('resellerStatLow', visibleLow);
+    set('resellerStatOut', visibleOut);
+    set('resellerStatItems', visibleItems);
 
     if (!state.resellerItems.length) {
       section.innerHTML =
@@ -10102,8 +10129,16 @@
             waLink(row.nomor_hp)
           );
           const clickable = suppliers.length > 0;
-          const status = statusByItem.get(item.id);
-          const badge = status && SUPPLIER_STATUS_BADGES[status.status];
+          const supplierLine = item.suppliers
+            .map((supplier) => {
+              const status = supplierStatus(supplier.supplier_id, item.id);
+              const badge = status && SUPPLIER_STATUS_BADGES[status.status];
+              return (
+                esc(supplier.nama) +
+                (badge ? ' (' + esc(badge.label) + ')' : '')
+              );
+            })
+            .join(' · ');
           return (
             '<div class="pengerjaan-row' +
             (clickable ? ' is-clickable' : '') +
@@ -10119,16 +10154,14 @@
             intValue(item.jumlah, 0) +
             ' · minimum ' +
             intValue(item.minimum_efektif, 0) +
+            '</span><span class="cell-sub">' +
+            supplierLine +
             '</span></div><div class="pengerjaan-actions">' +
             '<span class="badge ' +
             (item.status === 'HABIS' ? 'red' : 'amber') +
             '">' +
             (item.status === 'HABIS' ? 'Habis' : 'Menipis') +
             '</span>' +
-            (badge
-              ? '<span class="badge ' + badge.tone + '">' +
-                esc(badge.label) + '</span>'
-              : '') +
             '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-item-chat" data-id="' +
             item.id +
             '"' +
@@ -10162,6 +10195,9 @@
         (row.suppliers || []).some(
           (supplier) => supplier.supplier_id === supplierId
         )
+      )
+      .filter(
+        (row) => supplierStatusFor(supplierId, row.id)?.status !== 'ARSIP'
       )
       .map((row) => row.id);
     return ids.length ? ids : [fallbackItemId];
@@ -10247,32 +10283,75 @@
     openModal('#supplierPickModal');
   }
 
-  function openSupplierStatusModal(itemId) {
+  function openSupplierStatusModal(supplierId, itemId) {
     const item = state.resellerItems.find((row) => row.id === itemId);
     if (!item) return;
-    state.supplierStatusItemId = itemId;
-    const current = (state.supplierFollowupStatuses || []).find(
-      (row) => row.stock_item_id === itemId
+    const supplier = (item.suppliers || []).find(
+      (row) => row.supplier_id === supplierId
     );
-    $('#supplierStatusSubtitle').textContent = item.nama;
+    if (!supplier) return;
+    state.supplierStatusItemId = itemId;
+    state.supplierStatusSupplierId = supplierId;
+    const current = supplierStatusFor(supplierId, itemId);
+    $('#supplierStatusSubtitle').textContent =
+      item.nama + ' · ' + supplier.nama;
     $('#supplierStatusSelect').value = current ? current.status : '';
     $('#supplierStatusNote').value = current ? current.catatan || '' : '';
     openModal('#supplierStatusModal');
   }
 
+  function chatSupplierStatus(itemId) {
+    const item = state.resellerItems.find((row) => row.id === itemId);
+    if (!item) return;
+    const suppliers = item.suppliers || [];
+    if (!suppliers.length) {
+      toast('Belum ada supplier untuk barang ini.', 'warning');
+      return;
+    }
+    if (suppliers.length === 1) {
+      openSupplierStatusModal(suppliers[0].supplier_id, itemId);
+      return;
+    }
+    $('#supplierPickSubtitle').textContent =
+      item.nama + ' · pilih supplier untuk mengatur status.';
+    $('#supplierPickBody').innerHTML = suppliers
+      .map((supplier) => {
+        const current = supplierStatusFor(supplier.supplier_id, itemId);
+        const badge = current && SUPPLIER_STATUS_BADGES[current.status];
+        return (
+          '<div class="pengerjaan-row"><div class="pengerjaan-meta"><strong>' +
+          esc(supplier.nama) +
+          '</strong><span class="cell-sub">' +
+          (badge ? esc(badge.label) : 'Belum ada status') +
+          '</span></div><div class="pengerjaan-actions">' +
+          '<button type="button" class="btn btn-primary btn-xs" data-action="supplier-status-pick" data-id="' +
+          supplier.supplier_id +
+          '" data-item-id="' +
+          itemId +
+          '">Atur status</button></div></div>'
+        );
+      })
+      .join('');
+    openModal('#supplierPickModal');
+  }
+
   async function saveSupplierStatus() {
     const itemId = state.supplierStatusItemId;
-    if (!itemId) return;
+    const supplierId = state.supplierStatusSupplierId;
+    if (!itemId || !supplierId) return;
     const button = $('#supplierStatusSave');
     setBusy(button, true, 'Menyimpan...');
     try {
-      const saved = await API.setSupplierFollowupStatus(itemId, {
+      const saved = await API.setSupplierFollowupStatus(supplierId, itemId, {
         status: $('#supplierStatusSelect').value,
         catatan: $('#supplierStatusNote').value.trim() || null,
       });
       state.supplierFollowupStatuses = (
         state.supplierFollowupStatuses || []
-      ).filter((row) => row.stock_item_id !== itemId);
+      ).filter(
+        (row) =>
+          !(row.supplier_id === supplierId && row.stock_item_id === itemId)
+      );
       if (saved) state.supplierFollowupStatuses.push(saved);
       closeModal('#supplierStatusModal');
       renderFollowupReseller();

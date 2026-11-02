@@ -429,7 +429,6 @@ class SupplierWhatsAppPreviewOut(CompatBase):
 
 class SupplierFollowupIn(StrictBase):
     status: str = Field(default="", max_length=32)
-    supplier_id: Optional[int] = None
     catatan: Optional[str] = Field(default=None, max_length=255)
 
 
