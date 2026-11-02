@@ -66,6 +66,38 @@ badge ikut berubah tanpa menyentuh struktur.
 | accent | `#0F766E` | `#2DD4BF` |
 | on-accent | `#FFFFFF` | `#0F172A` |
 
+### putih (monokrom)
+
+| Variabel | Terang | Gelap |
+| --- | --- | --- |
+| sidebar | `#FFFFFF` | `#000000` |
+| text | `#000000` | `#FFFFFF` |
+| text-muted | `#525252` | `#A3A3A3` |
+| bg | `#FFFFFF` | `#000000` |
+| card | `#FFFFFF` | `#000000` |
+| border | `#E5E5E5` | `#262626` |
+| accent | `#000000` | `#FFFFFF` |
+| on-accent | `#FFFFFF` | `#000000` |
+
+Tema Putih memakai putih penuh pada mode terang dan berbalik menjadi hitam
+penuh pada mode gelap.
+
+### hitam (monokrom)
+
+| Variabel | Terang | Gelap |
+| --- | --- | --- |
+| sidebar | `#000000` | `#FFFFFF` |
+| text | `#FFFFFF` | `#000000` |
+| text-muted | `#A3A3A3` | `#525252` |
+| bg | `#000000` | `#FFFFFF` |
+| card | `#000000` | `#FFFFFF` |
+| border | `#262626` | `#E5E5E5` |
+| accent | `#FFFFFF` | `#000000` |
+| on-accent | `#000000` | `#FFFFFF` |
+
+Tema Hitam memakai hitam penuh pada mode terang dan berbalik menjadi putih
+penuh pada mode gelap.
+
 ## Turunan
 
 Warna turunan dihitung dari delapan variabel di atas dengan `color-mix`:

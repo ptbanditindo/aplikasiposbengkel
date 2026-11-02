@@ -9,7 +9,7 @@
       try {
         var mode = window.localStorage.getItem('bengkel.theme') === 'dark' ? 'dark' : 'light';
         var palette = window.localStorage.getItem('bengkel.colorTheme') || 'navy-oranye';
-        if (['navy-oranye', 'charcoal-kuning', 'biru-teal'].indexOf(palette) < 0) {
+        if (['navy-oranye', 'charcoal-kuning', 'biru-teal', 'putih', 'hitam'].indexOf(palette) < 0) {
           palette = 'navy-oranye';
         }
         document.documentElement.setAttribute(
@@ -19,7 +19,9 @@
         var backgrounds = {
           'navy-oranye': { light: '#F1F5F9', dark: '#0B1220' },
           'charcoal-kuning': { light: '#F4F4F5', dark: '#09090B' },
-          'biru-teal': { light: '#F1F5F9', dark: '#0B1220' }
+          'biru-teal': { light: '#F1F5F9', dark: '#0B1220' },
+          'putih': { light: '#FFFFFF', dark: '#000000' },
+          'hitam': { light: '#000000', dark: '#FFFFFF' }
         };
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute('content', backgrounds[palette][mode]);
@@ -28,8 +30,8 @@
   </script>
   <title>BengkelPOS Radiator</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261199">
-  <link rel="stylesheet" href="/static/css/world.css?v=20261199">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261209">
+  <link rel="stylesheet" href="/static/css/world.css?v=20261209">
 </head>
 <body class="auth-locked">
   <!-- ============================ GERBANG PIN ============================ -->
@@ -196,7 +198,7 @@
         <div class="page-head">
           <div>
             <h1>Ringkasan hari ini</h1>
-            <p class="muted">Servis dan pembayaran yang tercatat hari ini.</p>
+            <p class="muted">Uang masuk, unit, dan tagihan.</p>
           </div>
         </div>
 
@@ -209,14 +211,14 @@
         </div>
 
         <section class="stat-section">
-          <h2 class="stat-section-title">Laporan keuangan bengkel hari ini</h2>
+          <h2 class="stat-section-title">Kas dan tagihan</h2>
           <div class="stats-grid stats-grid--money">
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Lihat nota unit hari ini" data-action="dashboard-notas" data-filter="unit">
               <span class="stat-label">Unit diservis</span>
               <strong id="statUnit">0</strong>
             </article>
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Jumlah sparepart keluar hari ini dari nota servis dan pembelian sparepart saja" data-action="open-sold-parts">
-              <span class="stat-label">Sparepart keluar hari ini</span>
+              <span class="stat-label">Sparepart keluar</span>
               <strong id="statPartsOut">0</strong>
               <span class="stat-sub">Servis + pembelian part</span>
             </article>
@@ -229,7 +231,7 @@
               <strong id="statTransfer">Rp 0</strong>
             </article>
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar piutang pelanggan" data-action="open-receivables">
-              <span class="stat-label">Total hutang pelanggan</span>
+              <span class="stat-label">Hutang pelanggan</span>
               <strong id="statTotalDebt">Rp 0</strong>
               <span class="stat-sub" id="statTotalDebtSub">0 nota · 0 pelanggan</span>
             </article>
@@ -237,7 +239,7 @@
         </section>
 
         <section class="stat-section">
-          <h2 class="stat-section-title">Laporan stok habis / menipis</h2>
+          <h2 class="stat-section-title">Stok perlu perhatian</h2>
           <div class="stats-grid">
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka daftar stok menipis" data-action="open-low-stock">
               <span class="stat-label">Stok menipis</span>
@@ -253,7 +255,7 @@
         </section>
 
         <section class="stat-section" id="dashboardEmployeeStats">
-          <h2 class="stat-section-title">Laporan keuangan karyawan</h2>
+          <h2 class="stat-section-title">Gaji dan piutang karyawan</h2>
           <div class="stats-grid">
             <article class="stat-card is-clickable" role="button" tabindex="0" title="Buka hutang karyawan" data-action="open-employee-debts">
               <span class="stat-label">Piutang karyawan</span>
@@ -261,7 +263,7 @@
               <span class="stat-sub" id="statEmployeeDebtSub">0 hutang berjalan</span>
             </article>
             <article class="stat-card is-clickable hidden" id="dashboardPayrollCard" role="button" tabindex="0" title="Buka rincian gaji dan komisi" data-action="open-payroll">
-              <span class="stat-label">Gaji &amp; komisi harus dibayar</span>
+              <span class="stat-label">Gaji &amp; komisi</span>
               <strong id="statPayroll">Rp 0</strong>
               <span class="stat-sub" id="statPayrollSub">Belum ada tagihan gaji</span>
             </article>
@@ -889,6 +891,14 @@
               <button type="button" class="theme-choice" data-color-theme="biru-teal" aria-pressed="false">
                 <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
                 <span class="theme-name">Biru Teal</span>
+              </button>
+              <button type="button" class="theme-choice" data-color-theme="putih" aria-pressed="false">
+                <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="theme-name">Putih</span>
+              </button>
+              <button type="button" class="theme-choice" data-color-theme="hitam" aria-pressed="false">
+                <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="theme-name">Hitam</span>
               </button>
             </div>
           </div>
@@ -2738,15 +2748,15 @@
 
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-  <script src="/static/js/native-bridge.js?v=20261199"></script>
-  <script src="/static/js/api-client.js?v=20261199"></script>
-  <script src="/static/js/printer-manager.js?v=20261199"></script>
-  <script src="/static/js/bluetooth-native-adapter.js?v=20261199"></script>
-  <script src="/static/js/network-native-adapter.js?v=20261199"></script>
-  <script src="/static/js/usb-native-adapter.js?v=20261199"></script>
-  <script src="/static/js/system-native-adapter.js?v=20261199"></script>
-  <script src="/static/js/web-print-adapter.js?v=20261199"></script>
-  <script src="/static/js/bluetooth-printer.js?v=20261199"></script>
-  <script src="/static/js/app.js?v=20261199"></script>
+  <script src="/static/js/native-bridge.js?v=20261209"></script>
+  <script src="/static/js/api-client.js?v=20261209"></script>
+  <script src="/static/js/printer-manager.js?v=20261209"></script>
+  <script src="/static/js/bluetooth-native-adapter.js?v=20261209"></script>
+  <script src="/static/js/network-native-adapter.js?v=20261209"></script>
+  <script src="/static/js/usb-native-adapter.js?v=20261209"></script>
+  <script src="/static/js/system-native-adapter.js?v=20261209"></script>
+  <script src="/static/js/web-print-adapter.js?v=20261209"></script>
+  <script src="/static/js/bluetooth-printer.js?v=20261209"></script>
+  <script src="/static/js/app.js?v=20261209"></script>
 </body>
 </html>

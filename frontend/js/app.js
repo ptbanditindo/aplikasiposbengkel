@@ -11969,11 +11969,26 @@
   /* ------------------------------ Tampilan -------------------------------- */
   const THEME_KEY = 'bengkel.theme';
   const COLOR_THEME_KEY = 'bengkel.colorTheme';
-  const COLOR_THEMES = ['navy-oranye', 'charcoal-kuning', 'biru-teal'];
+  const COLOR_THEMES = [
+    'navy-oranye',
+    'charcoal-kuning',
+    'biru-teal',
+    'putih',
+    'hitam',
+  ];
   const COLOR_THEME_BG = {
     'navy-oranye': { light: '#F1F5F9', dark: '#0B1220' },
     'charcoal-kuning': { light: '#F4F4F5', dark: '#09090B' },
     'biru-teal': { light: '#F1F5F9', dark: '#0B1220' },
+    putih: { light: '#FFFFFF', dark: '#000000' },
+    hitam: { light: '#000000', dark: '#FFFFFF' },
+  };
+  const COLOR_THEME_TEXT = {
+    'navy-oranye': { light: '#1E293B', dark: '#F1F5F9' },
+    'charcoal-kuning': { light: '#18181B', dark: '#FAFAFA' },
+    'biru-teal': { light: '#1E293B', dark: '#F1F5F9' },
+    putih: { light: '#000000', dark: '#FFFFFF' },
+    hitam: { light: '#FFFFFF', dark: '#000000' },
   };
 
   function normalizeTheme(value) {
@@ -12026,8 +12041,10 @@
   function syncThemeMeta(mode, colorTheme) {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return;
-    const palette = COLOR_THEME_BG[normalizeColorTheme(colorTheme)];
-    meta.setAttribute('content', palette[mode]);
+    const key = normalizeColorTheme(colorTheme);
+    meta.setAttribute('content', COLOR_THEME_BG[key][mode]);
+    document.body.style.backgroundColor = COLOR_THEME_BG[key][mode];
+    document.body.style.color = COLOR_THEME_TEXT[key][mode];
   }
 
   function syncThemeUI(theme) {

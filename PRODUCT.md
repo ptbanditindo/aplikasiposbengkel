@@ -26,8 +26,8 @@ lokal, tanpa internet.
 - Offline-first: font dan aset dibundel, tanpa CDN.
 - Berjalan di WebView Android dan browser desktop.
 - Aplikasi dipakai seharian di ruang terang; tema terang adalah bawaan, tema
-  gelap tetap tersedia, dengan tiga pilihan tema warna: navy-oranye (bawaan),
-  charcoal-kuning, dan biru-teal.
+  gelap tetap tersedia, dengan lima pilihan tema warna: navy-oranye (bawaan),
+  charcoal-kuning, biru-teal, putih, dan hitam.
 - Backend, API, dan perilaku bisnis tidak boleh berubah karena pekerjaan UI.
 
 ## Mode permukaan
