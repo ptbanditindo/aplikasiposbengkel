@@ -10105,14 +10105,26 @@
 
   async function openSupplierItemChat(supplierId, itemId) {
     try {
-      const result = await API.supplierWhatsapp(supplierId, {
+      const preview = await API.supplierWhatsappPreview(supplierId, {
         stock_item_ids: [itemId],
       });
-      const opened = await openExternalLink(result.link);
-      if (opened) {
-        closeModal('#supplierPickModal');
-        toast('Chat supplier dibuka di WhatsApp.', 'success');
-      }
+      openWaPreview({
+        judul: 'Stok supplier · ' + preview.nama,
+        subtitle: 'Periksa pesan untuk ' + preview.nama + '.',
+        nomor: preview.nomor,
+        text: preview.wa_text,
+        note:
+          'Membuka WhatsApp akan mencatat upaya penanyaan stok. ' +
+          'Kasir tetap menekan kirim di WhatsApp.',
+        onOpen: async (text) => {
+          await API.supplierWhatsapp(supplierId, {
+            stock_item_ids: [itemId],
+            pesan: text,
+          });
+          toast('Pertanyaan stok tercatat.', 'success');
+        },
+      });
+      closeModal('#supplierPickModal');
     } catch (err) {
       toast(err.message, 'error', 7000);
     }

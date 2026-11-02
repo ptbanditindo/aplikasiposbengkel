@@ -56,6 +56,36 @@ def test_supplier_multi_barang_dan_followup_reseller(client):
         assert log.jenis == "supplier"
 
 
+def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
+    item = _stock(client, "Barang Preview", 1, 5)
+    supplier = client.post(
+        "/api/suppliers",
+        json={
+            "nama": "Supplier Preview",
+            "nomor_hp": "081200002222",
+            "stock_item_ids": [item["id"]],
+        },
+    ).json()
+    response = client.post(
+        f"/api/suppliers/{supplier['id']}/whatsapp-preview",
+        json={"stock_item_ids": [item["id"]]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    text = body["wa_text"].lower()
+    assert "barang preview" in text
+    assert "sisa" not in text
+    assert "minimum" not in text
+    assert "harga" in text
+    assert "dikirim" in text
+    from database.session import SessionLocal
+
+    with SessionLocal() as db:
+        assert (
+            db.query(WhatsAppLog).filter_by(supplier_id=supplier["id"]).count() == 0
+        )
+
+
 def test_supplier_tanpa_nomor_tidak_bisa_chat(client):
     item = _stock(client, "Barang Tanpa Nomor", 1, 5)
     supplier = client.post(

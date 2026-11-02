@@ -264,6 +264,11 @@
         method: 'POST',
         body: data,
       }),
+    supplierWhatsappPreview: (id, data) =>
+      request('/api/suppliers/' + id + '/whatsapp-preview', {
+        method: 'POST',
+        body: data,
+      }),
     customerWaLink: (customerId, jenis) =>
       request(
         '/api/customers/' +

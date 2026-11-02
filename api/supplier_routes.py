@@ -14,10 +14,12 @@ from api.schemas import (
     SupplierUpdate,
     SupplierWhatsAppIn,
     SupplierWhatsAppOut,
+    SupplierWhatsAppPreviewIn,
+    SupplierWhatsAppPreviewOut,
     WhatsAppLogOut,
 )
 from database.session import get_db
-from services import supplier_service, whatsapp_service
+from services import settings_service, supplier_service, whatsapp_service
 from services.auth_service import Operator
 
 router = APIRouter(
@@ -78,6 +80,37 @@ def update_supplier(
 def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
     supplier_service.delete_supplier(db, supplier_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/suppliers/{supplier_id}/whatsapp-preview",
+    response_model=SupplierWhatsAppPreviewOut,
+)
+def supplier_whatsapp_preview(
+    supplier_id: int,
+    payload: SupplierWhatsAppPreviewIn,
+    db: Session = Depends(get_db),
+    _operator: Operator = Depends(require_auth),
+):
+    supplier = supplier_service.get_supplier(db, supplier_id)
+    items = supplier_service.low_stock_items_for_supplier(
+        db, supplier_id, payload.stock_item_ids
+    )
+    if not items:
+        items = [
+            {"nama": item.nama}
+            for link in supplier.items
+            if (item := link.stock_item) is not None
+            and (not payload.stock_item_ids or item.id in payload.stock_item_ids)
+        ]
+    info = settings_service.get_bengkel_info(db)
+    db.rollback()
+    return SupplierWhatsAppPreviewOut(
+        supplier_id=supplier.id,
+        nama=supplier.nama,
+        nomor=supplier.nomor_hp or "",
+        wa_text=whatsapp_service.supplier_wa_text(supplier, items, info),
+    )
 
 
 @router.post(

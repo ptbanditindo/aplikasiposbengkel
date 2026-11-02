@@ -416,6 +416,17 @@ class SupplierWhatsAppOut(CompatBase):
     log: WhatsAppLogOut
 
 
+class SupplierWhatsAppPreviewIn(StrictBase):
+    stock_item_ids: List[int] = Field(default_factory=list)
+
+
+class SupplierWhatsAppPreviewOut(CompatBase):
+    supplier_id: int
+    nama: str
+    nomor: str = ""
+    wa_text: str = ""
+
+
 # --- STOCK & JASA ---
 class StockItemCreate(CompatBase):
     kode: Optional[str] = Field(default=None, max_length=64)
