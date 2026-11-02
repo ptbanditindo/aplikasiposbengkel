@@ -143,6 +143,7 @@ def supplier_whatsapp_preview(
         ]
     info = settings_service.get_bengkel_info(db)
     ops = settings_service.get_ops_settings(db)
+    qty = int(payload.jumlah or ops.get("supplier_tanya_jumlah", 1) or 1)
     db.rollback()
     return SupplierWhatsAppPreviewOut(
         supplier_id=supplier.id,
@@ -152,8 +153,9 @@ def supplier_whatsapp_preview(
             supplier,
             items,
             info,
-            jumlah=int(ops.get("supplier_tanya_jumlah", 1) or 1),
+            jumlah=qty,
         ),
+        jumlah=qty,
     )
 
 

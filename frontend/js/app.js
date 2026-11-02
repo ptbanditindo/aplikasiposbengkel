@@ -300,6 +300,7 @@
     rescheduleTarget: null,
     pengerjaan: null,
     waPreview: null,
+    waQtyTimer: null,
   };
 
   /* ------------------------------ UI utils -------------------------------- */
@@ -2754,6 +2755,10 @@
       nomor: opts.nomor || '',
       disabled: Boolean(opts.disabled),
       onOpen: typeof opts.onOpen === 'function' ? opts.onOpen : null,
+      onQuantityChange:
+        typeof opts.onQuantityChange === 'function'
+          ? opts.onQuantityChange
+          : null,
     };
     $('#waModalTitle').textContent = opts.judul || 'Pesan WhatsApp';
     $('#waModalSubtitle').textContent =
@@ -2763,20 +2768,47 @@
     $('#waModalNote').textContent =
       opts.note ||
       'Pesan hanya dibuka di WhatsApp, tidak dikirim otomatis. Upaya dicatat saat tombol dibuka.';
-    const open = $('#waModalOpen');
-    if (!link || opts.disabled) {
-      open.classList.add('hidden');
-    } else {
-      open.classList.remove('hidden');
-      open.href = link;
-    }
+    const qtyField = $('#waModalQtyField');
+    const qtyInput = $('#waModalQty');
+    const hasQty = opts.quantity !== undefined && opts.quantity !== null;
+    if (qtyField) qtyField.classList.toggle('hidden', !hasQty);
+    if (qtyInput) qtyInput.value = hasQty ? String(opts.quantity) : '';
+    updateWaOpenState();
     openModal('#waModal');
+  }
+
+  function updateWaOpenState() {
+    const open = $('#waModalOpen');
+    if (!open) return;
+    const preview = state.waPreview;
+    if (!preview || preview.disabled || !preview.link) {
+      open.classList.add('hidden');
+      return;
+    }
+    const qtyField = $('#waModalQtyField');
+    if (qtyField && !qtyField.classList.contains('hidden')) {
+      const qty = intValue($('#waModalQty').value, 0);
+      open.classList.toggle('hidden', qty < 1);
+      if (qty >= 1) open.href = preview.link;
+      return;
+    }
+    open.href = preview.link;
+    open.classList.remove('hidden');
   }
 
   async function handleWaOpen(event) {
     event.preventDefault();
     const preview = state.waPreview;
     if (!preview || preview.disabled) return;
+    const qtyField = $('#waModalQtyField');
+    if (qtyField && !qtyField.classList.contains('hidden')) {
+      const qty = intValue($('#waModalQty').value, 0);
+      if (qty < 1) {
+        toast('Isi jumlah yang ditanyakan dulu.', 'warning');
+        $('#waModalQty')?.focus();
+        return;
+      }
+    }
     const text = ($('#waModalText').value || '').trim();
     const link = preview.nomor ? waLink(preview.nomor, text) : preview.link;
     if (!link) {
@@ -10250,6 +10282,14 @@
         subtitle: 'Periksa pesan untuk ' + preview.nama + '.',
         nomor: preview.nomor,
         text: preview.wa_text,
+        quantity: preview.jumlah,
+        onQuantityChange: async (jumlah) => {
+          const updated = await API.supplierWhatsappPreview(supplierId, {
+            stock_item_ids: itemIds,
+            jumlah,
+          });
+          return updated.wa_text;
+        },
         note:
           'Membuka WhatsApp akan mencatat penanyaan stok. ' +
           'Pesan tetap dikirim manual dari WhatsApp.',
@@ -11539,6 +11579,25 @@
     $('#waModalOpen').addEventListener('click', handleWaOpen);
     $('#waModalClose').addEventListener('click', () => closeModal('#waModal'));
     $('#waModalCancel').addEventListener('click', () => closeModal('#waModal'));
+    $('#waModalQty').addEventListener('input', () => {
+      updateWaOpenState();
+      const preview = state.waPreview;
+      if (!preview || !preview.onQuantityChange) return;
+      const qty = intValue($('#waModalQty').value, 0);
+      window.clearTimeout(state.waQtyTimer);
+      if (qty < 1) return;
+      state.waQtyTimer = window.setTimeout(async () => {
+        if (state.waPreview !== preview) return;
+        try {
+          const text = await preview.onQuantityChange(qty);
+          if (typeof text === 'string' && state.waPreview === preview) {
+            $('#waModalText').value = text;
+          }
+        } catch (err) {
+          toast(err.message, 'error', 6000);
+        }
+      }, 400);
+    });
 
     $('#followupListClose').addEventListener('click', closeFollowupList);
     $('#followupListDismiss').addEventListener('click', closeFollowupList);

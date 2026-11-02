@@ -84,6 +84,15 @@ def test_preview_pesan_supplier_tanpa_jumlah_stok(client):
     assert "minimum" not in text
     assert "harga per satuan" in text
     assert "pengiriman" in text
+
+    custom = client.post(
+        f"/api/suppliers/{supplier['id']}/whatsapp-preview",
+        json={"stock_item_ids": [item["id"]], "jumlah": 3},
+    )
+    assert custom.status_code == 200, custom.text
+    custom_body = custom.json()
+    assert custom_body["jumlah"] == 3
+    assert "3 buah" in custom_body["wa_text"].lower()
     from database.session import SessionLocal
 
     with SessionLocal() as db:
