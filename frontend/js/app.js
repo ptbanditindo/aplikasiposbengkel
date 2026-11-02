@@ -7288,6 +7288,14 @@
       if (supplier) openSupplierModal(supplier);
       return;
     }
+    if (action === 'deactivate-supplier') {
+      await setSupplierActive(id, false);
+      return;
+    }
+    if (action === 'reactivate-supplier') {
+      await setSupplierActive(id, true);
+      return;
+    }
     if (action === 'delete-supplier') {
       await deleteSupplier(id);
       return;
@@ -9422,7 +9430,11 @@
     const body = $('#supplierBody');
     if (!body) return;
     const summary = $('#supplierSummary');
-    if (summary) summary.textContent = state.suppliers.length + ' supplier';
+    if (summary) {
+      const aktifCount = state.suppliers.filter((row) => row.aktif).length;
+      summary.textContent =
+        aktifCount + ' supplier aktif · ' + state.suppliers.length + ' total';
+    }
     if (!state.suppliers.length) {
       body.innerHTML = '';
       $('#supplierEmpty').classList.remove('hidden');
@@ -9454,6 +9466,13 @@
           '<button type="button" class="btn btn-outline btn-xs" data-action="edit-supplier" data-id="' +
           supplier.id +
           '">Edit</button>' +
+          (supplier.aktif
+            ? '<button type="button" class="btn btn-ghost btn-xs" data-action="deactivate-supplier" data-id="' +
+              supplier.id +
+              '">Nonaktifkan</button>'
+            : '<button type="button" class="btn btn-outline btn-xs" data-action="reactivate-supplier" data-id="' +
+              supplier.id +
+              '">Aktifkan</button>') +
           '<button type="button" class="btn btn-ghost btn-xs" data-action="delete-supplier" data-id="' +
           supplier.id +
           '">Hapus</button>' +
@@ -9587,6 +9606,29 @@
     try {
       await API.deleteSupplier(id);
       toast('Supplier dihapus.', 'success');
+      await loadSuppliers();
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function setSupplierActive(id, aktif) {
+    const supplier = state.suppliers.find((row) => row.id === id);
+    if (!supplier) return;
+    const message = aktif
+      ? 'Aktifkan kembali ' +
+        supplier.nama +
+        '? Supplier akan muncul lagi sebagai pilihan barang.'
+      : 'Nonaktifkan ' +
+        supplier.nama +
+        '? Data supplier tetap tersimpan dan bisa diaktifkan kembali.';
+    if (!window.confirm(message)) return;
+    try {
+      await API.updateSupplier(id, { aktif });
+      toast(
+        aktif ? 'Supplier diaktifkan.' : 'Supplier dinonaktifkan.',
+        'success'
+      );
       await loadSuppliers();
     } catch (err) {
       toast(err.message, 'error', 6000);
