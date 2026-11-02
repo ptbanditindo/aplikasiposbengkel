@@ -57,6 +57,47 @@ def test_penugasan_karyawan_dan_nama_di_struk(
     assert response.json()["komisi_total"] == "20000.00"
 
 
+def test_komisi_manual_dibatasi_total_nota_dan_sisa_setelah_modal(
+    client, create_customer, create_unit, make_transaction
+):
+    mechanic = _employee(client, "Mekanik Batas", "MEKANIK", nilai="0")
+    customer = create_customer(nama="Pelanggan Batas")
+    unit = create_unit(customer["id"], nopol="B 8408 BAT")
+    part = next(
+        item
+        for item in client.get("/api/stock").json()
+        if item["kode"] == "SP-003"
+    )
+    response = make_transaction(
+        unit["id"],
+        jobs=[{"deskripsi": "Servis", "jumlah": 1, "harga": "50000"}],
+        parts=[
+            {
+                "stock_item_id": part["id"],
+                "jumlah": 1,
+                "harga_satuan": "35000",
+            }
+        ],
+        mechanic_ids=[mechanic["id"]],
+    )
+    assert response.status_code == 201, response.text
+    record_id = response.json()["record"]["id"]
+    url = f"/api/employees/{mechanic['id']}/commissions/{record_id}"
+
+    # Nota 85.000 (jasa 50.000 + part 35.000), modal SP-003 18.000.
+    over_nota = client.put(url, json={"nominal": "90000"})
+    assert over_nota.status_code == 400, over_nota.text
+    assert "total nota" in over_nota.json()["detail"]
+
+    over_laba = client.put(url, json={"nominal": "70000"})
+    assert over_laba.status_code == 400, over_laba.text
+    assert "harga modal" in over_laba.json()["detail"]
+
+    pas = client.put(url, json={"nominal": "67000"})
+    assert pas.status_code == 200, pas.text
+    assert pas.json()["komisi_total"] == "67000.00"
+
+
 def test_mekanik_boleh_kosong_dan_kasir_harus_berperan_kasir(
     client, create_customer, create_unit, make_transaction
 ):

@@ -20,7 +20,7 @@ from database.models import (
 )
 from services import employee_debt_service
 from services.errors import BusinessValidationError, ConflictError, NotFoundError
-from services.utils import clean_text, money
+from services.utils import clean_text, format_rupiah, money
 
 PERAN_VALUES = {"MEKANIK", "KASIR", "KEDUANYA"}
 MODE_VALUES = {"PERSEN", "NOMINAL"}
@@ -787,6 +787,22 @@ def payroll_summary(db: Session, today: Optional[date] = None) -> Dict[str, Any]
     }
 
 
+def _record_modal_total(record: ServiceRecord) -> Decimal:
+    """Total harga modal sparepart bersih retur pada satu nota."""
+    modal = Decimal("0.00")
+    for part in record.parts:
+        net_qty = int(part.jumlah or 0) - int(getattr(part, "jumlah_retur", 0) or 0)
+        if net_qty <= 0:
+            continue
+        harga = getattr(part, "harga_modal", None)
+        if harga is None and part.stock_item is not None:
+            harga = part.stock_item.harga_modal
+        if harga is None:
+            continue
+        modal += Decimal(harga) * net_qty
+    return money(modal)
+
+
 def set_commission_override(
     db: Session,
     employee_id: int,
@@ -808,6 +824,21 @@ def set_commission_override(
         raise BusinessValidationError("Nominal komisi tidak valid.") from exc
     if amount < 0:
         raise BusinessValidationError("Nominal komisi tidak boleh negatif.")
+    total_nota = money(record.total_servis or 0)
+    if amount > total_nota:
+        raise BusinessValidationError(
+            "Komisi tidak boleh melebihi total nota pelanggan. "
+            "Maksimal " + format_rupiah(total_nota) + "."
+        )
+    modal_total = _record_modal_total(record)
+    sisa_setelah_modal = money(max(Decimal("0.00"), total_nota - modal_total))
+    if amount > sisa_setelah_modal:
+        raise BusinessValidationError(
+            "Komisi tidak boleh melebihi sisa setelah harga modal. "
+            "Harga modal nota " + format_rupiah(modal_total)
+            + " harus tetap aman. Maksimal komisi "
+            + format_rupiah(sisa_setelah_modal) + "."
+        )
     row = db.scalar(
         select(ServiceRecordCommission).where(
             ServiceRecordCommission.service_record_id == record_id,
