@@ -10,6 +10,8 @@ import threading
 import time
 
 RESTORE_PATH = "/api/admin/restore"
+RESTORE_ALL_PATH = "/api/admin/restore-all"
+RESTORE_PATHS = (RESTORE_PATH, RESTORE_ALL_PATH)
 HEALTH_PATH = "/api/health"
 RESTORE_WAIT_TIMEOUT = 30.0
 
@@ -74,6 +76,8 @@ gate = MaintenanceGate()
 __all__ = [
     "HEALTH_PATH",
     "RESTORE_PATH",
+    "RESTORE_ALL_PATH",
+    "RESTORE_PATHS",
     "RESTORE_WAIT_TIMEOUT",
     "MaintenanceGate",
     "gate",

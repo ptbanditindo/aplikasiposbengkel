@@ -11,6 +11,44 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Peringatan menyebut akibatnya (mis. isian hilang, riwayat tetap tersimpan).
 
 
+## Layar akses (PIN, karyawan, perangkat)
+
+- BengkelPOS Radiator
+- Data bengkel tersimpan di perangkat ini
+- Kasir, stok, dan piutang dalam satu buku kerja.
+- Akses pemilik
+- Buat PIN pemilik
+- PIN 4 sampai 12 angka. Hanya pemilik yang perlu tahu.
+- PIN baru
+- Ulangi PIN
+- Simpan PIN
+- Masuk
+- Masukkan PIN pemilik untuk membuka bengkel.
+- PIN
+- Buka aplikasi
+- Masuk sebagai karyawan
+- Username
+- Password
+- PIN 6 angka
+- Masuk karyawan
+- Masuk dari perangkat karyawan
+- Kembali ke PIN pemilik
+- ID owner
+- Token perangkat
+- Dari pemilik; cukup diisi sekali
+- Perangkat harus didaftarkan pemilik terlebih dahulu. Login pertama memerlukan koneksi ke hub.
+- Masuk perangkat
+- Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.
+- Error: PIN minimal 4 angka.
+- Error: PIN yang diulang tidak sama.
+- Error: Isi username dan password.
+- Error: PIN karyawan harus 6 angka. PIN ini dibuat saat login pertama.
+- Error: Isi ID owner, username, dan password.
+- Error: Token perangkat belum diisi. Minta token dari pemilik.
+- Error: Sesi perangkat berakhir. Masuk kembali dengan akun karyawan.
+- Error: Sesi berakhir. Masukkan PIN lagi.
+- Prompt: Password awal wajib diganti. Masukkan password baru (minimal 8 karakter):
+
 ## Halaman: dashboard
 
 - Ringkasan hari ini
@@ -367,10 +405,17 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Kirim backup otomatis setiap hari
 - Jam kirim (waktu lokal)
 - Chat ID penerima
+- Contoh: 123456789 atau @namachannel
+- Format backup otomatis
+- Database (.db) - bisa dipulihkan
+- Excel (.xlsx) - data per tabel
+- CSV (.zip) - teks spreadsheet per tabel
+- Database (.db) dapat dipulihkan lewat Pulihkan data. Excel dan CSV hanya untuk dibaca atau diolah; file pemulihan tetap harus .db.
 - Bot token Telegram
-- Setiap kiriman berisi satu file backup lengkap: pelanggan, unit, riwayat servis,
-- transaksi keuangan, stok, dan pengaturan bengkel. Nama file memakai rentang tanggal,
-- jadi tidak ada file terpisah yang tumpang tindih. Butuh koneksi internet. Jika
+- Kosongkan jika token sudah ada
+- Setiap kiriman berisi satu berkas sesuai format yang dipilih: pelanggan, unit,
+- riwayat servis, transaksi keuangan, stok, dan pengaturan bengkel. Database (.db)
+- dapat dipulihkan; Excel dan CSV hanya untuk dibaca. Butuh koneksi internet. Jika
 - jadwal terlewat, backup dikirim begitu internet tersedia.
 - Pilih folder tempat penyimpanan
 - Belum dipilih
@@ -387,6 +432,176 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - 10 menit
 - 30 menit
 - Kunci sekarang
+
+## Halaman: premium
+
+- Premium dan pemilik
+- Lisensi, akun karyawan, perangkat, sinkronisasi terenkripsi, dan arsip semua toko. Metadata disimpan di database utama; data toko tetap di database toko masing-masing.
+- Muat ulang
+- Paket gratis
+- Akun karyawan, perangkat, sinkronisasi terenkripsi, dan arsip semua toko hanya tersedia di paket premium. Aktifkan lisensi di bawah untuk membuka fitur ini.
+- Terkunci
+- Lisensi dan ID owner
+- Satu paket premium untuk semua fitur. Aktivasi di web hanya untuk pengujian; pembelian resmi memakai Play Billing di APK.
+- Gratis
+- Premium
+- ID owner
+- Salin ID
+- Tampilkan QR
+- Sembunyikan QR
+- QR hanya berisi ID owner untuk login perangkat karyawan. Tidak memuat password atau data bengkel.
+- QR tidak tersedia.
+- QR gagal dibuat.
+- Status lisensi
+- Berlaku sampai
+- Sisa hari
+- Batas perangkat owner
+- Kunci publik owner
+- Jam perangkat mundur dari verifikasi terakhir. Lisensi tetap aktif sampai batas waktu, tetapi periksa jam perangkat.
+- Masa aktif (hari)
+- Sumber aktivasi
+- Manual (uji)
+- Play Billing
+- Voucher
+- Aktifkan premium
+- Perpanjang
+- Lihat token lisensi
+- Ringkasan aplikasi owner
+- Pemulihan dan penghapusan metadata akun
+- Kode pemulihan
+- Tempel kode pemulihan
+- Buka kunci privat owner
+- Penghapusan hanya menghapus metadata premium di database utama. Data bengkel, stok, nota, dan backup tetap utuh.
+- Ketik ID owner untuk konfirmasi
+- Hapus metadata premium
+- Akun karyawan
+- Peran dasar ditambah izin tambahan. Tindakan pemilik tetap ditolak di lapisan data.
+- + Tambah akun
+- Tutup form
+- Username
+- Nama tampilan
+- Peran dasar
+- Kasir
+- Mekanik
+- Kasir & Mekanik
+- Password awal
+- Kosongkan untuk dibuat otomatis
+- Kosongkan bila tidak diubah
+- Buat password acak
+- Toko yang ditugaskan
+- Izin tambahan
+- Katalog izin belum dimuat.
+- Simpan akun
+- Batal
+- Username
+- Nama
+- Peran
+- Toko
+- Status
+- Aktif
+- Nonaktif
+- Wajib ganti password
+- Ubah
+- Password
+- Reset PIN
+- Audit
+- Snapshot
+- Nonaktifkan
+- Belum ada akun karyawan. Tambahkan akun untuk membuka akses terbatas.
+- Teks akun
+- Salin semua
+- Perangkat dan hub
+- Server hanya menyimpan kunci publik dan hash token perangkat. Kunci privat tidak pernah disimpan di server.
+- Siapkan web hub
+- + Daftarkan perangkat
+- Nama perangkat
+- HP kasir
+- Jenis
+- Owner
+- Karyawan
+- Akun karyawan
+- Tidak terikat
+- Buat kunci di server
+- Ya, tampilkan sekali
+- Tidak, kirim kunci publik
+- Toko yang ditugaskan
+- Daftarkan
+- Batal
+- Nama
+- Jenis
+- Toko
+- Status
+- Online
+- Offline
+- Dicabut
+- Hub:
+- Cabut
+- Lepas slot
+- Belum ada perangkat terdaftar.
+- Hub toko
+- Hub wajib daring untuk menulis uang di toko. Perangkat lain hanya dapat mengantrekan perubahan.
+- Toko
+- Perangkat hub
+- Paksa ganti hub
+- Tidak
+- Ya
+- Simpan hub
+- Buat kunci toko
+- Ganti kunci toko
+- Sinkronisasi terenkripsi
+- Antrean keluar, konflik, dan snapshot dienkripsi di perangkat. Server hanya melihat ciphertext dan tanda tangan.
+- Muat status
+- Bersihkan kedaluwarsa
+- Tertunda
+- Konflik
+- Sinkron terakhir
+- Status
+- Lengkap
+- Menunggu
+- Antrean keluar
+- Entitas
+- Aksi
+- Status
+- Dibuat
+- Antrean kosong.
+- Konflik
+- Entitas
+- Alasan
+- Dibuat
+- Pertahankan lokal
+- Pakai server
+- Tidak ada konflik terbuka.
+- Snapshot terenkripsi
+- Perangkat
+- Kunci toko (base64)
+- Dibuat lewat tombol Buat kunci toko
+- Kunci privat perangkat
+- Hanya tersedia di sesi ini
+- Buat snapshot
+- Ambil snapshot
+- Terapkan snapshot
+- Arsip semua toko
+- Satu ZIP berisi database seluruh toko, manifest, dan checksum. Pemulihan memvalidasi semua berkas sebelum menimpa data.
+- Buat arsip semua toko
+- Berkas
+- Ukuran
+- Dibuat
+- Unduh
+- Belum ada arsip semua toko.
+- Pulihkan arsip ZIP
+- Pulihkan semua toko
+- Restore arsip menimpa database toko yang ada. Buat backup manual dulu bila ragu.
+- Teks siap kirim: PusatkuPOS — akun karyawan / ID owner / Username / Password / Peran / Toko / Ganti password saat login pertama.
+- Teks rahasia perangkat: Perangkat / ID / Token perangkat (sekali) / Kunci tanda tangan (sekali) / Kunci enkripsi (sekali).
+- Teks kunci toko: Kunci toko (hanya ditampilkan sekali) / Perangkat terbungkus.
+- Teks ganti kunci: Kunci baru toko (hanya ditampilkan sekali) / Perangkat dibungkus ulang / Amplop dihapus / Snapshot dihapus / Outbox dikirim ulang.
+- Teks lisensi: Lisensi / ID owner / Berlaku sampai / Batas perangkat / Kode pemulihan (hanya sekali) / Token lisensi.
+- Teks pemulihan: Kunci privat owner (jangan bagikan):
+- Pesan gating paket gratis: Satu toko, kasir, stok, laporan, dan backup manual. / 20 kredit WhatsApp untuk Follow up. / Karyawan, Supplier, dan multi-toko terkunci.
+- Pesan gating paket premium: Toko tanpa batas dengan data terpisah. / Karyawan, Supplier, dan Follow up tanpa kuota. / Backup otomatis lokal dan Telegram.
+- Banner kuota: Kuota Follow up / 20 dari 20 kredit WhatsApp tersisa. Satu kredit terpakai saat tautan WhatsApp dibuka.
+- Banner kuota habis: Kuota Follow up habis / 20 kredit WhatsApp sudah terpakai. Fitur Follow up terkunci sampai berlangganan premium.
+- Catatan gating: Paket gratis: daftar karyawan tetap bisa dibaca, tetapi tambah dan ubah data terkunci.
 
 ## Halaman: customers
 
@@ -1211,6 +1426,40 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Backup tersimpan: file backupsuccess
 - Backup gagal dibagikan. Coba lagi.error
 - Aplikasi gagal memuat data awal. Tutup lalu buka lagi.error
+- Status premium gagal dimuat. Coba lagi.error
+- ID owner disalin.success
+- Teks akun disalin.success
+- Akun diperbarui.success
+- Akun dibuat.success
+- Pilih minimal satu toko untuk akun ini.error
+- Perangkat karyawan wajib terikat akun.error
+- Perangkat terdaftar.success
+- Kunci toko dibuat. Salin sekarang; tidak dapat ditampilkan lagi.success
+- Kunci toko diganti. Salin sekarang; tidak dapat ditampilkan lagi.success
+- Hub toko : aktif/dipaksa/menunggu/belum ada.success
+- Pilih toko dan perangkat owner untuk hub.error
+- Premium aktif.success
+- Lisensi diperpanjang.success
+- Masukkan kode pemulihan.error
+- Ketik ID owner untuk konfirmasi.error
+- Metadata premium dihapus. Data toko tidak disentuh.success
+- Password direset.success
+- PIN dihapus.success
+- Akun dinonaktifkan.success
+- Perangkat dicabut.success
+- Slot perangkat dilepas.success
+- Konflik ditandai selesai.success
+- Pilih perangkat hub, isi kunci toko dan kunci privat perangkat.error
+- Snapshot terenkripsi dibuat.success
+- Pilih perangkat.error
+- Pilih perangkat dan isi kunci toko.error
+- Snapshot diterapkan.success
+- Amplop kedaluwarsa dibersihkan: .success
+- Arsip semua toko dibuat: .success
+- Masuk sebagai .success
+- Password karyawan diperbarui.success
+- Password belum diganti. Ganti lewat pemilik bila perlu.warning
+- PIN karyawan dibuat dari isian login pertama.success
 
 ## Dialog konfirmasi
 
@@ -1236,6 +1485,15 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Aktifkan kembali ? Supplier akan muncul lagi di daftar aktif.
 - Pulihkan data dari ""? Seluruh data saat ini akan diganti. Salinan pengaman tetap dibuat otomatis.
 - Kosongkan semua isian transaksi? Isian yang belum disimpan akan hilang.
+- Ganti kunci toko ? Amplop dan snapshot lama dihapus; outbox dikirim ulang. Lakukan setelah perangkat dicabut.
+- Hapus PIN ? Karyawan harus membuat PIN baru.
+- Nonaktifkan akun ?
+- Cabut perangkat ini? Sesi perangkat langsung ditolak.
+- Lepas slot perangkat? Tindakan ini hanya dapat dilakukan sekali per 72 jam.
+- Terapkan snapshot ke toko aktif? Data toko saat ini akan diganti dan antrean lokal diputar ulang.
+- Hapus metadata premium di database utama? Data bengkel dan backup tetap utuh.
+- Prompt: Password baru untuk (kosongkan untuk dibuat otomatis):
+- Prompt: ID snapshot yang diterapkan:
 
 ## Judul/subjudul yang diisi dinamis
 
@@ -1313,3 +1571,14 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - `supplierStatusSubtitle`: ·
 - `supplierPickSubtitle`: · pilih supplier untuk mengatur status.
 - `supplierPickSubtitle`: · pilih supplier yang akan dihubungi.
+- `premiumPlanBadge`: GratisPremium
+- `premiumLicenseStatus`: Tidak aktifAktifKedaluwarsa
+- `premiumDaysLeft`: hari
+- `premiumOwnerId`: ID owner atau -
+- `premiumSecretOut`: teks lisensi, token, kunci toko, snapshot, ringkasan owner, atau audit akun
+- `accountSecretOut`: teks akun karyawan siap kirim atau hasil audit/snapshot akun
+- `deviceSecretOut`: token/kunci perangkat atau hasil buat/ganti kunci toko
+- `syncSecretOut`: hasil snapshot, penerapan, atau status sinkronisasi
+- `syncComplete`: LengkapMenunggu
+- `hubStore`/`hubDeviceId`: toko dan perangkat owner aktif
+- `premiumStoreLabel`: aktif/dipaksa/menunggu/belum ada

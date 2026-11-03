@@ -4052,3 +4052,203 @@ a.btn { text-decoration: none; }
     flex: 1 1 auto;
   }
 }
+
+/* ------------------------------ Premium web ------------------------------ */
+.nav-group-label.role-hidden,
+.nav-tab.role-hidden {
+  display: none !important;
+}
+.role-hidden {
+  display: none !important;
+}
+.auth-switch {
+  display: block;
+  margin: 12px auto 0;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-switch:hover {
+  color: var(--accent-strong, var(--accent));
+}
+#authEmployeeForm {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.premium-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px 18px;
+  margin: 12px 0;
+}
+.premium-value {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-word;
+}
+.premium-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.premium-form {
+  margin-top: 12px;
+}
+.premium-form-actions {
+  align-items: end;
+  flex-wrap: wrap;
+}
+.premium-wide {
+  grid-column: 1 / -1;
+}
+.premium-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 0;
+}
+.premium-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.premium-subhead {
+  margin: 18px 0 6px;
+}
+.premium-subhead h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.premium-details {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.premium-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.premium-secret {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 260px;
+  overflow: auto;
+}
+.premium-token-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .premium-grid {
+    grid-template-columns: 1fr;
+  }
+  .premium-form {
+    grid-template-columns: 1fr;
+  }
+}
+.sidebar-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--raised);
+}
+.sidebar-session .btn-sm {
+  padding: 2px 8px;
+  min-height: 0;
+}
+
+/* ID owner, password acak, dan salin teks akun (K-06/K-08) */
+.owner-id-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--raised);
+}
+.owner-id-value {
+  margin: 4px 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  word-break: break-all;
+}
+.owner-id-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.owner-qr {
+  margin: 12px 0 4px;
+  padding: 10px;
+  width: fit-content;
+  border-radius: 10px;
+  background: #fff;
+}
+.owner-qr svg {
+  display: block;
+  width: 160px;
+  height: 160px;
+}
+.input-with-action {
+  display: flex;
+  gap: 8px;
+}
+.input-with-action .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+}
+.btn-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.premium-secret-wrap {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
+}
+.premium-secret-wrap .premium-secret {
+  margin: 8px 0 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.premium-secret-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}

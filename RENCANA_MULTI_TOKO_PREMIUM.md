@@ -1,14 +1,29 @@
 # Rencana Multi-Toko dan Fitur Premium — PusatkuPOS
 
-Status: **rencana aktif**. Fase 1 web sudah dibangun; status dan riwayat ada di
-`STATUS_MULTI_TOKO_PEMANTAPAN.md`. 2026-11-03.
+Status: **rencana aktif**. Fase 1 web dan prototipe web Fase 3–7 sudah dibangun;
+status dan riwayat ada di `STATUS_MULTI_TOKO_PEMANTAPAN.md`. 2026-11-03.
 
 Produk target: **PusatkuPOS (Flutter)**. Aplikasi 2.7.0 yang berjalan sekarang
 tetap **BengkelPOS Radiator** (web) dan **menerima fitur ini lebih dulu** sebagai
 kanal uji web; setelah perilakunya teruji, fitur dibawa ke PusatkuPOS Flutter.
 
 Pengujian tidak dicantumkan di sini. Seluruh skenario uji ada di
-`RENCANA_PEMANTAPAN.md` dan baru dijalankan setelah fiturnya dibangun.
+`RENCANA_PEMANTAPAN.md`. Uji otomatis web sudah dijalankan; uji UI manual,
+pilot, dan pengujian Dart tetap harus diselesaikan sebelum rilis premium.
+
+### Status prototipe web
+
+- **Sudah ada kodenya:** header, registry toko, ganti toko, isolasi database,
+  gating gratis/premium, kuota Follow up lokal, akun owner/karyawan,
+  peran/izin, password/PIN, lisensi manual, ID owner (kartu + salin + QR lokal),
+  perangkat/hub, kunci toko terbungkus, relay E2E, outbox, snapshot terenkripsi,
+  konflik, TTL, arsip semua toko, re-key, login perangkat karyawan, dan ringkasan
+  aplikasi owner.
+- **Sudah lulus uji otomatis:** 400 tes desktop dan 15 tes premium web (3x
+  berturut). Bukti terperinci ada di `STATUS_MULTI_TOKO_PEMANTAPAN.md`.
+- **Belum:** uji UI web manual, pilot 1–3 bengkel, dokumen protokol + test
+  vector, port Dart/Flutter, Play Billing, secure storage, notifikasi sistem,
+  dan pengujian kunci/relay pada perangkat nyata.
 
 ## Cara membaca dokumen
 
@@ -32,10 +47,14 @@ Pengujian tidak dicantumkan di sini. Seluruh skenario uji ada di
 - Target produk adalah **PusatkuPOS Flutter** untuk Android, Windows, dan macOS.
 - **Web 2.7.0 (BengkelPOS Radiator) adalah kanal implementasi dan uji pertama
   untuk lingkup terbatas:** header, registry, ganti toko, isolasi data, dan
-  gating/kuota dengan entitlement stub.
+  gating/kuota dengan entitlement stub. Prototipe web juga sudah memuat alur
+  akun, lisensi, ID owner, perangkat/hub, kunci toko, relay E2E, snapshot,
+  konflik, arsip semua toko, dan login perangkat karyawan sebagai **acuan
+  migrasi**, bukan bukti kesiapan platform.
 - **Web tidak membuktikan** akun Google, Play Billing, secure storage/Keystore,
-  notifikasi sistem, kunci perangkat, relay, E2E, atau LAN. Bagian itu ditulis
-  sekali di Dart setelah spesifikasi protokol dan test vector selesai.
+  notifikasi sistem, kunci perangkat sungguhan, relay lintas perangkat nyata,
+  atau LAN. Bagian itu ditulis sekali di Dart setelah spesifikasi protokol dan
+  test vector selesai.
 - Web berjalan **loopback-only** (`validate_runtime`). Batas itu tidak boleh
   dilonggarkan untuk multi-device; multi-device diuji di Dart.
 - **Fokus implementasi saat ini hanya web.** APK/Android dan paket platform lain
@@ -847,9 +866,9 @@ Premium (satu tier)
                 └─ forward delta dan ringkasan berdasarkan ID owner
 ```
 
-- **Client:** web 2.7.0 hanya untuk lingkup K-01; target PusatkuPOS Flutter +
-  SQLite. Aplikasi owner adalah thin client premium tanpa database transaksi
-  (K-02, K-21).
+- **Client:** web 2.7.0 adalah kanal uji K-01 dan prototipe migrasi premium;
+  target PusatkuPOS Flutter + SQLite. Aplikasi owner adalah thin client premium
+  tanpa database transaksi (K-02, K-21).
 - **API:** FastAPI sebagai relay premium. Server hanya menyimpan akun, ID owner,
   lisensi, perangkat, kunci publik/wrapped key, dan amplop terenkripsi; bukan
   data bengkel yang dapat dibaca (K-13, K-22).
@@ -921,9 +940,11 @@ Catatan urutan:
   dulu; paket APK/Android belum dikejar sampai hasilnya stabil (K-17).
 - Fase 3–4 adalah premium tahap hub: satu perangkat owner, multi-toko, karyawan
   shift di hub, lisensi, dan backup. Relay dan perangkat karyawan menyusul, tetapi
-  tier yang dijual tetap satu.
+  tier yang dijual tetap satu. Prototipe web untuk fase ini sudah ada dan lulus
+  uji otomatis; port Dart tetap menjadi pekerjaan sebenarnya.
 - Fase 5 menulis protokol, format pesan, urutan HLC, tanda tangan, wrapped key,
-  snapshot, dan test vector. Tidak ada implementasi Python untuk sync/kripto.
+  snapshot, dan test vector. Kode web yang ada adalah acuan perilaku; dokumen
+  test vector wajib selesai sebelum implementasi sync/kripto Dart.
 - Fase 6–7 melengkapi premium dengan sync dan perangkat karyawan; tidak ada tier
   baru.
 - Fase 8 tidak dikerjakan kecuali ada keputusan baru dan uji terpisah.
@@ -939,8 +960,10 @@ Kriteria ini adalah gerbang penerimaan, bukan penetapan aturan. Nilai dan
 kebijakan mengikuti `K-xx`; skenario rinci ada di `RENCANA_PEMANTAPAN.md`
 bagian 7.
 
-- **K-01:** web hanya membuktikan lingkup header/registry/ganti toko/gating;
-  Play Billing, secure storage, kunci, notifikasi, dan relay diuji di Dart.
+- **K-01:** web membuktikan alur header/registry/ganti toko/gating dan memuat
+  prototipe akun/lisensi/perangkat/relay/arsip sebagai acuan migrasi; Play
+  Billing, secure storage, kunci perangkat sungguhan, notifikasi sistem, dan
+  relay lintas perangkat nyata tetap diuji di Dart.
 - **K-02/K-21:** hanya ada Gratis dan Premium; premium mencakup hub, sync, dan
   aplikasi owner tanpa tier versi terpisah.
 - **K-03/K-11:** tier, gating, langganan, data terkunci, dan perilaku saat

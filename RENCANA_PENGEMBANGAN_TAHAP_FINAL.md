@@ -1,8 +1,9 @@
 # Rencana Pengembangan Tahap Final — PusatkuPOS
 
-Status: **final** — 2026-11-03. Belum diimplementasikan. **Fokus implementasi
-saat ini hanya web; APK/Android dan paket platform lain belum dikerjakan sampai
-kode web stabil dan pilot lulus.**
+Status: **final** — 2026-11-03. Aplikasi Flutter belum diimplementasikan.
+**Fokus implementasi saat ini hanya web**; prototipe web multi-toko dan premium
+Fase 3–7 sudah dibangun dan lulus uji otomatis, tetapi APK/Android dan paket
+platform lain belum dikerjakan sampai kode web stabil dan pilot lulus.
 
 ## Identitas produk
 
@@ -67,8 +68,11 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 - **Apple:** target tahap ini macOS. iOS bukan target tahap ini.
 - **Rencana terpisah:** multi-toko, login, header toko, premium, dan backup ada
   di `RENCANA_MULTI_TOKO_PREMIUM.md`; pengujiannya di `RENCANA_PEMANTAPAN.md`.
-  Web 2.7.0 hanya menguji header/registry/ganti toko/gating (K-01); sync dan
-  kripto ditulis sekali di Dart setelah spesifikasi protokol + test vector.
+  Web 2.7.0 sudah membuktikan header/registry/ganti toko/gating dan memuat
+  prototipe akun/lisensi/perangkat/relay/arsip sebagai acuan migrasi (K-01).
+  Sync dan kripto Dart tetap ditulis ulang setelah spesifikasi protokol + test
+  vector; prototipe web tidak menggantikan uji Play Billing, secure storage,
+  notifikasi, kunci perangkat, atau relay lintas perangkat nyata.
 
 ## Arsitektur
 
@@ -160,13 +164,15 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
 
 ## Tahapan
 
-1. **Web 2.7.0 + pilot:** selesaikan header, registry, ganti toko, dan gating
-   lokal; jalankan pilot 1–3 bengkel nyata selama 2–4 minggu. Jangan mulai akun,
-   lisensi, relay, atau APK/Android sebelum pilot lulus dan web stabil (K-01).
+1. **Web 2.7.0 + pilot:** header, registry, ganti toko, gating lokal, dan
+   prototipe akun/lisensi/relay sudah dibangun; lakukan uji UI web manual lalu
+   jalankan pilot 1–3 bengkel nyata selama 2–4 minggu. Port Dart, rilis premium,
+   dan APK/Android belum dimulai sebelum pilot lulus dan web stabil (K-01).
 2. **Fondasi Flutter:** struktur proyek, SQLite, model data, uang decimal, shell
    modular, dan kerangka tes lintas platform.
 3. **Spesifikasi protokol:** HLC, tanda tangan, wrapped key, snapshot, replay
-   outbox, dan test vector. Tidak ada implementasi sync/kripto Python.
+   outbox, dan test vector. Prototipe Python di web sudah ada sebagai acuan;
+   test vector Dart tetap wajib sebelum port.
 4. **Port Flutter dan ukuran:** port layar inti; ukur ukuran aplikasi dan
    putuskan paket aset statis (K-17). Tidak ada paket layout atau unduhan kode.
 5. **Inti kasir:** pelanggan, unit empat kategori, jasa, sparepart, pembayaran,

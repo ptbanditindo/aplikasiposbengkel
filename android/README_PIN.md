@@ -6,6 +6,9 @@ Python 3.12.10 sebagai build Python).
 
 ## Status penting
 
+- **2026-11-03:** APK tidak dibangun ulang setelah kode web multi-toko/premium
+  ditambahkan. Modul PIN native tidak berubah oleh pekerjaan itu; build APK
+  terakhir tetap 2.7.0 dan belum memuat fitur premium web.
 - Gerbang PIN, reset, dan shell WebView sudah ditulis lengkap.
 - Backend Python **sudah dikemas** ke dalam APK memakai Chaquopy 16 (Python
   3.10). Lihat `README_APK.md` untuk arsitektur, build, dan batasannya.
@@ -143,6 +146,8 @@ cd android
 
 ## Belum dikerjakan
 
+- Membangun ulang APK dengan kode web premium/multi-toko dan dependensi baru
+  (`bcrypt`), lalu menguji ulang kedua jalur Pydantic.
 - Ganti PIN dari dalam aplikasi (saat ini reset lewat kata kunci `RESET`).
 - Enkripsi file backup Telegram.
 - Verifikasi di perangkat fisik: pembukaan ulang, latar belakang, reboot, ubah

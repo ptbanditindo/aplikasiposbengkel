@@ -136,6 +136,39 @@ build step) di `http://127.0.0.1:8000`.
   jasa, atau keduanya; pembagian mekanik dapat rata atau manual. Fitur karyawan
   dapat dimatikan dari Pengaturan; saat mati, kolom kasir/mekanik di kasir dan
   baris kasir/mekanik di struk tidak ditampilkan.
+- **Multi-toko & premium** — registry toko menyimpan nama, alamat, dan
+  `database_id`; setiap toko memakai file SQLite sendiri sehingga nota, stok,
+  pelanggan, karyawan, dan laporan tidak tercampur. **Ganti toko** berada di
+  panel Menu, header menampilkan nama dan alamat toko aktif, dan tambah toko
+  hanya tersedia di premium. Paket gratis tetap membuka kasir, stok, laporan,
+  backup manual, dan 20 kredit Follow up; akun karyawan, multi-toko, Supplier,
+  serta fitur premium lain terkunci. Data lama tetap dapat dibaca dan diekspor
+  saat paket berakhir, tetapi tambah/ubah dan aksi premium ditolak.
+- **Akun karyawan & login** — pemilik membuat akun dengan satu peran dasar
+  (Kasir, Mekanik, atau keduanya), toko yang ditugaskan, dan izin tambahan.
+  Password minimal 8 karakter, dapat diisi tombol acak 10–12 karakter, disimpan
+  sebagai hash bcrypt, dan wajib diganti saat login pertama. Di hub, karyawan
+  masuk dengan username + password + PIN 6 angka tanpa internet; dari perangkat
+  sendiri, karyawan memakai ID owner + username + password + token perangkat.
+  Setiap perubahan izin dicatat di audit, dan pemeriksaan izin dilakukan di UI
+  serta lapisan data.
+- **ID owner & perangkat** — ID owner 8 karakter unik ditampilkan sebagai kartu
+  dengan tombol salin dan QR lokal yang hanya berisi ID. Perangkat owner
+  terdaftar mengikuti batas paket (contoh 2), dapat dicabut, dan pelepasan slot
+  mandiri dibatasi sekali per 72 jam. Hak menulis uang mengikuti flag hub per
+  toko; perangkat non-hub dan perangkat karyawan hanya menulis stok sesuai izin.
+  Tombol **Ganti kunci toko** membungkus ulang kunci toko hanya untuk perangkat
+  aktif, menghapus amplop/snapshot lama, dan mengirim ulang outbox dengan kunci
+  baru setelah perangkat dicabut.
+- **Sinkronisasi terenkripsi (prototipe web)** — server hanya menyimpan
+  metadata, kunci publik, wrapped store key, dan amplop delta terenkripsi
+  end-to-end; kunci privat tidak pernah dikirim. Outbox bersifat idempoten,
+  konflik opname ditandai, snapshot diterapkan atomik lalu outbox lokal diputar
+  ulang, amplop dihapus setelah semua penerima mengakui atau setelah TTL 90
+  hari, dan arsip semua toko berbentuk ZIP dengan manifest serta checksum.
+  Jalur ini adalah acuan migrasi; Play Billing, secure storage, notifikasi,
+  kunci perangkat, dan relay lintas perangkat sungguhan tetap diuji di
+  Dart/APK.
 - **Nomor nota angka** — nota baru memakai nomor 1, 2, 3, dan seterusnya tanpa
   duplikat atau nomor ulang. Nota lama tetap memakai nomor lama.
 - **Pengaturan struk** — setiap bagian struk memiliki tombol on/off sendiri:
@@ -160,8 +193,12 @@ build step) di `http://127.0.0.1:8000`.
   lewat browser. Mendukung kertas 58/80 mm, tes cetak, serta printer utama.
 - **Backup & pemulihan** — snapshot SQLite lengkap (pelanggan, unit, riwayat
   servis, transaksi keuangan, stok, pengaturan), pemulihan dengan validasi
-  skema dan salinan pengaman otomatis, backup lokal harian, serta pengiriman
-  opsional ke Telegram.
+  skema dan salinan pengaman otomatis. Backup manual tersedia di semua paket;
+  backup terjadwal lokal, backup Telegram/remote, dan arsip semua toko hanya
+  aktif di premium. Di paket gratis, pengingat backup manual tetap tampil.
+  Backup, ekspor spreadsheet, dan arsip meredaksi hash password/PIN karyawan,
+  token perangkat, `login_guards`, serta rahasia sesi dan Telegram; konfigurasi
+  printer tidak ikut ke database atau backup.
 - **Pengaturan** — identitas bengkel, rekening transfer, token/jadwal Telegram,
   printer, tema, jam follow-up, dan seluruh angka pengingat dapat diubah dari UI
   tanpa mengedit `.env`. Angka yang dapat diatur mencakup tempo piutang, tahap
@@ -182,8 +219,9 @@ build step) di `http://127.0.0.1:8000`.
   disiapkan, layar menampilkan indikator loading lingkaran. Layar utama
   dapat di-screenshot dan direkam; hanya layar PIN yang diproteksi. Layar
   mengikuti area aman (status bar, navigation bar, dan notch) sehingga kontrol
-  tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build
-  kode terbaru dan APK debug terakhir adalah **2.7.0** (versionCode 19).
+  tidak tertutup sistem, dan warna status bar ikut tema terang/gelap. Build APK
+  debug terakhir adalah **2.7.0** (versionCode 19); kode web premium setelah
+  2026-11-03 belum dipaketkan ke APK.
 
 ## Menjalankan versi web/desktop
 
@@ -229,15 +267,18 @@ membuat PIN pemilik 4&ndash;12 angka. Data tersimpan di
 | `TELEGRAM_BACKUP_ENABLED`, `TELEGRAM_BACKUP_TIME` | Sakelar dan jam pengiriman harian Telegram (default 21:00). |
 | `BACKUP_SCHEDULER` | `python` untuk versi desktop (default). APK memakai `workmanager`, diisi otomatis oleh `bootstrap.py`. |
 
-Backup lokal harian selalu dibuat. Di versi desktop, penjadwal berjalan selama
-aplikasi terbuka; di APK, WorkManager menjalankan jadwal harian dan dapat
-menyalakan backend sebentar untuk membuat snapshot. Pengiriman Telegram adalah
-tambahan opsional: bila token dan Chat ID diisi, file snapshot yang sama dikirim
-ke chat bot. Format backup otomatis dapat dipilih di Pengaturan: database
-(`.db`), Excel (`.xlsx`), atau CSV dalam ZIP. Database dapat dipulihkan; Excel
-dan CSV hanya untuk dibaca atau diolah. Backup manual dan bagikan mengikuti
-pilihan format manual di Pengaturan; pemulihan tetap memakai `.db`. Nilai
-`APP_ENV=test` mematikan penjadwal agar test tidak berjalan latar.
+Backup manual dapat dijalankan di semua paket. Backup lokal terjadwal dan
+pengiriman Telegram hanya berjalan saat lisensi premium aktif; di paket gratis
+snapshot terjadwal dilewati dan pengguna diarahkan memakai backup manual. Di
+versi desktop, penjadwal berjalan selama aplikasi terbuka; di APK 2.7.0,
+WorkManager menjalankan jadwal harian, tetapi build APK tersebut belum memuat
+kode premium. Pengiriman Telegram adalah tambahan opsional: bila token dan Chat
+ID diisi, file snapshot yang sama dikirim ke chat bot. Format backup otomatis
+dapat dipilih di Pengaturan: database (`.db`), Excel (`.xlsx`), atau CSV dalam
+ZIP. Database dapat dipulihkan; Excel dan CSV hanya untuk dibaca atau diolah.
+Backup manual dan bagikan mengikuti pilihan format manual di Pengaturan;
+pemulihan tetap memakai `.db`. Nilai `APP_ENV=test` mematikan penjadwal agar
+test tidak berjalan latar.
 
 `.env` **tidak pernah** ikut di-commit; hanya `.env.example`. Identitas bengkel
 dan konfigurasi Telegram yang disimpan lewat UI berada di database dan
@@ -302,7 +343,10 @@ Batasan APK saat ini: printer fisik belum diuji di perangkat nyata (jalur
 Bluetooth SPP, TCP 9100, USB OTG, dan cetak Android sudah tersedia), pemulihan
 dari Telegram tetap manual (unduh file lalu pilih di Pengaturan), dan proses
 aplikasi dapat dimatikan Android saat di latar belakang (data aman di SQLite;
-WorkManager tetap menjalankan backup harian).
+WorkManager tetap menjalankan backup harian). APK 2.7.0 juga **belum memuat**
+prototipe premium/multi-toko yang sekarang ada di web: paket backend, daftar
+dependensi Chaquopy (termasuk `bcrypt`), dan `versionCode` harus diperbarui saat
+migrasi APK dikerjakan.
 
 ## Struktur proyek
 
@@ -324,12 +368,15 @@ reset_pin.py    pemulihan darurat PIN di PC kasir
 python -m pytest -q
 ```
 
-342 test pada jalur desktop mencakup transaksi, kredit/pelunasan/piutang, WhatsApp,
-follow-up dan servis berkala (jasa dan sparepart), void/retur, stok, garansi,
-laporan, pengaturan, label barang, printer, backup/restore, Telegram, serta
-pemeriksaan keamanan akses (PIN, sesi, token instalasi, loopback, host/origin).
-Jalur desktop memakai Pydantic v2; kombinasi APK tetap memakai Pydantic 1.10 +
-FastAPI 0.115 dan diuji ulang saat build APK.
+400 test pada jalur desktop mencakup transaksi, kredit/pelunasan/piutang,
+WhatsApp, follow-up dan servis berkala (jasa dan sparepart), void/retur, stok,
+garansi, laporan, pengaturan, label barang, printer, backup/restore, Telegram,
+serta pemeriksaan keamanan akses (PIN, sesi, token instalasi, loopback,
+host/origin). Termasuk 15 tes premium web untuk akun/peran, lisensi dan ID
+owner, perangkat/hub, kunci toko, relay E2E, snapshot, konflik, TTL, arsip semua
+toko, dan login perangkat karyawan. Jalur desktop memakai Pydantic v2;
+kombinasi APK tetap memakai Pydantic 1.10 + FastAPI 0.115 dan harus diuji ulang
+saat APK dibangun kembali.
 
 Unit test Kotlin untuk PIN, backup, printer, dan shell WebView juga tersedia
 (154 test pada build terakhir):
@@ -354,12 +401,17 @@ alur pendaftaran dapat dicoba dari awal.
 
 - PIN pemilik di-hash PBKDF2-HMAC-SHA256 + salt; sesi ditandatangani HMAC dengan
   rahasia yang tersimpan di database, sehingga reset PIN membatalkan sesi lama.
+  Password karyawan di-hash bcrypt dengan salt per pengguna; hash PBKDF2 lama
+  tetap dapat dibaca dan dimigrasikan saat login.
 - Server hanya mendengar loopback, memvalidasi `Host`, menolak `Origin` asing
   untuk permintaan tulis, dan tidak membuka dokumentasi API otomatis.
-- File backup database meredaksi PIN, sesi, dan token bot Telegram. Ekspor
-  Excel/CSV juga meredaksi nilai rahasia tersebut; database aktif tetap
-  menyimpan token karena dibutuhkan untuk pengiriman. Konfigurasi printer
+- File backup database meredaksi PIN, sesi, hash password/PIN karyawan, hash
+  token perangkat, `login_guards`, dan token bot Telegram. Ekspor Excel/CSV
+  serta arsip semua toko juga meredaksi nilai rahasia tersebut; database aktif
+  tetap menyimpan token karena dibutuhkan untuk pengiriman. Konfigurasi printer
   disimpan di berkas terpisah dan tidak ikut masuk database atau backup.
+- Pustaka QR dimuat dari aset lokal (tanpa CDN); QR hanya berisi ID owner, bukan
+  password, token, atau data bengkel.
 - Di APK: hash PIN + salt di EncryptedSharedPreferences, layar PIN memakai
   `FLAG_SECURE`, `allowBackup=false`, dan server hanya mendengar `127.0.0.1`.
 - Data transaksi tidak dikirim ke layanan pihak ketiga; Telegram hanya dipakai

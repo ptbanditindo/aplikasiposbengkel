@@ -87,6 +87,16 @@ def active_database_path() -> Path:
     return store_registry.resolve_database_path(entry)
 
 
+def main_database_path() -> Path:
+    """Berkas database utama, tidak terpengaruh toko yang sedang aktif."""
+    path = _sqlite_file_path(engine)
+    if path is None:
+        raise RuntimeError(
+            "Arsip multi-toko hanya tersedia untuk database SQLite berkas."
+        )
+    return path
+
+
 def active_engine() -> Engine:
     entry = active_store_entry()
     if entry.get("store_id") == store_registry.PRIMARY_STORE_ID:

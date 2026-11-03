@@ -86,6 +86,20 @@ AUTH_ROLLBACK_KEYS = (
     "auth.lock_until",
 )
 
+# Token perangkat dan kredensial akun karyawan tidak ikut ke backup (K-10).
+# Nilai pengganti tetap unik agar kolom token_hash yang NOT NULL/UNIQUE sah.
+TABLE_REDACTIONS = {
+    "devices": {"token_hash": "'redacted:' || id"},
+    "employee_accounts": {
+        "password_hash": "''",
+        "password_salt": "''",
+        "password_iterations": "0",
+        "pin_hash": "''",
+        "pin_salt": "''",
+        "pin_iterations": "0",
+    },
+}
+
 
 def _read_settings(path: Path, keys) -> dict:
     connection = sqlite3.connect(str(path))
@@ -186,8 +200,26 @@ def _redact_secrets(path: Path) -> None:
                 connection.execute(
                     "UPDATE app_settings SET value = '' WHERE key = ?", (key,)
                 )
-            connection.commit()
-            connection.execute("VACUUM")
+        for table, columns in TABLE_REDACTIONS.items():
+            if table not in tables:
+                continue
+            available = {
+                row[1]
+                for row in connection.execute(f'PRAGMA table_info("{table}")')
+            }
+            assignments = [
+                f'"{column}" = {expression}'
+                for column, expression in columns.items()
+                if column in available
+            ]
+            if assignments:
+                connection.execute(
+                    f'UPDATE "{table}" SET ' + ", ".join(assignments)
+                )
+        if "login_guards" in tables:
+            connection.execute("DELETE FROM login_guards")
+        connection.commit()
+        connection.execute("VACUUM")
     finally:
         connection.close()
 
@@ -276,6 +308,7 @@ def create_export(fmt: str) -> Path:
     try:
         from services import spreadsheet_export
 
+        _redact_secrets(staging)
         redacted = set(SENSITIVE_SETTING_KEYS) | set(AUTH_ROLLBACK_KEYS)
         try:
             if fmt == "xlsx":

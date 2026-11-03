@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import uvicorn
 
-from config import set_runtime_port, settings, validate_runtime
+from config import APP_VERSION, set_runtime_port, settings, validate_runtime
 
 
 def main() -> None:
@@ -34,7 +34,7 @@ def main() -> None:
 
     print("=" * 58)
     print(f"  {settings.bengkel_nama}")
-    print("  BengkelPOS Radiator v2.0 - Kasir & Servis Multi-Unit")
+    print(f"  BengkelPOS Radiator v{APP_VERSION} - Kasir & Servis Multi-Unit")
     print("=" * 58)
     print(f"  Buka: http://127.0.0.1:{args.port}")
     print("  Tekan Ctrl+C untuk berhenti.")

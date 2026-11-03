@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
+APP_VERSION = "2.7.0"
+
 
 def _as_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)

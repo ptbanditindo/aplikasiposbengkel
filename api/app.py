@@ -18,6 +18,7 @@ from api import (
     followup_routes,
     payment_routes,
     pos_routes,
+    premium_routes,
     printer_routes,
     report_routes,
     settings_routes,
@@ -33,23 +34,34 @@ from api.schemas import (
     ConfigOut,
     EntitlementOut,
     FollowupQuotaOut,
+    LicenseInfoOut,
+    OperatorOut,
     OpsSettingsOut,
+    PremiumStatusOut,
     PrinterInfoOut,
     ReceiptSettingsOut,
     StoreOut,
     TelegramInfoOut,
 )
 from api.security import UNSAFE_METHODS, allowed_origins, host_header_allowed
-from config import BASE_DIR, effective_app_port, settings, validate_runtime
-from database.session import get_db
+from config import (
+    APP_VERSION,
+    BASE_DIR,
+    effective_app_port,
+    settings,
+    validate_runtime,
+)
+from database.session import get_db, get_primary_db
 from services import (
     entitlement_service,
     followup_quota_service,
+    license_service,
     settings_service,
     store_service,
     telegram_backup_service,
 )
-from services.maintenance import HEALTH_PATH, RESTORE_PATH, gate
+from services.auth_service import Operator
+from services.maintenance import HEALTH_PATH, RESTORE_PATHS, gate
 from services.errors import (
     AuthenticationError,
     ConflictError,
@@ -61,7 +73,6 @@ from services.errors import (
 )
 
 FRONTEND_DIR = BASE_DIR / "frontend"
-APP_VERSION = "2.7.0"
 
 KELUHAN_PRESETS = [
     "Overheat / panas berlebih",
@@ -134,7 +145,7 @@ def create_app() -> FastAPI:
                 )
 
         path = request.url.path
-        if path == RESTORE_PATH and gate.is_restoring():
+        if path in RESTORE_PATHS and gate.is_restoring():
             # Restore kedua ditolak sebelum autentikasi: data sesi di database
             # lama mungkin sudah diganti saat restore pertama berjalan.
             return JSONResponse(
@@ -146,7 +157,7 @@ def create_app() -> FastAPI:
                     )
                 },
             )
-        counted = path not in (HEALTH_PATH, RESTORE_PATH)
+        counted = path not in (HEALTH_PATH, *RESTORE_PATHS)
         if counted and not gate.try_enter():
             return JSONResponse(
                 status_code=503,
@@ -224,6 +235,7 @@ def create_app() -> FastAPI:
     app.include_router(report_routes.router, prefix=api_prefix)
     app.include_router(settings_routes.router, prefix=api_prefix)
     app.include_router(store_routes.router, prefix=api_prefix)
+    app.include_router(premium_routes.router, prefix=api_prefix)
     app.include_router(printer_routes.router, prefix=api_prefix)
     app.include_router(audit_routes.router, prefix=api_prefix)
 
@@ -235,11 +247,35 @@ def create_app() -> FastAPI:
         "/api/config",
         response_model=ConfigOut,
         tags=["Sistem"],
-        dependencies=[Depends(require_auth)],
     )
-    def app_config(db: Session = Depends(get_db)):
+    def app_config(
+        operator: Operator = Depends(require_auth),
+        db: Session = Depends(get_db),
+        primary_db: Session = Depends(get_primary_db),
+    ):
         telegram_config = settings_service.get_telegram_config(db)
-        stores = store_service.list_stores()
+        allowed = operator.stores if operator.kind == "employee" else None
+        stores = store_service.list_stores(allowed_store_ids=allowed)
+        license_info = license_service.status(primary_db)
+        plan = entitlement_service.get_plan()
+        premium = PremiumStatusOut(
+            plan=plan,
+            premium=plan == "premium",
+            owner_id=license_info["owner_id"],
+            owner_public_key=license_info["owner_public_key"],
+            license=LicenseInfoOut(**license_info["license"]),
+            recovery_pending=license_info["recovery_pending"],
+        )
+        operator_out = OperatorOut(
+            id=operator.id,
+            kind=operator.kind,
+            role=operator.role,
+            label=operator.label,
+            permissions=sorted(operator.permissions),
+            stores=list(operator.stores),
+            device_id=operator.device_id,
+            must_change_password=operator.must_change_password,
+        )
         return ConfigOut(
             version=APP_VERSION,
             bengkel=BengkelInfoOut(**settings_service.get_bengkel_info(db)),
@@ -266,6 +302,8 @@ def create_app() -> FastAPI:
             kuota_followup=FollowupQuotaOut(
                 **followup_quota_service.status(db)
             ),
+            operator=operator_out,
+            premium=premium,
         )
 
     if FRONTEND_DIR.exists():

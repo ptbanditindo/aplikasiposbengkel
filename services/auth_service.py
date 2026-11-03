@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import NoReturn, Optional
 
 from sqlalchemy.orm import Session
@@ -43,9 +43,32 @@ class Operator:
     id: str
     role: str
     label: str
+    kind: str = "owner"
+    permissions: frozenset[str] = frozenset()
+    stores: tuple[str, ...] = ()
+    employee_id: Optional[int] = None
+    device_id: Optional[str] = None
+    must_change_password: bool = False
 
 
 OWNER = Operator(id="owner", role=OWNER_ROLE, label="Pemilik")
+
+
+def employee_operator(account, device_id: Optional[str] = None) -> Operator:
+    """Bangun principal karyawan dari akun; izin dibaca ulang tiap permintaan."""
+    from services import account_service
+
+    return Operator(
+        id=f"employee:{account.id}",
+        role=account.role_base,
+        label=account.nama or account.username,
+        kind="employee",
+        permissions=account_service.effective_permissions(account),
+        stores=account_service.assigned_stores(account),
+        employee_id=account.id,
+        device_id=device_id,
+        must_change_password=bool(account.must_change_password),
+    )
 
 PIN_MIN_LENGTH = 4
 PIN_MAX_LENGTH = 12
@@ -195,15 +218,36 @@ def _session_secret(db: Session) -> Optional[bytes]:
         return None
 
 
-def create_session_token(db: Session, operator: Operator = OWNER) -> str:
+def create_session_token(
+    db: Session,
+    operator: Operator = OWNER,
+    device_id: Optional[str] = None,
+) -> str:
     secret = _session_secret(db)
     epoch = _epoch(db)
     if secret is None or not epoch:
         raise AuthenticationError("PIN belum dibuat.")
     expires = _now() + SESSION_TTL_SECONDS
-    payload = f"v2.{operator.id}.{operator.role}.{epoch}.{expires}"
+    device = device_id or operator.device_id or "-"
+    subject = str(operator.employee_id) if operator.kind == "employee" else operator.id
+    payload = f"v3.{operator.kind}.{subject}.{device}.{epoch}.{expires}"
     signature = hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{payload}.{signature}"
+
+
+def _employee_operator(
+    db: Session, employee_id: str, device_id: Optional[str]
+) -> Optional[Operator]:
+    from database.models import EmployeeAccount
+
+    try:
+        numeric = int(employee_id)
+    except (TypeError, ValueError):
+        return None
+    account = db.get(EmployeeAccount, numeric)
+    if account is None or not account.aktif:
+        return None
+    return employee_operator(account, device_id)
 
 
 def verify_session_token(db: Session, token: Optional[str]) -> Optional[Operator]:
@@ -216,7 +260,17 @@ def verify_session_token(db: Session, token: Optional[str]) -> Optional[Operator
     except ValueError:
         return None
 
-    if parts[:1] == ["v2"] and len(parts) == 5:
+    operator: Optional[Operator]
+    if parts[:1] == ["v3"] and len(parts) == 6:
+        _, kind, subject, device, epoch, expires = parts
+        device_id = None if device == "-" else device
+        if kind == "owner" and subject == OWNER.id:
+            operator = replace(OWNER, device_id=device_id)
+        elif kind == "employee":
+            operator = _employee_operator(db, subject, device_id)
+        else:
+            return None
+    elif parts[:1] == ["v2"] and len(parts) == 5:
         _, operator_id, role, epoch, expires = parts
         operator = (
             OWNER

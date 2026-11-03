@@ -16,6 +16,10 @@ PREMIUM_WRITE_PREFIXES = (
     "/api/payroll",
     "/api/salary-payments",
     "/api/suppliers",
+    "/api/accounts",
+    "/api/devices",
+    "/api/premium",
+    "/api/owner-app",
 )
 
 PREMIUM_ROUTES = {
@@ -23,6 +27,7 @@ PREMIUM_ROUTES = {
     ("PUT", "/api/settings/telegram"),
     ("POST", "/api/admin/scheduled-backup"),
     ("POST", "/api/admin/telegram-backup"),
+    ("POST", "/api/admin/backup-all"),
 }
 
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -34,6 +39,15 @@ LOCKED_MESSAGE = (
 
 
 def get_plan() -> str:
+    try:
+        from services import license_service
+
+        licensed = license_service.effective_plan()
+        if licensed is not None:
+            return licensed
+    except Exception:
+        # Registry tetap menjadi stub bila lisensi belum/tidak dapat dibaca.
+        pass
     return store_registry.get_plan()
 
 

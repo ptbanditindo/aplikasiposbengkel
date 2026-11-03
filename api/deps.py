@@ -9,15 +9,24 @@ request (POS memakai `db.begin()`).
 from __future__ import annotations
 
 import hmac
+from dataclasses import replace
 
 from fastapi import Depends, HTTPException, Request, status
 
 from config import settings
 from database.session import SessionLocal
-from services import auth_service, entitlement_service
+from database import store_registry
+from database.models import EmployeeAccount
+from services import (
+    auth_service,
+    authorization_service,
+    device_service,
+    entitlement_service,
+)
 from services.auth_service import Operator
 
 INSTALL_TOKEN_HEADER = "X-Install-Token"
+DEVICE_TOKEN_HEADER = "X-Device-Token"
 
 
 def _install_token_valid(presented: str | None) -> bool:
@@ -29,19 +38,43 @@ def _install_token_valid(presented: str | None) -> bool:
     )
 
 
+def _operator_from_device(db, device_token: str | None) -> Operator | None:
+    device = device_service.device_from_token(db, device_token)
+    if device is None:
+        return None
+    if not entitlement_service.is_premium():
+        return None
+    if device.employee_account_id is not None:
+        account = db.get(EmployeeAccount, device.employee_account_id)
+        if account is None or not account.aktif:
+            return None
+        return auth_service.employee_operator(account, device.id)
+    return replace(auth_service.OWNER, device_id=device.id)
+
+
 def require_auth(request: Request) -> Operator:
     """Kembalikan principal terautentikasi; identitas tidak dari frontend."""
     mode = settings.auth_mode
 
     if mode == "session-pin":
         token = request.cookies.get(auth_service.COOKIE_NAME)
+        device_token = request.headers.get(DEVICE_TOKEN_HEADER)
         with SessionLocal() as db:
             operator = auth_service.verify_session_token(db, token)
-        if operator is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Silakan masuk dengan PIN pemilik terlebih dahulu.",
-                headers={"WWW-Authenticate": "Session"},
+            if operator is None and device_token:
+                operator = _operator_from_device(db, device_token)
+            if operator is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Silakan masuk dengan PIN pemilik terlebih dahulu.",
+                    headers={"WWW-Authenticate": "Session"},
+                )
+            authorization_service.assert_allowed(
+                db,
+                operator,
+                request.method,
+                request.url.path,
+                active_store_id=store_registry.active_store()["store_id"],
             )
         entitlement_service.guard_request(request.method, request.url.path)
         return operator
@@ -66,7 +99,7 @@ def require_auth(request: Request) -> Operator:
 
 
 def require_owner(operator: Operator = Depends(require_auth)) -> Operator:
-    if operator.id != auth_service.OWNER.id:
+    if operator.kind != "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tindakan ini hanya untuk pemilik bengkel.",

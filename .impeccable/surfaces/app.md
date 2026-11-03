@@ -1,11 +1,16 @@
 # Surface: entire app shell
 
-- Scope: semua view, navigasi, modal, form, tabel, dan state di `frontend/`.
+- Scope: semua view, navigasi, modal, form, tabel, dan state di `frontend/`,
+  termasuk layar akses PIN/karyawan/perangkat, halaman Premium, ganti toko,
+  kartu ID owner + QR, dan panel sinkronisasi/arsip.
 - Visitor mode: Operate.
-- Audience: pemilik dan kasir bengkel radiator; dipakai harian di konter.
-- Job: mencatat transaksi, memeriksa uang/piutang/stok, dan menindaklanjuti
-  pelanggan tanpa kehilangan konteks.
-- Constraints: offline, WebView Android, backend tidak berubah, teks Indonesia.
+- Audience: pemilik dan kasir bengkel radiator; dipakai harian di konter, dengan
+  karyawan memakai hub atau perangkat sendiri di paket premium.
+- Job: mencatat transaksi, memeriksa uang/piutang/stok, menindaklanjuti
+  pelanggan, dan mengelola toko/akun/perangkat tanpa kehilangan konteks.
+- Constraints: offline untuk operasional inti, WebView Android, backend lokal
+  loopback-only, teks Indonesia, data toko terpisah per database, dan fitur
+  premium terkunci tanpa lisensi.
 
 ## Chosen direction
 

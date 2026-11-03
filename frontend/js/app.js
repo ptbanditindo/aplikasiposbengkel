@@ -258,6 +258,17 @@
   const state = {
     config: null,
     entitlement: { plan: 'free', premium: false },
+    operator: null,
+    premiumMeta: null,
+    premiumKeys: { deviceId: '', sign: '', encrypt: '', storeKey: '' },
+    permissionCatalog: null,
+    premiumAccounts: [],
+    premiumDevices: [],
+    premiumArchives: [],
+    premiumSync: null,
+    premiumOutbox: [],
+    premiumConflicts: [],
+    premiumBusy: false,
     stores: [],
     storeActive: '',
     storeSwitching: false,
@@ -572,11 +583,13 @@
 
   /* ----------------------------- Navigation ------------------------------- */
   const NAV_ORDER_KEY = 'bengkel.navOrder';
-  const NAV_FIXED_VIEWS = ['dashboard', 'pos'];
+  const NAV_FIXED_VIEWS = ['dashboard', 'pos', 'premium'];
 
   function navReorderableTabs() {
     return $$('.nav-tab').filter(
-      (tab) => !NAV_FIXED_VIEWS.includes(tab.dataset.view)
+      (tab) =>
+        !NAV_FIXED_VIEWS.includes(tab.dataset.view) &&
+        !tab.classList.contains('role-hidden')
     );
   }
 
@@ -748,7 +761,11 @@
       state.followupTab = 'customer';
     }
     const active = $('.nav-tab.active');
-    if (active && active.classList.contains('menu-hidden')) {
+    if (
+      active &&
+      (active.classList.contains('menu-hidden') ||
+        active.classList.contains('role-hidden'))
+    ) {
       navigate('dashboard');
     }
     refreshMobileNav();
@@ -792,7 +809,9 @@
 
   function visibleNavTabs() {
     return $$('#navTabs .nav-tab').filter(
-      (tab) => !tab.classList.contains('menu-hidden')
+      (tab) =>
+        !tab.classList.contains('menu-hidden') &&
+        !tab.classList.contains('role-hidden')
     );
   }
 
@@ -918,6 +937,7 @@
   }
 
   function navigate(view) {
+    if (!canView(view)) view = 'dashboard';
     $$('.nav-tab').forEach((tab) => {
       const active = tab.dataset.view === view;
       tab.classList.toggle('active', active);
@@ -961,6 +981,7 @@
       fillTelegramForm();
       initPrinterSettings();
     }
+    if (view === 'premium') loadPremiumPage();
     if (view === 'pos') {
       loadPartsOutToday();
       if (!state.selectedCustomer) {
@@ -989,6 +1010,51 @@
   function renderStoreSwitcher() {
     const nameEl = $('#storeActiveName');
     if (nameEl) nameEl.textContent = activeStoreName();
+  }
+
+  function isOwnerOperator() {
+    return !state.operator || state.operator.kind !== 'employee';
+  }
+
+  function operatorPermissions() {
+    return new Set((state.operator && state.operator.permissions) || []);
+  }
+
+  function canView(view) {
+    if (isOwnerOperator()) return true;
+    const permissions = operatorPermissions();
+    if (view === 'suppliers') return permissions.has('baca_supplier');
+    if (view === 'followup') return permissions.has('baca_followup');
+    if (view === 'report') return permissions.has('lihat_laporan');
+    if (view === 'stock') {
+      return (
+        permissions.has('opname') ||
+        permissions.has('stok_masuk') ||
+        permissions.has('stok_keluar')
+      );
+    }
+    if (view === 'employees' || view === 'settings' || view === 'jasa' || view === 'premium') {
+      return false;
+    }
+    return true;
+  }
+
+  function applyOperatorVisibility() {
+    const owner = isOwnerOperator();
+    $$('#navTabs .nav-tab').forEach((tab) => {
+      tab.classList.toggle('role-hidden', !canView(tab.dataset.view));
+    });
+    const label = $('#premiumNavLabel');
+    if (label) label.classList.toggle('role-hidden', !owner);
+    const accountBtn = $('#accountFormToggle');
+    if (accountBtn) accountBtn.disabled = !owner;
+    const deviceBtn = $('#deviceFormToggle');
+    if (deviceBtn) deviceBtn.disabled = !owner;
+    const active = $('.nav-tab.active');
+    if (active && active.classList.contains('role-hidden')) {
+      navigate('dashboard');
+    }
+    refreshMobileNav();
   }
 
   function applyEntitlementVisibility() {
@@ -1083,6 +1149,8 @@
     if (!config) return;
 
     state.entitlement = config.entitlement || { plan: 'free', premium: false };
+    state.operator = config.operator || null;
+    state.premiumMeta = config.premium || null;
     state.stores = config.stores || [];
     state.storeActive = config.store_aktif || '';
     state.followupQuota = config.kuota_followup || null;
@@ -1091,6 +1159,15 @@
     document.title = config.bengkel.nama + ' - Kasir Bengkel';
     $('#bengkelNama').textContent = config.bengkel.nama;
     $('#bengkelTagline').textContent = storeAddress();
+    const sessionLabel = $('#sessionLabel');
+    if (sessionLabel) {
+      const operator = state.operator;
+      sessionLabel.textContent = operator
+        ? operator.label ||
+          operator.role ||
+          (operator.kind === 'employee' ? 'Karyawan' : 'Pemilik')
+        : 'Pemilik';
+    }
     const mobileBrand = $('#mobileBrandName');
     if (mobileBrand) mobileBrand.textContent = config.bengkel.nama;
     const mobileTitle = $('#mobilePageTitle');
@@ -1111,6 +1188,7 @@
     renderPlanCard();
     renderFollowupQuota();
     applyEntitlementVisibility();
+    applyOperatorVisibility();
     applyMenuVisibility();
   }
 
@@ -9779,6 +9857,1377 @@
     }
   }
 
+  /* ------------------------------ Premium web ----------------------------- */
+  function showPremiumSecret(elementId, value, options) {
+    const element = $('#' + elementId);
+    if (!element) return;
+    const opts = options || {};
+    const text =
+      typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    element.textContent = text || '';
+    element.classList.toggle('hidden', !text);
+    const wrap = element.closest('.premium-secret-wrap');
+    if (wrap) wrap.classList.toggle('hidden', !text);
+    const copyBtn = wrap
+      ? wrap.querySelector('[data-secret-copy]')
+      : null;
+    if (copyBtn) {
+      copyBtn.classList.toggle('hidden', !(text && opts.copy));
+      copyBtn.disabled = !(text && opts.copy);
+      copyBtn.dataset.copyTarget = elementId;
+    }
+  }
+
+  function premiumStatusLabel(value) {
+    const labels = {
+      active: 'Aktif',
+      expired: 'Kedaluwarsa',
+      none: 'Belum aktif',
+      pending: 'Menunggu',
+      free: 'Gratis',
+      premium: 'Premium',
+    };
+    return labels[value] || value || '-';
+  }
+
+  function premiumStoreName(storeId) {
+    const store = (state.stores || []).find(
+      (row) => row.store_id === storeId
+    );
+    return store ? store.nama : storeId;
+  }
+
+  function fillPremiumStoreChecks(containerId, selected) {
+    const container = $('#' + containerId);
+    if (!container) return;
+    const chosen = new Set(selected || []);
+    container.innerHTML = (state.stores || [])
+      .map(
+        (store) =>
+          '<label><input type="checkbox" value="' +
+          esc(store.store_id) +
+          '"' +
+          (chosen.has(store.store_id) ? ' checked' : '') +
+          '> ' +
+          esc(store.nama || store.store_id) +
+          '</label>'
+      )
+      .join('');
+    if (!container.innerHTML) {
+      container.innerHTML = '<span class="tiny muted">Belum ada toko.</span>';
+    }
+  }
+
+  function selectedChecks(containerId) {
+    return $$('#' + containerId + ' input[type="checkbox"]')
+      .filter((input) => input.checked)
+      .map((input) => input.value);
+  }
+
+  function fillPremiumSelectors() {
+    const storeOptions = (state.stores || [])
+      .map(
+        (store) =>
+          '<option value="' +
+          esc(store.store_id) +
+          '">' +
+          esc(store.nama || store.store_id) +
+          '</option>'
+      )
+      .join('');
+    const storeSelect = $('#hubStore');
+    if (storeSelect) storeSelect.innerHTML = storeOptions;
+    const accountSelect = $('#deviceAccount');
+    if (accountSelect) {
+      accountSelect.innerHTML =
+        '<option value="">Tidak terikat</option>' +
+        (state.premiumAccounts || [])
+          .filter((account) => account.aktif)
+          .map(
+            (account) =>
+              '<option value="' +
+              account.id +
+              '">' +
+              esc(account.username) +
+              (account.nama ? ' - ' + esc(account.nama) : '') +
+              '</option>'
+          )
+          .join('');
+    }
+    const ownerDevices = (state.premiumDevices || []).filter(
+      (device) => !device.revoked_at
+    );
+    const deviceOptions = ownerDevices
+      .map(
+        (device) =>
+          '<option value="' +
+          esc(device.id) +
+          '">' +
+          esc(device.nama) +
+          ' (' +
+          esc(device.kind) +
+          ')</option>'
+      )
+      .join('');
+    ['hubDeviceId', 'snapshotDevice'].forEach((id) => {
+      const select = $('#' + id);
+      if (select) select.innerHTML = deviceOptions;
+    });
+    fillPremiumStoreChecks('accountStores', []);
+    fillPremiumStoreChecks('deviceStores', []);
+  }
+
+  function renderOwnerQr(ownerId) {
+    const target = $('#premiumOwnerQr');
+    if (!target) return;
+    target.dataset.ownerId = ownerId || '';
+    if (!ownerId) {
+      target.innerHTML = '';
+      target.classList.add('hidden');
+      const button = $('#ownerIdQrBtn');
+      if (button) button.textContent = 'Tampilkan QR';
+      return;
+    }
+    if (typeof window.qrcode !== 'function') {
+      target.innerHTML = '<span class="tiny muted">QR tidak tersedia.</span>';
+      return;
+    }
+    try {
+      const qr = window.qrcode(0, 'M');
+      qr.addData(ownerId);
+      qr.make();
+      // QR hanya memuat ID owner; password dan data bengkel tidak ikut.
+      target.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
+    } catch (err) {
+      target.innerHTML = '<span class="tiny muted">QR gagal dibuat.</span>';
+    }
+  }
+
+  function toggleOwnerQr() {
+    const target = $('#premiumOwnerQr');
+    if (!target) return;
+    const show = target.classList.contains('hidden');
+    target.classList.toggle('hidden', !show);
+    const button = $('#ownerIdQrBtn');
+    if (button) button.textContent = show ? 'Sembunyikan QR' : 'Tampilkan QR';
+  }
+
+  function renderPremiumLicense(meta) {
+    const badge = $('#premiumPlanBadge');
+    if (badge) {
+      badge.textContent = premiumStatusLabel(meta.plan);
+      badge.classList.toggle('green', !!meta.premium);
+      badge.classList.toggle('gray', !meta.premium);
+    }
+    const license = meta.license || {};
+    const ownerId = $('#premiumOwnerId');
+    if (ownerId) ownerId.textContent = meta.owner_id || '-';
+    renderOwnerQr(meta.owner_id || '');
+    const status = $('#premiumLicenseStatus');
+    if (status) status.textContent = premiumStatusLabel(license.status);
+    const end = $('#premiumPeriodEnd');
+    if (end) end.textContent = license.period_end ? fmtDateTime(license.period_end) : '-';
+    const days = $('#premiumDaysLeft');
+    if (days) days.textContent = license.period_end ? String(license.days_left) + ' hari' : '-';
+    const limit = $('#premiumDeviceLimit');
+    if (limit) limit.textContent = license.device_limit ? String(license.device_limit) : '-';
+    const key = $('#premiumOwnerKey');
+    if (key) key.textContent = meta.owner_public_key || '-';
+    const warning = $('#premiumClockWarning');
+    if (warning) warning.classList.toggle('hidden', !license.clock_warning);
+    const locked = $('#premiumLockedCard');
+    if (locked) locked.classList.toggle('hidden', !!meta.premium);
+  }
+
+  function renderPremiumAccounts() {
+    const body = $('#accountList');
+    if (!body) return;
+    const rows = state.premiumAccounts || [];
+    body.innerHTML = rows
+      .map(function (account) {
+        return (
+          '<tr>' +
+          '<td><strong>' +
+          esc(account.username) +
+          '</strong>' +
+          (account.must_change_password
+            ? '<div class="tiny muted">Wajib ganti password</div>'
+            : '') +
+          '</td>' +
+          '<td>' +
+          esc(account.nama || '-') +
+          '</td>' +
+          '<td>' +
+          esc(account.role_label || account.role) +
+          '</td>' +
+          '<td class="tiny">' +
+          esc((account.stores || []).map(premiumStoreName).join(', ') || '-') +
+          '</td>' +
+          '<td><span class="badge ' +
+          (account.aktif ? 'green' : 'gray') +
+          '">' +
+          (account.aktif ? 'Aktif' : 'Nonaktif') +
+          '</span></td>' +
+          '<td class="row-actions">' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="edit-account" data-id="' +
+          account.id +
+          '">Ubah</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="reset-password" data-id="' +
+          account.id +
+          '">Password</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="reset-pin" data-id="' +
+          account.id +
+          '">Reset PIN</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="account-audit" data-id="' +
+          account.id +
+          '">Audit</button>' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="account-snapshot" data-id="' +
+          account.id +
+          '">Snapshot</button>' +
+          (account.aktif
+            ? '<button type="button" class="btn btn-ghost btn-sm text-danger" data-premium-action="deactivate-account" data-id="' +
+              account.id +
+              '">Nonaktifkan</button>'
+            : '') +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+    const empty = $('#accountEmpty');
+    if (empty) empty.classList.toggle('hidden', rows.length > 0);
+  }
+
+  function renderPremiumAccountsPermissions() {
+    const container = $('#accountPermissions');
+    if (!container) return;
+    const catalog = state.permissionCatalog;
+    if (!catalog) {
+      container.innerHTML = '<span class="tiny muted">Katalog izin belum dimuat.</span>';
+      return;
+    }
+    const ownerOnly = new Set(catalog.owner_only || []);
+    container.innerHTML = Object.keys(catalog.permissions || {})
+      .filter((key) => !ownerOnly.has(key))
+      .map(
+        (key) =>
+          '<label><input type="checkbox" value="' +
+          esc(key) +
+          '"> ' +
+          esc(catalog.permissions[key]) +
+          '</label>'
+      )
+      .join('');
+  }
+
+  function fillAccountForm(account) {
+    const form = $('#accountForm');
+    if (!form) return;
+    form.classList.remove('hidden');
+    $('#accountId').value = account ? account.id : '';
+    $('#accountUsername').value = account ? account.username : '';
+    $('#accountUsername').disabled = !!account;
+    $('#accountNama').value = account ? account.nama || '' : '';
+    $('#accountRole').value = account ? account.role : 'KASIR';
+    $('#accountPassword').value = '';
+    $('#accountPassword').placeholder = account
+      ? 'Kosongkan bila tidak diubah'
+      : 'Kosongkan untuk dibuat otomatis';
+    fillPremiumStoreChecks('accountStores', account ? account.stores : []);
+    const extras = new Set(account ? account.extra_permissions || [] : []);
+    $$('#accountPermissions input[type="checkbox"]').forEach((input) => {
+      input.checked = extras.has(input.value);
+    });
+    const error = $('#accountFormError');
+    if (error) error.textContent = '';
+    const toggle = $('#accountFormToggle');
+    if (toggle) toggle.textContent = account ? 'Tutup form' : '+ Tambah akun';
+  }
+
+  function closeAccountForm() {
+    const form = $('#accountForm');
+    if (form) form.classList.add('hidden');
+    const toggle = $('#accountFormToggle');
+    if (toggle) toggle.textContent = '+ Tambah akun';
+  }
+
+  const ACCOUNT_PASSWORD_ALPHABET =
+    'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+  function randomAccountPassword() {
+    const size = 10 + Math.floor(Math.random() * 3);
+    const values = new Uint32Array(size);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(values);
+    }
+    let out = '';
+    for (let index = 0; index < size; index += 1) {
+      const value = values[index] || Math.floor(Math.random() * 4294967296);
+      out += ACCOUNT_PASSWORD_ALPHABET[value % ACCOUNT_PASSWORD_ALPHABET.length];
+    }
+    return out;
+  }
+
+  function accountRoleLabel(role) {
+    const labels = {
+      KASIR: 'Kasir',
+      MEKANIK: 'Mekanik',
+      KEDUANYA: 'Kasir & Mekanik',
+    };
+    return labels[role] || role || '-';
+  }
+
+  function accountShareText(account, password) {
+    const meta = state.premiumMeta || {};
+    const stores = (account.stores || [])
+      .map(premiumStoreName)
+      .join(', ') || '-';
+    return [
+      'PusatkuPOS — akun karyawan',
+      'ID owner: ' + (meta.owner_id || '-'),
+      'Username: ' + account.username,
+      'Password: ' + (password || '-'),
+      'Peran: ' + accountRoleLabel(account.role || account.role_base),
+      'Toko: ' + stores,
+      'Ganti password saat login pertama.',
+    ].join('\n');
+  }
+
+  async function saveAccount(event) {
+    event.preventDefault();
+    if (state.premiumBusy) return;
+    const id = $('#accountId').value;
+    const username = $('#accountUsername').value.trim();
+    const storeIds = selectedChecks('accountStores');
+    const error = $('#accountFormError');
+    if (storeIds.length === 0) {
+      if (error) error.textContent = 'Pilih minimal satu toko untuk akun ini.';
+      return;
+    }
+    const payload = {
+      nama: $('#accountNama').value.trim(),
+      role: $('#accountRole').value,
+      store_ids: storeIds,
+      extra_permissions: selectedChecks('accountPermissions'),
+    };
+    const password = $('#accountPassword').value.trim();
+    if (password) payload.password = password;
+    if (error) error.textContent = '';
+    state.premiumBusy = true;
+    const button = $('#accountSave');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      let result;
+      if (id) {
+        result = await API.updateAccount(Number(id), payload);
+        toast('Akun ' + result.username + ' diperbarui.', 'success');
+      } else {
+        result = await API.createAccount(
+          Object.assign({ username: username }, payload)
+        );
+        const account = result.akun || result;
+        showPremiumSecret(
+          'accountSecretOut',
+          accountShareText(account, result.password),
+          { copy: true }
+        );
+        toast('Akun ' + account.username + ' dibuat.', 'success');
+      }
+      closeAccountForm();
+      await loadPremiumPage();
+    } catch (err) {
+      if (error) error.textContent = err.message;
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  function renderPremiumDevices() {
+    const body = $('#deviceList');
+    if (!body) return;
+    const rows = state.premiumDevices || [];
+    body.innerHTML = rows
+      .map(function (device) {
+        const status = device.revoked_at
+          ? '<span class="badge red">Dicabut</span>'
+          : device.online
+            ? '<span class="badge green">Online</span>'
+            : '<span class="badge gray">Offline</span>';
+        return (
+          '<tr>' +
+          '<td><strong>' +
+          esc(device.nama) +
+          '</strong><div class="tiny muted">' +
+          esc(device.id) +
+          '</div></td>' +
+          '<td>' +
+          esc(device.kind) +
+          (device.hub_stores && device.hub_stores.length
+            ? '<div class="tiny muted">Hub: ' +
+              esc(device.hub_stores.map(premiumStoreName).join(', ')) +
+              '</div>'
+            : '') +
+          '</td>' +
+          '<td class="tiny">' +
+          esc((device.stores || []).map(premiumStoreName).join(', ') || '-') +
+          '</td>' +
+          '<td>' +
+          status +
+          '</td>' +
+          '<td class="row-actions">' +
+          (device.revoked_at
+            ? ''
+            : '<button type="button" class="btn btn-ghost btn-sm text-danger" data-premium-action="revoke-device" data-id="' +
+              esc(device.id) +
+              '">Cabut</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="release-device" data-id="' +
+              esc(device.id) +
+              '">Lepas slot</button>') +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+    const empty = $('#deviceEmpty');
+    if (empty) empty.classList.toggle('hidden', rows.length > 0);
+  }
+
+  async function saveDevice(event) {
+    event.preventDefault();
+    if (state.premiumBusy) return;
+    const kind = $('#deviceKind').value;
+    const accountId = $('#deviceAccount').value;
+    if (kind === 'employee' && !accountId) {
+      toast('Perangkat karyawan wajib terikat akun.', 'error');
+      return;
+    }
+    const payload = {
+      nama: $('#deviceNama').value.trim() || 'Perangkat',
+      kind: kind,
+      employee_account_id: kind === 'employee' ? Number(accountId) : null,
+      store_ids: selectedChecks('deviceStores'),
+      generate_keys: $('#deviceGenerateKeys').value === 'true',
+    };
+    state.premiumBusy = true;
+    const button = $('#deviceSave');
+    setBusy(button, true, 'Mendaftarkan...');
+    try {
+      const result = await API.registerDevice(payload);
+      const device = result.device || result;
+      let text = 'Perangkat: ' + device.nama + '\nID: ' + device.id;
+      if (result.token) text += '\nToken perangkat (sekali): ' + result.token;
+      if (result.private_keys) {
+        text +=
+          '\nKunci tanda tangan (sekali): ' +
+          result.private_keys.sign +
+          '\nKunci enkripsi (sekali): ' +
+          result.private_keys.encrypt;
+      }
+      if (result.private_keys) {
+        state.premiumKeys.deviceId = device.id;
+        state.premiumKeys.sign = result.private_keys.sign;
+        state.premiumKeys.encrypt = result.private_keys.encrypt;
+      }
+      showPremiumSecret('deviceSecretOut', text + '\n\n' + (result.private_keys_note || ''));
+      toast('Perangkat ' + device.nama + ' terdaftar.', 'success');
+      $('#deviceForm').classList.add('hidden');
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function prepareWebHub() {
+    if (state.premiumBusy) return;
+    state.premiumBusy = true;
+    const button = $('#webHubBtn');
+    setBusy(button, true, 'Menyiapkan...');
+    try {
+      const result = await API.registerWebHub();
+      const device = result.device || result;
+      let text = 'Web hub: ' + device.nama + '\nID: ' + device.id;
+      if (result.token) text += '\nToken (sekali): ' + result.token;
+      if (result.private_keys) {
+        text +=
+          '\nKunci tanda tangan (sekali): ' +
+          result.private_keys.sign +
+          '\nKunci enkripsi (sekali): ' +
+          result.private_keys.encrypt;
+        state.premiumKeys.deviceId = device.id;
+        state.premiumKeys.sign = result.private_keys.sign;
+        state.premiumKeys.encrypt = result.private_keys.encrypt;
+      } else {
+        text +=
+          '\nPerangkat owner sudah ada. Kunci privat lama tidak dapat ditampilkan lagi.';
+      }
+      showPremiumSecret('deviceSecretOut', text);
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function createStoreKey() {
+    if (state.premiumBusy) return;
+    const storeId = $('#hubStore').value;
+    const hubDeviceId = $('#hubDeviceId').value;
+    const deviceIds = (state.premiumDevices || [])
+      .filter(
+        (device) =>
+          !device.revoked_at && (device.stores || []).includes(storeId)
+      )
+      .map((device) => device.id);
+    if (!storeId) return;
+    state.premiumBusy = true;
+    const button = $('#storeKeyBtn');
+    setBusy(button, true, 'Membuat kunci...');
+    try {
+      const result = await API.registerStoreKeys({
+        store_id: storeId,
+        device_ids: deviceIds,
+        hub_device_id: hubDeviceId,
+      });
+      let text =
+        'Kunci toko ' +
+        premiumStoreName(storeId) +
+        ' (hanya ditampilkan sekali):\n' +
+        (result.store_key || '(sudah ada)') +
+        '\n\nPerangkat terbungkus: ' +
+        ((result.devices || result.created || []).join(', ') || '-');
+      if (result.store_key) state.premiumKeys.storeKey = result.store_key;
+      if (hubDeviceId) state.premiumKeys.deviceId = hubDeviceId;
+      showPremiumSecret('deviceSecretOut', text);
+      const keyInput = $('#snapshotStoreKey');
+      if (keyInput && result.store_key) keyInput.value = result.store_key;
+      const privateInput = $('#snapshotPrivateKey');
+      if (privateInput && state.premiumKeys.sign) {
+        privateInput.value = state.premiumKeys.sign;
+      }
+      toast('Kunci toko dibuat. Salin sekarang; tidak dapat ditampilkan lagi.', 'success', 8000);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function rotateStoreKey() {
+    if (state.premiumBusy) return;
+    const storeId = $('#hubStore').value;
+    const hubDeviceId = $('#hubDeviceId').value;
+    if (!storeId) return;
+    if (
+      !window.confirm(
+        'Ganti kunci toko ' +
+          premiumStoreName(storeId) +
+          '? Amplop dan snapshot lama dihapus; outbox dikirim ulang. Lakukan setelah perangkat dicabut.'
+      )
+    ) {
+      return;
+    }
+    const deviceIds = (state.premiumDevices || [])
+      .filter(
+        (device) =>
+          !device.revoked_at && (device.stores || []).includes(storeId)
+      )
+      .map((device) => device.id);
+    state.premiumBusy = true;
+    const button = $('#rotateStoreKeyBtn');
+    setBusy(button, true, 'Mengganti...');
+    try {
+      const result = await API.rotateStoreKeys({
+        store_id: storeId,
+        device_ids: deviceIds,
+        hub_device_id: hubDeviceId,
+      });
+      let text =
+        'Kunci baru toko ' +
+        premiumStoreName(storeId) +
+        ' (hanya ditampilkan sekali):\n' +
+        (result.store_key || '(tidak dibuat)') +
+        '\n\nPerangkat dibungkus ulang: ' +
+        ((result.devices || []).join(', ') || '-') +
+        '\nAmplop dihapus: ' +
+        (result.dropped_envelopes || 0) +
+        '\nSnapshot dihapus: ' +
+        (result.dropped_snapshots || 0) +
+        '\nOutbox dikirim ulang: ' +
+        (result.requeued_outbox || 0);
+      if (result.store_key) state.premiumKeys.storeKey = result.store_key;
+      showPremiumSecret('deviceSecretOut', text);
+      const keyInput = $('#snapshotStoreKey');
+      if (keyInput && result.store_key) keyInput.value = result.store_key;
+      toast('Kunci toko diganti. Salin sekarang; tidak dapat ditampilkan lagi.', 'success', 8000);
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function saveHub(event) {
+    event.preventDefault();
+    if (state.premiumBusy) return;
+    const storeId = $('#hubStore').value;
+    const deviceId = $('#hubDeviceId').value;
+    if (!storeId || !deviceId) {
+      toast('Pilih toko dan perangkat owner untuk hub.', 'error');
+      return;
+    }
+    state.premiumBusy = true;
+    const button = $('#hubSetBtn');
+    setBusy(button, true, 'Menyimpan...');
+    try {
+      const result = await API.setHub({
+        store_id: storeId,
+        device_id: deviceId,
+        force: $('#hubForce').value === 'true',
+        online: true,
+      });
+      toast(
+        'Hub toko ' +
+          premiumStoreName(storeId) +
+          ': ' +
+          premiumStoreLabel(result.mode),
+        'success'
+      );
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  function premiumStoreLabel(mode) {
+    const labels = { active: 'aktif', forced: 'dipaksa', pending: 'menunggu', none: 'belum ada' };
+    return labels[mode] || mode || '-';
+  }
+
+  function renderPremiumSync() {
+    const status = state.premiumSync || {};
+    const pending = $('#syncPending');
+    if (pending) pending.textContent = String(status.pending || 0);
+    const conflicts = $('#syncConflictCount');
+    if (conflicts) conflicts.textContent = String(status.conflicts || 0);
+    const last = $('#syncLastAt');
+    if (last) last.textContent = status.last_sync_at ? fmtDateTime(status.last_sync_at) : '-';
+    const complete = $('#syncComplete');
+    if (complete) {
+      complete.textContent = status.complete ? 'Lengkap' : 'Menunggu';
+    }
+    const outboxBody = $('#syncOutboxList');
+    if (outboxBody) {
+      outboxBody.innerHTML = (state.premiumOutbox || [])
+        .slice(0, 20)
+        .map(
+          (item) =>
+            '<tr><td>' +
+            esc(item.entity) +
+            (item.entity_id
+              ? '<div class="tiny muted">' + esc(item.entity_id) + '</div>'
+              : '') +
+            '</td><td>' +
+            esc(item.action) +
+            '</td><td>' +
+            esc(item.status) +
+            '</td><td class="tiny">' +
+            esc(fmtDateTime(item.created_at)) +
+            '</td></tr>'
+        )
+        .join('');
+    }
+    const outboxEmpty = $('#syncOutboxEmpty');
+    if (outboxEmpty) {
+      outboxEmpty.classList.toggle(
+        'hidden',
+        (state.premiumOutbox || []).length > 0
+      );
+    }
+    const conflictBody = $('#syncConflictList');
+    if (conflictBody) {
+      conflictBody.innerHTML = (state.premiumConflicts || [])
+        .map(
+          (item) =>
+            '<tr><td>' +
+            esc(item.entity) +
+            '</td><td>' +
+            esc(item.reason) +
+            '</td><td class="tiny">' +
+            esc(fmtDateTime(item.created_at)) +
+            '</td><td class="row-actions">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="resolve-conflict" data-id="' +
+            item.id +
+            '" data-resolution="keep_local">Pertahankan lokal</button>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="resolve-conflict" data-id="' +
+            item.id +
+            '" data-resolution="use_server">Pakai server</button>' +
+            '</td></tr>'
+        )
+        .join('');
+    }
+    const conflictEmpty = $('#syncConflictEmpty');
+    if (conflictEmpty) {
+      conflictEmpty.classList.toggle(
+        'hidden',
+        (state.premiumConflicts || []).length > 0
+      );
+    }
+  }
+
+  async function loadPremiumSync(deviceId) {
+    const selected = deviceId || ($('#snapshotDevice') || {}).value || '';
+    if (!isPremium()) {
+      state.premiumSync = null;
+      state.premiumOutbox = [];
+      state.premiumConflicts = [];
+      renderPremiumSync();
+      return;
+    }
+    try {
+      const results = await Promise.all([
+        API.syncStatus(selected),
+        API.syncOutbox(selected),
+        API.syncConflicts(),
+      ]);
+      state.premiumSync = results[0];
+      state.premiumOutbox = results[1] || [];
+      state.premiumConflicts = results[2] || [];
+    } catch (err) {
+      state.premiumSync = null;
+      state.premiumOutbox = [];
+      state.premiumConflicts = [];
+    }
+    renderPremiumSync();
+  }
+
+  function renderPremiumArchives() {
+    const body = $('#archiveList');
+    if (!body) return;
+    const rows = state.premiumArchives || [];
+    body.innerHTML = rows
+      .map(
+        (row) =>
+          '<tr><td><strong>' +
+          esc(row.filename) +
+          '</strong></td><td>' +
+          esc(Math.max(1, Math.round(row.size / 1024)) + ' KB') +
+          '</td><td class="tiny">' +
+          esc(fmtDateTime(row.created_at)) +
+          '</td><td class="row-actions"><button type="button" class="btn btn-ghost btn-sm" data-premium-action="download-archive" data-id="' +
+          esc(row.filename) +
+          '">Unduh</button></td></tr>'
+      )
+      .join('');
+    const empty = $('#archiveEmpty');
+    if (empty) empty.classList.toggle('hidden', rows.length > 0);
+  }
+
+  async function loadPremiumPage() {
+    if (!isOwnerOperator()) {
+      navigate('dashboard');
+      return;
+    }
+    fillPremiumSelectors();
+    try {
+      const meta = await API.premiumStatus();
+      state.premiumMeta = meta;
+      renderPremiumLicense(meta);
+    } catch (err) {
+      toast('Status premium gagal dimuat. Coba lagi.', 'error', 6000);
+      return;
+    }
+    try {
+      state.permissionCatalog = await API.permissionCatalog();
+      renderPremiumAccountsPermissions();
+    } catch (err) {
+      /* katalog izin tidak menghalangi status lisensi */
+    }
+    try {
+      state.premiumAccounts = (await API.accounts()) || [];
+    } catch (err) {
+      state.premiumAccounts = [];
+    }
+    try {
+      state.premiumDevices = (await API.devices()) || [];
+    } catch (err) {
+      state.premiumDevices = [];
+    }
+    fillPremiumSelectors();
+    renderPremiumAccounts();
+    renderPremiumDevices();
+    if (isPremium()) {
+      await loadPremiumSync();
+      try {
+        state.premiumArchives = (await API.archives()) || [];
+      } catch (err) {
+        state.premiumArchives = [];
+      }
+      renderPremiumArchives();
+    } else {
+      state.premiumSync = null;
+      state.premiumOutbox = [];
+      state.premiumConflicts = [];
+      state.premiumArchives = [];
+      renderPremiumSync();
+      renderPremiumArchives();
+    }
+  }
+
+  async function activateLicense(event) {
+    event.preventDefault();
+    if (state.premiumBusy) return;
+    state.premiumBusy = true;
+    const button = $('#licenseActivateBtn');
+    setBusy(button, true, 'Mengaktifkan...');
+    try {
+      const result = await API.licenseActivate({
+        days: Number($('#licenseDays').value) || 30,
+        provider: $('#licenseProvider').value,
+        device_limit: Number($('#licenseDeviceLimit').value) || 2,
+      });
+      let text =
+        'Lisensi: ' +
+        premiumStatusLabel(result.status) +
+        '\nID owner: ' +
+        (result.owner_id || '-') +
+        '\nBerlaku sampai: ' +
+        fmtDateTime(result.period_end) +
+        '\nBatas perangkat: ' +
+        (result.device_limit || '-');
+      if (result.recovery_code) {
+        text +=
+          '\n\nKode pemulihan (hanya sekali): ' +
+          result.recovery_code +
+          '\nSimpan di tempat aman. Tanpa kode ini kunci privat owner tidak dapat dipulihkan.';
+      }
+      if (result.token) text += '\n\nToken lisensi: ' + result.token;
+      showPremiumSecret('premiumSecretOut', text);
+      toast('Premium aktif.', 'success');
+      await refreshConfigSilently();
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function renewLicense() {
+    if (state.premiumBusy) return;
+    state.premiumBusy = true;
+    const button = $('#licenseRenewBtn');
+    setBusy(button, true, 'Memperpanjang...');
+    try {
+      const result = await API.licenseRenew({
+        days: Number($('#licenseDays').value) || 30,
+      });
+      showPremiumSecret(
+        'premiumSecretOut',
+        'Lisensi diperpanjang sampai ' +
+          fmtDateTime(result.period_end) +
+          '. Sisa ' +
+          (result.days_left || 0) +
+          ' hari.'
+      );
+      toast('Lisensi diperpanjang.', 'success');
+      await refreshConfigSilently();
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function refreshConfigSilently() {
+    try {
+      state.config = await API.getConfig();
+      applyConfig();
+    } catch (err) {
+      /* tampilan lama tetap dipakai sampai permintaan berikutnya */
+    }
+  }
+
+  async function showLicenseToken() {
+    try {
+      const result = await API.licenseToken();
+      showPremiumSecret('premiumSecretOut', result);
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function showOwnerSummary() {
+    try {
+      const result = await API.ownerSummary();
+      showPremiumSecret('premiumSecretOut', result);
+    } catch (err) {
+      toast(err.message, 'error', 6000);
+    }
+  }
+
+  async function recoverOwnerKey() {
+    const code = $('#licenseRecoveryCode').value.trim();
+    if (!code) {
+      toast('Masukkan kode pemulihan.', 'error');
+      return;
+    }
+    try {
+      const result = await API.recoverOwnerKey(code);
+      showPremiumSecret(
+        'premiumSecretOut',
+        'Kunci privat owner (jangan bagikan):\n' + result.private_key
+      );
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  async function deleteOwnerMetadata() {
+    const confirmValue = $('#licenseDeleteConfirm').value.trim();
+    const ownerId = (state.premiumMeta && state.premiumMeta.owner_id) || '';
+    if (!confirmValue) {
+      toast('Ketik ID owner untuk konfirmasi.', 'error');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Hapus metadata premium di database utama? Data bengkel dan backup tetap utuh.'
+      )
+    ) {
+      return;
+    }
+    try {
+      const result = await API.deleteOwner(confirmValue);
+      showPremiumSecret(
+        'premiumSecretOut',
+        'Metadata premium dihapus.\n' + JSON.stringify(result, null, 2)
+      );
+      toast('Metadata premium dihapus. Data toko tidak disentuh.', 'success');
+      await refreshConfigSilently();
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  async function handlePremiumAction(action, id, dataset) {
+    const account = (state.premiumAccounts || []).find(
+      (row) => String(row.id) === String(id)
+    );
+    if (action === 'edit-account' && account) {
+      fillAccountForm(account);
+      return;
+    }
+    if (action === 'reset-password' && account) {
+      const password = window.prompt(
+        'Password baru untuk ' + account.username + ' (kosongkan untuk dibuat otomatis):',
+        ''
+      );
+      if (password === null) return;
+      try {
+        const result = await API.resetAccountPassword(account.id, password.trim());
+        showPremiumSecret(
+          'accountSecretOut',
+          accountShareText(account, result.password),
+          { copy: true }
+        );
+        toast('Password direset.', 'success');
+        await loadPremiumPage();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'reset-pin' && account) {
+      if (!window.confirm('Hapus PIN ' + account.username + '? Karyawan harus membuat PIN baru.')) {
+        return;
+      }
+      try {
+        await API.resetAccountPin(account.id);
+        toast('PIN dihapus.', 'success');
+        await loadPremiumPage();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'account-audit' && account) {
+      try {
+        showPremiumSecret('accountSecretOut', await API.accountAudit(account.id));
+      } catch (err) {
+        toast(err.message, 'error', 6000);
+      }
+      return;
+    }
+    if (action === 'account-snapshot' && account) {
+      try {
+        showPremiumSecret('accountSecretOut', await API.accountSnapshot(account.id));
+      } catch (err) {
+        toast(err.message, 'error', 6000);
+      }
+      return;
+    }
+    if (action === 'deactivate-account' && account) {
+      if (!window.confirm('Nonaktifkan akun ' + account.username + '?')) return;
+      try {
+        await API.deactivateAccount(account.id);
+        toast('Akun dinonaktifkan.', 'success');
+        await loadPremiumPage();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'revoke-device') {
+      if (!window.confirm('Cabut perangkat ini? Sesi perangkat langsung ditolak.')) {
+        return;
+      }
+      try {
+        await API.revokeDevice(id, 'dicabut pemilik');
+        toast('Perangkat dicabut.', 'success');
+        await loadPremiumPage();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'release-device') {
+      if (
+        !window.confirm(
+          'Lepas slot perangkat? Tindakan ini hanya dapat dilakukan sekali per 72 jam.'
+        )
+      ) {
+        return;
+      }
+      try {
+        await API.releaseDevice(id);
+        toast('Slot perangkat dilepas.', 'success');
+        await loadPremiumPage();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'resolve-conflict') {
+      try {
+        await API.resolveSyncConflict(id, dataset.resolution || 'manual');
+        toast('Konflik ditandai selesai.', 'success');
+        await loadPremiumSync();
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+      return;
+    }
+    if (action === 'download-archive') {
+      try {
+        await API.downloadArchive(id);
+      } catch (err) {
+        toast(err.message, 'error', 7000);
+      }
+    }
+  }
+
+  async function createEncryptedSnapshot() {
+    if (state.premiumBusy) return;
+    const deviceId = $('#snapshotDevice').value;
+    const storeKey = $('#snapshotStoreKey').value.trim();
+    const privateKey = $('#snapshotPrivateKey').value.trim();
+    if (!deviceId || !storeKey || !privateKey) {
+      toast(
+        'Pilih perangkat hub, isi kunci toko dan kunci privat perangkat.',
+        'error',
+        7000
+      );
+      return;
+    }
+    const storeId =
+      (state.stores.find((store) => store.aktif) || {}).store_id ||
+      (state.stores[0] || {}).store_id ||
+      '';
+    state.premiumBusy = true;
+    const button = $('#snapshotCreateBtn');
+    setBusy(button, true, 'Membuat...');
+    try {
+      const result = await API.createSnapshot({
+        store_id: storeId,
+        device_id: deviceId,
+        store_key: storeKey,
+        device_private_key: privateKey,
+        hlc_wall: Date.now(),
+        hlc_counter: 0,
+      });
+      state.premiumSnapshotId = result.id;
+      showPremiumSecret(
+        'syncSecretOut',
+        'Snapshot dibuat.\nID: ' +
+          result.id +
+          '\nChecksum: ' +
+          result.checksum +
+          '\nKedaluwarsa: ' +
+          fmtDateTime(result.expires_at)
+      );
+      toast('Snapshot terenkripsi dibuat.', 'success');
+      await loadPremiumSync(deviceId);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function getEncryptedSnapshot() {
+    const deviceId = $('#snapshotDevice').value;
+    if (!deviceId) {
+      toast('Pilih perangkat.', 'error');
+      return;
+    }
+    const storeId =
+      (state.stores.find((store) => store.aktif) || {}).store_id ||
+      (state.stores[0] || {}).store_id ||
+      '';
+    try {
+      const result = await API.latestSnapshot(storeId, deviceId);
+      state.premiumSnapshotId = result.id;
+      showPremiumSecret('syncSecretOut', result);
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  async function applyEncryptedSnapshot() {
+    if (state.premiumBusy) return;
+    const deviceId = $('#snapshotDevice').value;
+    const storeKey = $('#snapshotStoreKey').value.trim();
+    const snapshotId = window.prompt(
+      'ID snapshot yang diterapkan:',
+      state.premiumSnapshotId || ''
+    );
+    if (!snapshotId) return;
+    if (!deviceId || !storeKey) {
+      toast('Pilih perangkat dan isi kunci toko.', 'error');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Terapkan snapshot ke toko aktif? Data toko saat ini akan diganti dan antrean lokal diputar ulang.'
+      )
+    ) {
+      return;
+    }
+    state.premiumBusy = true;
+    const button = $('#snapshotApplyBtn');
+    setBusy(button, true, 'Menerapkan...');
+    try {
+      const result = await API.applySnapshot({
+        device_id: deviceId,
+        snapshot_id: snapshotId,
+        store_key: storeKey,
+      });
+      showPremiumSecret('syncSecretOut', result);
+      toast('Snapshot diterapkan.', 'success');
+      await startApp();
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 8000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function purgeSync() {
+    try {
+      const result = await API.purgeSync();
+      toast('Amplop kedaluwarsa dibersihkan: ' + (result.deleted || 0) + '.', 'success');
+      await loadPremiumSync();
+    } catch (err) {
+      toast(err.message, 'error', 7000);
+    }
+  }
+
+  async function backupAllStores() {
+    if (state.premiumBusy) return;
+    state.premiumBusy = true;
+    const button = $('#archiveBackupAllBtn');
+    setBusy(button, true, 'Membuat arsip...');
+    try {
+      const result = await API.backupAll();
+      toast('Arsip semua toko dibuat: ' + result.filename, 'success', 8000);
+      state.premiumArchives = (await API.archives()) || [];
+      renderPremiumArchives();
+    } catch (err) {
+      toast(err.message, 'error', 8000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  async function restoreAllStores() {
+    const input = $('#archiveRestoreFile');
+    const file = input && input.files && input.files[0];
+    if (!file) {
+      toast('Pilih berkas ZIP arsip semua toko.', 'error');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Pulihkan semua toko dari ' +
+          file.name +
+          '? Database toko yang ada akan ditimpa.'
+      )
+    ) {
+      return;
+    }
+    if (state.premiumBusy) return;
+    state.premiumBusy = true;
+    const button = $('#archiveRestoreBtn');
+    setBusy(button, true, 'Memulihkan...');
+    try {
+      const result = await API.restoreAll(file);
+      input.value = '';
+      showPremiumSecret('deviceSecretOut', result);
+      toast('Arsip semua toko dipulihkan.', 'success', 8000);
+      await startApp();
+      await loadPremiumPage();
+    } catch (err) {
+      toast(err.message, 'error', 9000);
+    } finally {
+      state.premiumBusy = false;
+      setBusy(button, false);
+    }
+  }
+
+  function bindPremiumEvents() {
+    const view = $('#view-premium');
+    if (!view) return;
+    view.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-premium-action]');
+      if (!button) return;
+      handlePremiumAction(
+        button.dataset.premiumAction,
+        button.dataset.id,
+        button.dataset
+      );
+    });
+    const refresh = $('#premiumRefreshBtn');
+    if (refresh) refresh.addEventListener('click', loadPremiumPage);
+    const activate = $('#licenseActivateForm');
+    if (activate) activate.addEventListener('submit', activateLicense);
+    const renew = $('#licenseRenewBtn');
+    if (renew) renew.addEventListener('click', renewLicense);
+    const token = $('#licenseTokenBtn');
+    if (token) token.addEventListener('click', showLicenseToken);
+    const summary = $('#licenseSummaryBtn');
+    if (summary) summary.addEventListener('click', showOwnerSummary);
+    const recovery = $('#licenseRecoveryBtn');
+    if (recovery) recovery.addEventListener('click', recoverOwnerKey);
+    const remove = $('#licenseDeleteBtn');
+    if (remove) remove.addEventListener('click', deleteOwnerMetadata);
+    const ownerCopy = $('#ownerIdCopyBtn');
+    if (ownerCopy) {
+      ownerCopy.addEventListener('click', () =>
+        copyText(
+          (state.premiumMeta && state.premiumMeta.owner_id) || '',
+          'ID owner disalin.'
+        )
+      );
+    }
+    const ownerQr = $('#ownerIdQrBtn');
+    if (ownerQr) ownerQr.addEventListener('click', toggleOwnerQr);
+
+    const accountToggle = $('#accountFormToggle');
+    if (accountToggle) {
+      accountToggle.addEventListener('click', () => {
+        const form = $('#accountForm');
+        const closed = form.classList.contains('hidden');
+        if (closed) fillAccountForm(null);
+        else closeAccountForm();
+      });
+    }
+    const accountForm = $('#accountForm');
+    if (accountForm) accountForm.addEventListener('submit', saveAccount);
+    const accountCancel = $('#accountCancel');
+    if (accountCancel) accountCancel.addEventListener('click', closeAccountForm);
+    const accountRandom = $('#accountPasswordRandom');
+    if (accountRandom) {
+      accountRandom.addEventListener('click', () => {
+        const input = $('#accountPassword');
+        input.value = randomAccountPassword();
+        input.focus();
+      });
+    }
+    const accountCopy = $('#accountSecretCopy');
+    if (accountCopy) {
+      accountCopy.addEventListener('click', () => {
+        const targetId = accountCopy.dataset.copyTarget || 'accountSecretOut';
+        const source = $('#' + targetId);
+        copyText(source ? source.textContent : '', 'Teks akun disalin.');
+      });
+    }
+
+    const deviceToggle = $('#deviceFormToggle');
+    if (deviceToggle) {
+      deviceToggle.addEventListener('click', () => {
+        $('#deviceForm').classList.toggle('hidden');
+      });
+    }
+    const deviceForm = $('#deviceForm');
+    if (deviceForm) deviceForm.addEventListener('submit', saveDevice);
+    const deviceCancel = $('#deviceCancel');
+    if (deviceCancel) {
+      deviceCancel.addEventListener('click', () =>
+        $('#deviceForm').classList.add('hidden')
+      );
+    }
+    const webHub = $('#webHubBtn');
+    if (webHub) webHub.addEventListener('click', prepareWebHub);
+    const storeKey = $('#storeKeyBtn');
+    if (storeKey) storeKey.addEventListener('click', createStoreKey);
+    const rotateKey = $('#rotateStoreKeyBtn');
+    if (rotateKey) rotateKey.addEventListener('click', rotateStoreKey);
+    const hubForm = $('#hubForm');
+    if (hubForm) hubForm.addEventListener('submit', saveHub);
+
+    const syncRefresh = $('#syncRefreshBtn');
+    if (syncRefresh) syncRefresh.addEventListener('click', () => loadPremiumSync());
+    const purge = $('#syncPurgeBtn');
+    if (purge) purge.addEventListener('click', purgeSync);
+    const snapshotCreate = $('#snapshotCreateBtn');
+    if (snapshotCreate) snapshotCreate.addEventListener('click', createEncryptedSnapshot);
+    const snapshotGet = $('#snapshotGetBtn');
+    if (snapshotGet) snapshotGet.addEventListener('click', getEncryptedSnapshot);
+    const snapshotApply = $('#snapshotApplyBtn');
+    if (snapshotApply) snapshotApply.addEventListener('click', applyEncryptedSnapshot);
+    const snapshotDevice = $('#snapshotDevice');
+    if (snapshotDevice) {
+      snapshotDevice.addEventListener('change', () =>
+        loadPremiumSync(snapshotDevice.value)
+      );
+    }
+
+    const backupAll = $('#archiveBackupAllBtn');
+    if (backupAll) backupAll.addEventListener('click', backupAllStores);
+    const restoreAll = $('#archiveRestoreBtn');
+    if (restoreAll) restoreAll.addEventListener('click', restoreAllStores);
+  }
+
   /* ---------------------------- Gerbang PIN ------------------------------- */
   const authState = {
     mode: 'session-pin',
@@ -9806,6 +11255,14 @@
     $('#authLogin').classList.toggle('hidden', screen !== 'login');
     setAuthError($('#authSetupError'), screen === 'setup' ? message : '');
     setAuthError($('#authLoginError'), screen === 'login' ? message : '');
+    const deviceForm = $('#authDeviceForm');
+    if (deviceForm && screen !== 'login') deviceForm.classList.add('hidden');
+    if (screen === 'login' && storedDeviceToken()) {
+      showDeviceLogin(true);
+      setAuthError($('#authDeviceError'), message);
+      return;
+    }
+    if (screen === 'login') showEmployeeLogin(false);
     const target = screen === 'setup' ? $('#authSetupPin') : $('#authLoginPin');
     if (target) setTimeout(() => target.focus(), 80);
   }
@@ -9821,7 +11278,12 @@
     if (now - lastUnauthorizedAt < 1500) return;
     lastUnauthorizedAt = now;
     authState.started = false;
-    showAuthGate('login', 'Sesi berakhir. Masukkan PIN lagi.');
+    showAuthGate(
+      'login',
+      storedDeviceToken()
+        ? 'Sesi perangkat berakhir. Masuk kembali dengan akun karyawan.'
+        : 'Sesi berakhir. Masukkan PIN lagi.'
+    );
   }
 
   async function ensureAuthenticated() {
@@ -9909,6 +11371,190 @@
     } finally {
       setBusy(button, false);
     }
+  }
+
+  function storedDeviceToken() {
+    try {
+      return (window.sessionStorage.getItem('bengkel.deviceToken') || '').trim();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function clearDeviceToken() {
+    try {
+      window.sessionStorage.removeItem('bengkel.deviceToken');
+    } catch (err) {
+      /* penyimpanan tab tidak tersedia */
+    }
+  }
+
+  function showEmployeeLogin(show) {
+    const ownerForm = $('#authLoginForm');
+    const employeeForm = $('#authEmployeeForm');
+    const deviceForm = $('#authDeviceForm');
+    const toggle = $('#authEmployeeToggle');
+    if (deviceForm) deviceForm.classList.add('hidden');
+    if (ownerForm) ownerForm.classList.toggle('hidden', show);
+    if (employeeForm) employeeForm.classList.toggle('hidden', !show);
+    if (toggle) toggle.classList.toggle('hidden', show);
+    setAuthError($('#authEmployeeError'), '');
+    if (show) {
+      setTimeout(() => {
+        const input = $('#authEmployeeUser');
+        if (input) input.focus();
+      }, 60);
+    }
+  }
+
+  function showDeviceLogin(show) {
+    const ownerForm = $('#authLoginForm');
+    const employeeForm = $('#authEmployeeForm');
+    const deviceForm = $('#authDeviceForm');
+    const toggle = $('#authEmployeeToggle');
+    if (ownerForm) ownerForm.classList.toggle('hidden', show);
+    if (employeeForm) employeeForm.classList.add('hidden');
+    if (deviceForm) deviceForm.classList.toggle('hidden', !show);
+    if (toggle) toggle.classList.toggle('hidden', show);
+    setAuthError($('#authDeviceError'), '');
+    if (show) {
+      const tokenInput = $('#authDeviceToken');
+      if (tokenInput && !tokenInput.value) {
+        tokenInput.value = storedDeviceToken();
+      }
+      setTimeout(() => {
+        const input = $('#authDeviceOwnerId');
+        if (input) input.focus();
+      }, 60);
+    }
+  }
+
+  async function handleDeviceLoginSubmit(event) {
+    event.preventDefault();
+    const ownerId = $('#authDeviceOwnerId').value.trim();
+    const username = $('#authDeviceUser').value.trim();
+    const password = $('#authDevicePassword').value;
+    const tokenInput = $('#authDeviceToken');
+    const token = tokenInput.value.trim() || storedDeviceToken();
+    const button = $('#authDeviceSubmit');
+    if (!ownerId || !username || !password) {
+      setAuthError($('#authDeviceError'), 'Isi ID owner, username, dan password.');
+      return;
+    }
+    if (!token) {
+      setAuthError(
+        $('#authDeviceError'),
+        'Token perangkat belum diisi. Minta token dari pemilik.'
+      );
+      return;
+    }
+    try {
+      window.sessionStorage.setItem('bengkel.deviceToken', token);
+    } catch (err) {
+      /* token tetap dikirim lewat isian kali ini */
+    }
+    setAuthError($('#authDeviceError'), '');
+    setBusy(button, true, 'Memeriksa...');
+    try {
+      const result = await API.authDeviceLogin({
+        owner_id: ownerId,
+        username: username,
+        password: password,
+      });
+      if (result.operator && result.operator.must_change_password) {
+        const next = window.prompt(
+          'Password awal wajib diganti. Masukkan password baru (minimal 8 karakter):',
+          ''
+        );
+        if (next && next.length >= 8) {
+          await API.authEmployeeChangePassword({
+            old_password: password,
+            new_password: next,
+          });
+          toast('Password karyawan diperbarui.', 'success');
+        } else {
+          toast(
+            'Password belum diganti. Ganti lewat pemilik bila perlu.',
+            'warning',
+            6000
+          );
+        }
+      }
+      $('#authDevicePassword').value = '';
+      $('#authDeviceToken').value = '';
+      await startApp();
+      toast('Masuk sebagai ' + username + '.', 'success');
+    } catch (err) {
+      setAuthError($('#authDeviceError'), err.message);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function handleEmployeeLoginSubmit(event) {
+    event.preventDefault();
+    const username = $('#authEmployeeUser').value.trim();
+    const password = $('#authEmployeePassword').value;
+    const pin = normalizePin($('#authEmployeePin').value);
+    const button = $('#authEmployeeSubmit');
+    if (!username || !password) {
+      setAuthError($('#authEmployeeError'), 'Isi username dan password.');
+      return;
+    }
+    if (pin.length !== 6) {
+      setAuthError(
+        $('#authEmployeeError'),
+        'PIN karyawan harus 6 angka. PIN ini dibuat saat login pertama.'
+      );
+      return;
+    }
+    setAuthError($('#authEmployeeError'), '');
+    setBusy(button, true, 'Memeriksa...');
+    let workingPassword = password;
+    try {
+      const result = await API.authEmployeeLogin({
+        username: username,
+        password: workingPassword,
+        pin: pin,
+      });
+      if (result.must_change_password) {
+        const next = window.prompt(
+          'Password awal wajib diganti. Masukkan password baru (minimal 8 karakter):',
+          ''
+        );
+        if (next && next.length >= 8) {
+          await API.authEmployeeChangePassword({
+            old_password: workingPassword,
+            new_password: next,
+          });
+          workingPassword = next;
+          toast('Password karyawan diperbarui.', 'success');
+        } else {
+          toast('Password belum diganti. Ganti lewat pemilik bila perlu.', 'warning', 6000);
+        }
+      }
+      if (result.pin_set) {
+        toast('PIN karyawan dibuat dari isian login pertama.', 'success', 6000);
+      }
+      $('#authEmployeePassword').value = '';
+      $('#authEmployeePin').value = '';
+      await startApp();
+      toast('Masuk sebagai ' + username + '.', 'success');
+    } catch (err) {
+      setAuthError($('#authEmployeeError'), err.message);
+    } finally {
+      setBusy(button, false);
+    }
+  }
+
+  async function logoutSession() {
+    try {
+      await API.authLogout();
+    } catch (err) {
+      /* sesi tetap dianggap berakhir di perangkat ini */
+    }
+    clearDeviceToken();
+    window.location.reload();
   }
 
   /* ------------------------------ Karyawan -------------------------------- */
@@ -13233,6 +14879,33 @@
 
     $('#authSetupForm').addEventListener('submit', handleAuthSetupSubmit);
     $('#authLoginForm').addEventListener('submit', handleAuthLoginSubmit);
+    const employeeForm = $('#authEmployeeForm');
+    if (employeeForm) {
+      employeeForm.addEventListener('submit', handleEmployeeLoginSubmit);
+    }
+    const employeeToggle = $('#authEmployeeToggle');
+    if (employeeToggle) {
+      employeeToggle.addEventListener('click', () => showEmployeeLogin(true));
+    }
+    const ownerToggle = $('#authOwnerToggle');
+    if (ownerToggle) {
+      ownerToggle.addEventListener('click', () => showEmployeeLogin(false));
+    }
+    const deviceForm = $('#authDeviceForm');
+    if (deviceForm) {
+      deviceForm.addEventListener('submit', handleDeviceLoginSubmit);
+    }
+    const deviceToggle = $('#authDeviceToggle');
+    if (deviceToggle) {
+      deviceToggle.addEventListener('click', () => showDeviceLogin(true));
+    }
+    const deviceBack = $('#authDeviceBack');
+    if (deviceBack) {
+      deviceBack.addEventListener('click', () => showEmployeeLogin(false));
+    }
+    const logoutButton = $('#sessionLogout');
+    if (logoutButton) logoutButton.addEventListener('click', logoutSession);
+    bindPremiumEvents();
     $$('#authSetupPin, #authSetupPinConfirm, #authLoginPin').forEach((input) => {
       input.addEventListener('input', () => {
         const digits = normalizePin(input.value);

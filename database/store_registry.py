@@ -342,6 +342,49 @@ def update_store(store_id: str, **fields: Any) -> Optional[Dict[str, Any]]:
         return dict(entry)
 
 
+def reset_cache() -> None:
+    """Paksa pembacaan ulang registry setelah berkas ditulis di luar API."""
+    global _cached, _cached_mtime_ns
+    with _lock:
+        _cached = None
+        _cached_mtime_ns = -1
+
+
+def upsert_stores(
+    entries: List[Dict[str, Any]],
+    *,
+    active_store_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Daftarkan/segarkan entri toko dari arsip tanpa menghapus toko lain."""
+    with _lock:
+        data = _load()
+        by_id = {row["store_id"]: row for row in data["stores"]}
+        for item in entries:
+            store_id = str(item.get("store_id") or "").strip()
+            raw_path = str(item.get("database_path") or "").strip()
+            if not store_id or not raw_path:
+                continue
+            path = _relative_database_path(Path(raw_path))
+            fields = {
+                "database_id": str(
+                    item.get("database_id") or store_id
+                ).strip(),
+                "nama": str(item.get("nama") or "").strip(),
+                "alamat": str(item.get("alamat") or "").strip(),
+                "database_path": path,
+            }
+            if store_id in by_id:
+                by_id[store_id].update(fields)
+            else:
+                entry = {"store_id": store_id, **fields, "created_at": ""}
+                data["stores"].append(entry)
+                by_id[store_id] = entry
+        if active_store_id and active_store_id in by_id:
+            data["active_store_id"] = active_store_id
+        _write(data)
+        return [dict(row) for row in data["stores"]]
+
+
 def reset_for_tests() -> Dict[str, Any]:
     """Bersihkan registry dan toko tambahan; hanya untuk APP_ENV=test."""
     if settings.app_env != "test":

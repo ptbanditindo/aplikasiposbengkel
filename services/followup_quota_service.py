@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from database import session as db_session
+from database.models import AppSetting
 from database.session import store_session
 from services import entitlement_service, settings_service, store_service
 from services.errors import FeatureLockedError
@@ -81,12 +84,54 @@ def consume(db: Session) -> Dict[str, Any]:
     current = ensure_available(db)
     if current["plan"] == "premium":
         return current
-    used = current["terpakai"]
-    settings_service.set_setting(db, USED_KEY, str(used + 1))
-    db.commit()
+    used = _increment_atomic(db)
     return {
-        **current,
-        "terpakai": used + 1,
-        "sisa": max(0, FREE_LIMIT - (used + 1)),
-        "terkunci": used + 1 >= FREE_LIMIT,
+        "plan": "free",
+        "database_id": current["database_id"],
+        "batas": FREE_LIMIT,
+        "terpakai": used,
+        "sisa": max(0, FREE_LIMIT - used),
+        "terkunci": used >= FREE_LIMIT,
     }
+
+
+def _increment_atomic(db: Session) -> int:
+    """Naikkan counter di bawah kunci tulis agar dua link tidak memakai satu kredit."""
+    bind = db.get_bind()
+    engine = getattr(bind, "engine", bind)
+    table = AppSetting.__tablename__
+    fresh = store_session(engine)
+    try:
+        db_session.begin_immediate(fresh)
+        fresh.execute(
+            text(
+                f"INSERT INTO {table} (key, value, updated_at) "
+                "VALUES (:key, '0', CURRENT_TIMESTAMP) "
+                "ON CONFLICT(key) DO NOTHING"
+            ),
+            {"key": USED_KEY},
+        )
+        updated = fresh.execute(
+            text(
+                f"UPDATE {table} SET value = CAST(value AS INTEGER) + 1, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE key = :key AND CAST(value AS INTEGER) < :limit"
+            ),
+            {"key": USED_KEY, "limit": FREE_LIMIT},
+        )
+        used = fresh.execute(
+            text(f"SELECT value FROM {table} WHERE key = :key"),
+            {"key": USED_KEY},
+        ).scalar_one()
+        if updated.rowcount != 1 or int(used) > FREE_LIMIT:
+            fresh.rollback()
+            raise FeatureLockedError(
+                QUOTA_LOCKED_MESSAGE, code="followup_quota_habis"
+            )
+        fresh.commit()
+        return int(used)
+    except Exception:
+        fresh.rollback()
+        raise
+    finally:
+        fresh.close()

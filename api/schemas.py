@@ -1509,6 +1509,8 @@ class ConfigOut(CompatBase):
     stores: List[StoreOut] = Field(default_factory=list)
     store_aktif: str = ""
     kuota_followup: Optional[FollowupQuotaOut] = None
+    operator: Optional[OperatorOut] = None
+    premium: Optional[PremiumStatusOut] = None
 
 
 class PinRequest(CompatBase):
@@ -1522,6 +1524,12 @@ class AuthStatusOut(CompatBase):
     locked_seconds: int = 0
     operator_id: Optional[str] = None
     operator_label: Optional[str] = None
+    operator_kind: str = "owner"
+    operator_role: str = "owner"
+    permissions: List[str] = Field(default_factory=list)
+    stores: List[str] = Field(default_factory=list)
+    device_id: Optional[str] = None
+    must_change_password: bool = False
 
 
 class AuditEventOut(ORMModel):
@@ -1533,3 +1541,165 @@ class AuditEventOut(ORMModel):
     reference_id: str
     reason: Optional[str] = None
     created_at: datetime
+
+
+# --- PREMIUM: LISENSI, AKUN, PERANGKAT, SINKRONISASI ---
+class OperatorOut(CompatBase):
+    id: str
+    kind: str = "owner"
+    role: str = "owner"
+    label: str = ""
+    permissions: List[str] = Field(default_factory=list)
+    stores: List[str] = Field(default_factory=list)
+    device_id: Optional[str] = None
+    must_change_password: bool = False
+
+
+class LicenseInfoOut(CompatBase):
+    status: str = "none"
+    provider: str = ""
+    period_end: Optional[datetime] = None
+    device_limit: int = 0
+    days_left: int = 0
+    clock_warning: bool = False
+    offline: bool = True
+
+
+class PremiumStatusOut(CompatBase):
+    plan: str = "free"
+    premium: bool = False
+    owner_id: str = ""
+    owner_public_key: str = ""
+    license: LicenseInfoOut = Field(default_factory=LicenseInfoOut)
+    recovery_pending: bool = False
+
+
+class LicenseActivateIn(StrictBase):
+    days: int = Field(default=30, ge=1, le=366)
+    provider: str = Field(default="manual", max_length=16)
+    device_limit: int = Field(default=2, ge=1, le=50)
+
+
+class LicenseRenewIn(StrictBase):
+    days: int = Field(default=30, ge=1, le=366)
+
+
+class RecoveryIn(StrictBase):
+    code: str = Field(min_length=8, max_length=64)
+
+
+class AccountCreateIn(StrictBase):
+    username: str = Field(min_length=3, max_length=32)
+    nama: str = Field(default="", max_length=255)
+    role: str = Field(default="KASIR", max_length=16)
+    store_ids: List[str] = Field(default_factory=list)
+    extra_permissions: List[str] = Field(default_factory=list)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=64)
+
+
+class AccountUpdateIn(StrictBase):
+    nama: Optional[str] = Field(default=None, max_length=255)
+    role: Optional[str] = Field(default=None, max_length=16)
+    store_ids: Optional[List[str]] = None
+    extra_permissions: Optional[List[str]] = None
+    aktif: Optional[bool] = None
+
+
+class PasswordResetIn(StrictBase):
+    password: Optional[str] = Field(default=None, min_length=8, max_length=64)
+
+
+class DeviceRegisterIn(StrictBase):
+    nama: str = Field(default="Perangkat", max_length=255)
+    kind: str = Field(default="owner", max_length=16)
+    public_key: str = Field(default="", max_length=4096)
+    encryption_key: str = Field(default="", max_length=4096)
+    employee_account_id: Optional[int] = None
+    store_ids: List[str] = Field(default_factory=list)
+    generate_keys: bool = False
+
+
+class HubSetIn(StrictBase):
+    store_id: str = Field(min_length=1, max_length=32)
+    device_id: str = Field(min_length=1, max_length=32)
+    force: bool = False
+    online: bool = True
+
+
+class StoreKeyRegisterIn(StrictBase):
+    store_id: str = Field(min_length=1, max_length=32)
+    device_ids: List[str] = Field(default_factory=list)
+    store_key: str = Field(default="", max_length=512)
+    hub_device_id: str = Field(default="", max_length=32)
+
+
+class StoreKeyRotateIn(StoreKeyRegisterIn):
+    pass
+
+
+class OutboxEnqueueIn(StrictBase):
+    device_id: str = Field(min_length=1, max_length=32)
+    entity: str = Field(min_length=1, max_length=32)
+    action: str = Field(min_length=1, max_length=32)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    entity_id: str = Field(default="", max_length=64)
+    idempotency_key: Optional[str] = Field(default=None, max_length=128)
+
+
+class EnvelopeSubmitIn(StrictBase):
+    store_id: str = Field(min_length=1, max_length=32)
+    sender_device_id: str = Field(min_length=1, max_length=32)
+    recipient_device_id: str = Field(default="", max_length=32)
+    seq: int = Field(ge=1)
+    hlc_wall: int = Field(ge=0)
+    hlc_counter: int = Field(ge=0)
+    idempotency_key: str = Field(min_length=8, max_length=128)
+    ciphertext: str = Field(min_length=1)
+    nonce: str = Field(min_length=1, max_length=64)
+    signature: str = Field(min_length=1)
+
+
+class ApplyEnvelopeIn(StrictBase):
+    device_id: str = Field(min_length=1, max_length=32)
+    store_key: str = Field(min_length=1, max_length=512)
+
+
+class SnapshotCreateIn(StrictBase):
+    store_id: str = Field(min_length=1, max_length=32)
+    device_id: str = Field(min_length=1, max_length=32)
+    store_key: str = Field(min_length=1, max_length=512)
+    device_private_key: str = Field(min_length=1, max_length=512)
+    hlc_wall: int = Field(default=0, ge=0)
+    hlc_counter: int = Field(default=0, ge=0)
+
+
+class SnapshotApplyIn(StrictBase):
+    device_id: str = Field(min_length=1, max_length=32)
+    snapshot_id: str = Field(min_length=1, max_length=32)
+    store_key: str = Field(min_length=1, max_length=512)
+
+
+class ConflictResolveIn(StrictBase):
+    resolution: str = Field(default="manual", max_length=32)
+
+
+class EmployeeHubLoginIn(StrictBase):
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=1, max_length=64)
+    pin: str = Field(default="", max_length=12)
+
+
+class EmployeeDeviceLoginIn(StrictBase):
+    owner_id: str = Field(min_length=4, max_length=16)
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=1, max_length=64)
+
+
+class EmployeeChangePasswordIn(StrictBase):
+    old_password: str = Field(min_length=1, max_length=64)
+    new_password: str = Field(min_length=8, max_length=64)
+
+
+class EmployeeSetPinIn(StrictBase):
+    password: str = Field(min_length=1, max_length=64)
+    pin: str = Field(min_length=6, max_length=6)

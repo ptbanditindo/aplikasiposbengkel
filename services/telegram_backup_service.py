@@ -30,7 +30,7 @@ from database.models import (
     VehicleOrUnit,
 )
 from database.session import SessionLocal
-from services import backup_service, settings_service
+from services import backup_service, entitlement_service, settings_service
 from services.errors import BusinessValidationError
 from services.maintenance import gate
 from services.utils import sanitize_ascii
@@ -231,6 +231,10 @@ def send_backup(db: Session) -> Dict[str, Any]:
     Tombol "Backup sekarang" selalu mengirim data sampai detik itu: snapshot
     lama hanya dipakai bila isinya masih identik, termasuk identitas bengkel.
     """
+    if not entitlement_service.is_premium():
+        raise BusinessValidationError(
+            "Backup Telegram hanya tersedia di paket premium."
+        )
     with BACKUP_LOCK:
         config = settings_service.get_telegram_config(db)
         if not config["bot_token"] or not config["chat_id"]:
@@ -249,7 +253,11 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
     """
     with BACKUP_LOCK:
         config = settings_service.get_telegram_config(db)
-        ready = bool(config["bot_token"] and config["chat_id"])
+        ready = bool(
+            config["bot_token"]
+            and config["chat_id"]
+            and entitlement_service.is_premium()
+        )
         active_format = settings_service.get_backup_format(db)
         now = datetime.now()
         try:
@@ -262,6 +270,7 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
         jumlah_nota = db.scalar(select(func.count()).select_from(ServiceRecord)) or 0
         if not ready:
             _record_backup_status(db, now, "ok", filename=path.name)
+            configured = bool(config["bot_token"] and config["chat_id"])
             return {
                 "status": "ok",
                 "local_saved": True,
@@ -273,7 +282,11 @@ def run_manual_backup(db: Session) -> Dict[str, Any]:
                 "telegram_sent": False,
                 "telegram_error": None,
                 "jumlah_nota": jumlah_nota,
-                "message": "Backup lokal tersimpan. Telegram belum diatur.",
+                "message": (
+                    "Backup lokal tersimpan. Telegram hanya tersedia di paket premium."
+                    if configured
+                    else "Backup lokal tersimpan. Telegram belum diatur."
+                ),
             }
 
         try:
@@ -463,6 +476,13 @@ def run_scheduled_backup_now(
     ganda sekaligus tidak ada nota yang tertinggal.
     """
     moment = now or datetime.now()
+    if not entitlement_service.is_premium():
+        # Backup manual tetap tersedia; hanya backup terjadwal yang premium (K-10).
+        return _scheduled_response(
+            "skipped",
+            moment,
+            message="Backup terjadwal hanya tersedia di paket premium.",
+        )
     if not BACKUP_LOCK.acquire(blocking=False):
         return _scheduled_response(
             "busy",
@@ -648,6 +668,8 @@ def local_backup_due(now: datetime, config: Dict[str, Any], last_local_at: Any) 
 
 def run_scheduled_backup(now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
     moment = now or datetime.now()
+    if not entitlement_service.is_premium():
+        return None
     with SessionLocal() as db:
         config = settings_service.get_telegram_config(db)
         last_local_at = settings_service.get_setting(

@@ -3,6 +3,14 @@
 Dokumen ini menjelaskan bagaimana backend FastAPI yang sama dengan versi
 desktop dijalankan **di dalam** APK Android, tanpa server terpisah.
 
+> **Status 2026-11-03.** Dokumen ini merujuk build APK 2.7.0 (versionCode 19),
+> yaitu build terakhir sebelum prototipe web multi-toko/premium. Kode web
+> sekarang sudah memuat akun karyawan, lisensi/ID owner, perangkat, relay,
+> snapshot, arsip semua toko, dan **bcrypt**; semuanya **belum** dipaketkan ke
+> APK. APK tidak dibangun ulang pada tahap ini (K-01). Saat migrasi APK
+> dimulai, `versionCode`, daftar dependensi Chaquopy, dan ukuran ZIP backend
+> harus diperbarui lalu kedua jalur tes dijalankan ulang.
+
 ## Arsitektur
 
 ```
@@ -90,6 +98,11 @@ Rust. Karena itu APK memakai pin pure-Python berikut di
 | python-multipart | 0.0.9 |
 | python-dotenv | 1.0.1 |
 
+Daftar ini berasal dari build 2.7.0 dan **belum memuat `bcrypt`** yang sekarang
+dipakai hash password karyawan di web. Saat APK dibangun ulang, tambahkan
+`bcrypt` sebagai dependensi Chaquopy (atau pastikan jalur fallback PBKDF2 dipakai
+secara sadar) dan jalankan ulang tes jalur Pydantic v1.
+
 `api/schemas.py` dibuat kompatibel untuk v1 dan v2:
 
 - `Money` menjadi string dua desimal di kedua versi.
@@ -97,8 +110,10 @@ Rust. Karena itu APK memakai pin pure-Python berikut di
 - `pattern` (v2) dipetakan ke `regex` (v1).
 
 Versi desktop di `requirements.txt` memakai pydantic v2 dan FastAPI terbaru
-yang diverifikasi. Seluruh **338 test** lulus di kedua jalur (v2 dan v1 +
-FastAPI 0.115).
+yang diverifikasi. Pada build 2.7.0, **338 test** lulus di kedua jalur (v2 dan
+v1 + FastAPI 0.115). Jalur desktop sekarang berisi **400 test** (termasuk 15
+tes premium web), tetapi jalur Pydantic v1/APK belum diuji ulang karena APK
+tidak dibangun pada tahap ini.
 
 Semua paket dipasang dengan `options("--no-deps")` dan daftar eksplisit di
 `android/app/build.gradle.kts`, sehingga pip hanya mengunduh wheel
@@ -146,7 +161,8 @@ ABI yang dibangun: `arm64-v8a` (mayoritas HP modern), `armeabi-v7a`
   putih, hitam) dengan mode terang/gelap, font Plus Jakarta Sans lokal, serta
   logika follow-up, supplier/reseller, karyawan, struk, dan
   estimasi laba bersih.
-- Pytest dua stack lulus 363 test. Unit test Kotlin debug lulus 154 test.
+- Pytest dua stack lulus 363 test pada build 2.7.0. Unit test Kotlin debug lulus
+  154 test. Build ini belum memuat perubahan web premium 2026-11-03.
 - APK belum dipasang/diuji di perangkat Android fisik; verifikasi perangkat ada
   di bagian berikut dan dicatat sebagai belum diverifikasi.
 
@@ -232,3 +248,7 @@ dan alur cetak lalu otomatis membuka WhatsApp.
 - **Belum ada Release APK**; hanya build Debug yang dipakai untuk verifikasi.
 - **Ganti PIN dari dalam aplikasi dan enkripsi file backup Telegram** belum
   dikerjakan.
+- **Fitur premium/multi-toko web belum ada di APK 2.7.0.** Akun karyawan,
+  lisensi/ID owner, perangkat/hub, relay, snapshot, arsip semua toko, dan
+  bcrypt baru ada di kode web; APK harus dibangun ulang dan diuji ulang setelah
+  migrasi.

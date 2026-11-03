@@ -5,9 +5,10 @@ pengerjaan ada di
 [`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md).
 
 Dokumen ini menampung pekerjaan pemantapan yang **tidak dikerjakan** selama fase
-pengembangan fitur. Pengujian fitur web 2.7.0 dilakukan di fase ini. Seluruh
-skenario uji multi-toko dan premium ada di bagian 7 dan baru dijalankan setelah
-fiturnya dibangun. Aturan produk tidak ditulis ulang di sini; rujukannya adalah
+pengembangan fitur. Pengujian fitur web 2.7.0 dilakukan di fase ini. Skenario
+multi-toko dan premium ada di bagian 7; prototipe web Fase 3–7 sudah dibangun
+dan sebagian sudah lulus uji otomatis, tetapi **uji UI manual dan pilot belum
+dijalankan**. Aturan produk tidak ditulis ulang di sini; rujukannya adalah
 `K-xx` pada bagian **Keputusan (sumber kebenaran)** di
 `RENCANA_MULTI_TOKO_PREMIUM.md`.
 
@@ -20,12 +21,16 @@ tetap memuat skenario uji untuk fitur yang sudah ada.
 
 Status fitur dan riwayat pengerjaan ada di
 [`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md). Versi acuan
-web adalah **2.7.0**; tidak ada versi 2.8.0 yang terpasang.
+web adalah **2.7.0**; tidak ada versi 2.8.0 yang terpasang. Kode web Fase 1 dan
+prototipe Fase 3–7 sudah ada (multi-toko, akun, lisensi, perangkat, relay,
+snapshot, arsip), dengan 400 tes desktop lulus dan 15 tes premium web lulus 3x
+berturut pada 2026-11-03.
 
 ## Posisi
 
 - Tidak ada uji pemantapan selama fase build fitur.
-- Uji pemantapan dilakukan setelah fitur web selesai, dalam satu fase.
+- Uji pemantapan dilakukan setelah fitur web selesai, dalam satu fase. Uji UI
+  manual dan pilot tetap menjadi gerbang sebelum port Dart/APK.
 - APK, Android, printer fisik, dan perangkat fisik ditunda sampai kode web
   stabil; fokus saat ini hanya web.
 - Tidak ada data pengguna nyata; backup/restore tetap diuji dengan database
@@ -100,10 +105,12 @@ web adalah **2.7.0**; tidak ada versi 2.8.0 yang terpasang.
 
 Dijalankan setelah fitur di `RENCANA_MULTI_TOKO_PREMIUM.md` dibangun. Aturan
 produk tidak diulang di sini; setiap baris merujuk `K-xx` pada bagian
-**Keputusan (sumber kebenaran)** di dokumen itu. **Web 2.7.0 hanya menguji
-lingkup K-01** (header, registry, ganti toko, gating lokal); Play Billing,
-secure storage, notifikasi, kunci, relay, dan multi-device diuji di Dart, bukan
-di web.
+**Keputusan (sumber kebenaran)** di dokumen itu. **Web 2.7.0 sudah memuat
+prototipe premium Fase 3–7** (akun, lisensi, ID owner, perangkat/hub, relay,
+snapshot, arsip, login perangkat karyawan) sebagai acuan migrasi. Web tetap
+hanya membuktikan alur dan penyimpanan metadata; Play Billing, secure storage,
+notifikasi sistem, kunci perangkat sungguhan, dan relay lintas perangkat nyata
+tetap diuji di Dart/APK.
 
 | Area | Rujukan | Uji |
 | --- | --- | --- |
@@ -120,6 +127,8 @@ di web.
 | Kuota per database | K-04, K-05 | database baru mendapat ID dan 20 kredit baru; tidak ada pengikat perangkat/akun |
 | Free tier | K-03, K-04, K-07, K-10 | gratis seumur hidup; peran owner baik tanpa akun maupun login Google; kasir/ringkasan/stok/laporan terbuka; 1 toko tanpa tambah; tanpa karyawan/Supplier; Follow up 20 kredit; tanpa API data; login gratis hanya auth, tanpa registrasi perangkat; backup manual saja |
 | Backup lokal (P0) | K-10 | backup manual gratis di semua tier; backup otomatis lokal hanya premium; tetap manual setelah downgrade; restore staging, checksum, rollback; outbox dan data terkunci ikut; PIN/token tidak ikut |
+| Gating backup web | K-10 | tombol backup manual tetap berhasil di gratis; penjadwal dan Telegram melewati pengiriman saat gratis lalu melapor premium-only; pengingat backup manual tetap tampil |
+| Redaksi rahasia | K-10, K-18 | backup, ekspor Excel/CSV, dan arsip semua toko menghapus hash password/PIN karyawan, hash token perangkat, `login_guards`, serta rahasia sesi/Telegram; database aktif tetap menyimpan yang dibutuhkan |
 | Backup Telegram | K-10 | hanya premium; setelah downgrade backup baru berhenti, file lama tidak dihapus |
 | Backup semua toko | K-10 | 3 toko menjadi satu ZIP dengan manifest, checksum, seluruh database, data terkunci, dan outbox |
 | Restore | K-10 | satu arsip memunculkan semua toko; checksum/manifest valid; satu database rusak membatalkan semua |
@@ -131,10 +140,13 @@ di web.
 | Login karyawan | K-07, K-08 | di hub: username + password + PIN, lokal tanpa internet; di perangkat: tiga kolom + ID owner, login pertama online; lockout; tanpa Google |
 | Password | K-08 | tanpa aturan unik; tombol acak memenuhi kebijakan; password tampil sekali; wajib ganti saat login pertama; reset oleh pemilik |
 | Salin semua | K-08 | teks berisi username + password + peran + toko + catatan ganti; ID owner disertakan hanya untuk login perangkat karyawan, hub tidak perlu; tanpa PIN/token/data bengkel; hanya aktif selama password baru tampil |
+| ID owner web | K-06 | kartu besar + salin; QR lokal hanya memuat ID owner; ID tidak berubah setelah aktivasi; QR tidak memuat password/token/data bengkel |
+| Password web | K-08 | bcrypt + salt per pengguna; tombol acak menghasilkan 10–12 karakter tanpa `0`,`1`,`l`,`o`; password awal wajib diganti saat login pertama; hash PBKDF2 lama tetap dapat login |
+| Login perangkat web | K-07 | form ID owner + username + password + token perangkat; token disimpan di `sessionStorage`, dikirim sebagai `X-Device-Token`, dan dihapus saat logout; login pertama meminta ganti password |
 | PIN | K-08 | PIN diatur karyawan; lupa PIN meminta reset pemilik lalu membuat PIN baru |
 | Peran dan izin | K-07 | Budi kasir + opname membuka opname; kasir lain tanpa izin ditolak; peran/komisi Budi tidak berubah; login hub lokal |
 | Batas izin | K-07 | akses khusus pemilik tidak bisa diberikan; permintaan langsung ditolak |
-| Penerapan izin | K-07, K-15 | UI menyembunyikan menu dan lapisan data menolak permintaan langsung; paket terkunci tetap menang |
+| Penerapan izin | K-07, K-15 | UI menyembunyikan menu dan lapisan data menolak permintaan langsung; paket terkunci tetap menang; delta karyawan diverifikasi terhadap snapshot izin bertanda tangan owner (versi, toko, izin stok) |
 | Cabut izin | K-07, K-15 | di hub berlaku lokal; perangkat offline memakai izin terakhir, lalu izin baru saat sinkron; cabut perangkat mengakhiri akses |
 | Audit izin | K-07 | setiap perubahan mencatat siapa, kapan, sebelum/sesudah; riwayat terlihat di hub dan aplikasi owner premium |
 | Logout | K-07, K-08 | sesi/token terhapus, sync berhenti, data lokal dan PIN tetap ada; perangkat tidak lagi menerima delta |
@@ -145,11 +157,11 @@ di web.
 | Flag hub | K-12 | hanya perangkat owner bisa menjadi hub; karyawan kasir di hub boleh menulis uang; owner di non-hub tidak; satu hub per toko; pindah hub online + ack/force; delta uang hub lama dikarantina |
 | Multi-device | K-12, K-14, K-21 | premium: delta sampai ke semua perangkat owner terdaftar; non-hub hanya stok sesuai izin; dua hub untuk toko yang sama ditolak |
 | Relay data | K-13, K-21 | premium: server tidak dapat membaca nota/pelanggan/stok; hanya metadata, kunci publik/wrapped key, dan amplop terenkripsi |
-| Antrean terenkripsi | K-13 | penerima offline; amplop ciphertext; hapus setelah semua ack; TTL sesuai K-13; server tidak memegang kunci privat |
+| Antrean terenkripsi | K-13 | penerima offline; amplop ciphertext; hapus setelah semua penerima aktif mengakui; pengakuan ulang setelah amplop dihapus dianggap duplikat, bukan galat; TTL sesuai K-13; server tidak memegang kunci privat |
 | TTL antrean | K-13, K-22 | setelah TTL, penerima meminta snapshot dari hub online atau restore backup; outbox pengirim tidak hilang |
 | Snapshot | K-13, K-22 | perangkat kedua mengambil snapshot + wrapped key dari hub/backup; snapshot atomik; outbox lokal diputar ulang, dideduplikasi, konflik ditandai |
 | Distribusi kunci | K-22 | perangkat baru membuat keypair; owner/hub menyetujui; wrapped store key hanya untuk toko yang ditugaskan |
-| Pencabutan dan re-key | K-22 | perangkat dicabut tidak menerima amplop baru; hub re-key ke perangkat tersisa; data lama di perangkat dicabut tidak dapat dihapus jarak jauh |
+| Pencabutan dan re-key | K-22 | perangkat dicabut tidak menerima amplop baru; **Ganti kunci toko** membungkus ulang hanya ke perangkat aktif, menghapus amplop/snapshot lama, dan mengirim ulang outbox; data lama di perangkat dicabut tidak dapat dihapus jarak jauh |
 | Pemulihan kunci owner | K-22 | secure storage + cadangan terenkripsi + kode pemulihan; Google re-auth tidak cukup; kunci+kode hilang berarti izin baru tidak bisa diterbitkan dan dukungan tidak dapat memulihkan |
 | Tanda tangan delta | K-15, K-22 | delta valid diterima; tanda tangan salah, perangkat dicabut, replay, atau izin diubah ditolak |
 | Sinkronisasi | K-13, K-14 | premium: delta hanya diteruskan; kasir tetap transaksi saat API mati; kirim ulang idempotent; konflik uang/stok ditolak |
@@ -170,13 +182,15 @@ di web.
 | Data safety | K-13, K-18 | deklarasi akun (termasuk identitas Google pengguna gratis), lisensi, perangkat, kunci/wrapped key, dan amplop terenkripsi; tidak ada data bengkel atau kuota gratis di server |
 | Retensi dan PDP | K-18 | privacy notice dan persetujuan saat pembuatan akun gratis/berbayar; dasar pemrosesan, retensi, hak akses/ekspor/koreksi/hapus, prosedur insiden |
 | Harga | K-20, K-21 | harga satu tier premium; halaman harga menjelaskan perangkat owner dan perangkat karyawan |
-| Batas web | K-01 | web hanya header/registry/ganti toko/gating; Play Billing, secure storage, notifikasi, kunci, relay, dan multi-device tidak diuji di web; loopback tidak dilonggarkan |
-| Protokol | K-01, K-22 | test vector HLC, tanda tangan, wrapped key, snapshot, dan replay outbox diselesaikan sebelum kode Dart; tidak ada implementasi sync/kripto Python |
+| Batas web | K-01 | web sudah memuat header/registry/ganti toko/gating serta prototipe akun, lisensi, perangkat, relay, snapshot, dan arsip; Play Billing, secure storage, notifikasi sistem, kunci perangkat sungguhan, dan relay lintas perangkat nyata tidak diuji di web; loopback tidak dilonggarkan |
+| Protokol | K-01, K-22 | kode protokol web (HLC, tanda tangan, wrapped key, snapshot, replay outbox) sudah ada sebagai acuan; dokumen test vector dan implementasi Dart tetap wajib diselesaikan sebelum sync Dart |
 
 ## Gerbang pilot (sebelum akun, lisensi, relay)
 
 - Dijalankan setelah web 2.7.0 menyelesaikan header, registry, ganti toko, dan
-  gating lokal; **sebelum** akun, lisensi, atau relay dibangun.
+  gating lokal. Prototipe web akun/lisensi/relay sudah dibuat lebih awal atas
+  permintaan pemilik; pilot tetap menjadi **gerbang sebelum port Dart, rilis
+  premium, dan APK**, bukan gerbang pembuatan prototipe web.
 - Ajak **1–3 bengkel nyata** memakai alur gratis selama **2–4 minggu**.
 - Kriteria lulus: dipakai harian, tidak ada kehilangan data P0, backup/restore
   berhasil, dan pemilik dapat menjelaskan kebutuhan karyawan, multi-toko, serta
@@ -189,16 +203,22 @@ di web.
 
 Dilakukan sekali setelah fitur web selesai dan build web berhasil.
 
-1. Jalankan `pytest` pada `.venv`.
+1. Jalankan `pytest` pada `.venv` (termasuk `tests/test_premium_web.py`).
 2. Buat database baru dari nol dan jalankan integrity check.
 3. Uji manual web: kasir, pembayaran, retur, void, stok, laporan, pengaturan,
    serta backup/restore lokal dan rollback.
-4. Perbaiki bug, lalu ulangi hanya tes yang gagal.
-5. Build web ulang bila ada perbaikan.
+4. Uji manual halaman Premium: ID owner + salin + QR, aktivasi/perpanjangan,
+   pembuatan akun (password acak + salin semua), login hub dan login perangkat
+   karyawan, pendaftaran/pencabutan perangkat, hub toko, buat/ganti kunci toko,
+   snapshot, konflik, arsip semua toko, dan gating fitur saat gratis.
+5. Perbaiki bug, lalu ulangi hanya tes yang gagal.
+6. Build web ulang bila ada perbaikan.
 
-Tidak diuji pada tahap ini: APK, Android, printer, scanner fisik, Telegram,
-perangkat fisik, Play Billing, secure storage, kunci perangkat, relay, dan
-multi-device. Backup/restore lokal **tetap diuji** sebagai P0.
+Tidak diuji pada tahap ini: APK, Android, printer, scanner fisik, Telegram
+jaringan sungguhan, perangkat fisik, Play Billing, secure storage, notifikasi
+sistem, kunci perangkat sungguhan, dan relay lintas perangkat nyata.
+Backup/restore lokal **tetap diuji** sebagai P0, termasuk backup manual gratis
+dan penolakan backup terjadwal di paket gratis.
 
 ## Kriteria selesai
 
@@ -210,20 +230,22 @@ multi-device. Backup/restore lokal **tetap diuji** sebagai P0.
 - Backup/restore lokal dan rollback lulus sebagai P0.
 - Tidak ada rahasia baru di repo.
 - README dan changelog sesuai.
-- Gap perangkat/APK/sync premium dicatat.
+- Gap perangkat/APK/sync premium dan hasil uji UI web manual dicatat.
 - Pilot 1–3 bengkel dijalankan dan keputusan lanjut/tidak lanjut dicatat sebelum
-  akun/lisensi/relay.
+  port Dart, rilis premium, dan APK. Prototipe web akun/lisensi/relay sudah ada;
+  pilot menilai apakah fitur itu dibawa ke Dart.
 
 ## Di luar lingkup
 
 - APK, Android, kamera, dan perangkat fisik.
 - Printer fisik dan pengujian cetak.
-- Telegram dan backup semua toko sebelum fitur premium dibangun; skenario ada di
-  bagian 7. Backup/restore lokal **termasuk lingkup P0**.
-- Play Billing, secure storage, kunci perangkat, notifikasi sistem, relay,
-  multi-device, dan LAN; semuanya diuji di Dart, bukan web.
-- Implementasi multi-toko, login, premium, dan sinkronisasi; pengujiannya ada
-  di bagian 7 dan baru dijalankan setelah fiturnya dibangun.
+- Telegram jaringan sungguhan dan pengiriman jarak jauh; gating premium dan
+  antrean lokal sudah diuji. Skenario backup ada di bagian 7. Backup/restore
+  lokal **termasuk lingkup P0**.
+- Play Billing, secure storage, notifikasi sistem, kunci perangkat sungguhan,
+  relay lintas perangkat nyata, dan LAN; semuanya diuji di Dart, bukan web.
+- Port Dart/Flutter dan build APK; prototipe web multi-toko, akun, premium, dan
+  sinkronisasi sudah ada dan pengujiannya ada di bagian 7.
 - Fitur baru; pemantapan tidak menambah fitur.
 
 ## Risiko

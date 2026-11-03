@@ -57,11 +57,21 @@
     return typeof injected === 'string' ? injected.trim() : '';
   }
 
+  function deviceToken() {
+    try {
+      return (window.sessionStorage.getItem('bengkel.deviceToken') || '').trim();
+    } catch (err) {
+      return '';
+    }
+  }
+
   async function request(path, options) {
     const opts = options || {};
     const headers = Object.assign({}, opts.headers || {});
     const token = installToken();
     if (token) headers['X-Install-Token'] = token;
+    const device = deviceToken();
+    if (device) headers['X-Device-Token'] = device;
 
     const init = {
       method: opts.method || 'GET',
@@ -158,7 +168,13 @@
     const disposition = response.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/i);
     const fallbackSuffix =
-      extension === 'xlsx' ? '.xlsx' : extension === 'csv' ? '_csv.zip' : '.db';
+      extension === 'xlsx'
+        ? '.xlsx'
+        : extension === 'zip'
+          ? '.zip'
+          : extension === 'csv'
+            ? '_csv.zip'
+            : '.db';
     const filename =
       (match && match[1]) ||
       'bengkel_radiator_backup_' +
@@ -185,6 +201,17 @@
     authLogin: (pin) =>
       request('/api/auth/login', { method: 'POST', body: { pin: pin } }),
     authLogout: () => request('/api/auth/logout', { method: 'POST' }),
+    authEmployeeLogin: (data) =>
+      request('/api/auth/employee/login', { method: 'POST', body: data }),
+    authDeviceLogin: (data) =>
+      request('/api/auth/device/login', { method: 'POST', body: data }),
+    authEmployeeChangePassword: (data) =>
+      request('/api/auth/employee/change-password', {
+        method: 'POST',
+        body: data,
+      }),
+    authEmployeeSetPin: (data) =>
+      request('/api/auth/employee/pin', { method: 'POST', body: data }),
 
     getConfig: () => request('/api/config'),
     health: () => request('/api/health'),
@@ -443,6 +470,158 @@
       request('/api/settings/telegram', { method: 'PUT', body: data }),
 
     backupNow: () => request('/api/admin/backup-now', { method: 'POST' }),
+
+    premiumStatus: () => request('/api/premium/status'),
+    licenseActivate: (data) =>
+      request('/api/license/activate', { method: 'POST', body: data }),
+    licenseRenew: (data) =>
+      request('/api/license/renew', { method: 'POST', body: data }),
+    licenseToken: () => request('/api/license/token'),
+    recoverOwnerKey: (code) =>
+      request('/api/license/recovery', { method: 'POST', body: { code: code } }),
+    deleteOwner: (ownerId) =>
+      request('/api/license/owner?confirm=' + qs(ownerId), { method: 'DELETE' }),
+    ownerSummary: () => request('/api/owner-app/summary'),
+
+    permissionCatalog: () => request('/api/accounts/permissions'),
+    accounts: () => request('/api/accounts'),
+    createAccount: (data) =>
+      request('/api/accounts', { method: 'POST', body: data }),
+    updateAccount: (id, data) =>
+      request('/api/accounts/' + id, { method: 'PUT', body: data }),
+    deactivateAccount: (id) =>
+      request('/api/accounts/' + id, { method: 'DELETE' }),
+    resetAccountPassword: (id, password) =>
+      request('/api/accounts/' + id + '/password-reset', {
+        method: 'POST',
+        body: { password: password || null },
+      }),
+    resetAccountPin: (id) =>
+      request('/api/accounts/' + id + '/pin-reset', { method: 'POST' }),
+    accountAudit: (id) => request('/api/accounts/' + id + '/audit'),
+    accountSnapshot: (id) => request('/api/accounts/' + id + '/snapshot'),
+
+    devices: () => request('/api/devices'),
+    registerDevice: (data) =>
+      request('/api/devices', { method: 'POST', body: data }),
+    registerWebHub: () =>
+      request('/api/devices/web-hub', { method: 'POST' }),
+    revokeDevice: (id, reason) =>
+      request(
+        '/api/devices/' + qs(id) + '/revoke?reason=' + qs(reason || ''),
+        { method: 'POST' }
+      ),
+    releaseDevice: (id) =>
+      request('/api/devices/' + qs(id) + '/release', { method: 'POST' }),
+    getHub: (storeId) =>
+      request('/api/devices/hub?store_id=' + qs(storeId || '')),
+    setHub: (data) => request('/api/devices/hub', { method: 'POST', body: data }),
+    registerStoreKeys: (data) =>
+      request('/api/devices/keys', { method: 'POST', body: data }),
+    rotateStoreKeys: (data) =>
+      request('/api/devices/keys/rotate', { method: 'POST', body: data }),
+    storeKeyWrap: (storeId, deviceId) =>
+      request(
+        '/api/devices/keys/' + qs(storeId) + '/' + qs(deviceId)
+      ),
+
+    syncStatus: (deviceId) =>
+      request('/api/sync/status?device_id=' + qs(deviceId || '')),
+    syncOutbox: (deviceId) =>
+      request('/api/sync/outbox?device_id=' + qs(deviceId || '')),
+    enqueueOutbox: (data) =>
+      request('/api/sync/outbox', { method: 'POST', body: data }),
+    submitEnvelope: (data) =>
+      request('/api/sync/envelopes', { method: 'POST', body: data }),
+    syncEnvelopes: (deviceId, storeId) =>
+      request(
+        '/api/sync/envelopes?device_id=' +
+          qs(deviceId || '') +
+          '&store_id=' +
+          qs(storeId || '')
+      ),
+    ackSyncEnvelope: (envelopeId, deviceId) =>
+      request(
+        '/api/sync/envelopes/' +
+          qs(envelopeId) +
+          '/ack?device_id=' +
+          qs(deviceId || ''),
+        { method: 'POST' }
+      ),
+    applySyncEnvelope: (envelopeId, data) =>
+      request('/api/sync/envelopes/' + qs(envelopeId) + '/apply', {
+        method: 'POST',
+        body: data,
+      }),
+    syncConflicts: () => request('/api/sync/conflicts'),
+    resolveSyncConflict: (id, resolution) =>
+      request('/api/sync/conflicts/' + id + '/resolve', {
+        method: 'POST',
+        body: { resolution: resolution || 'manual' },
+      }),
+    createSnapshot: (data) =>
+      request('/api/sync/snapshots', { method: 'POST', body: data }),
+    latestSnapshot: (storeId, deviceId) =>
+      request(
+        '/api/sync/snapshots/' +
+          qs(storeId) +
+          '?device_id=' +
+          qs(deviceId || '')
+      ),
+    applySnapshot: (data) =>
+      request('/api/sync/snapshots/apply', { method: 'POST', body: data }),
+    purgeSync: () => request('/api/sync/purge', { method: 'POST' }),
+
+    archives: () => request('/api/admin/archives'),
+    downloadArchive: (filename) =>
+      downloadBackupBlob(
+        '/api/admin/archives/' + encodeURIComponent(filename),
+        'GET',
+        'zip'
+      ),
+    backupAll: () =>
+      downloadBackupBlob('/api/admin/backup-all', 'POST', 'zip'),
+    restoreAll: async (file) => {
+      const form = new FormData();
+      form.append('file', file);
+      const headers = {};
+      const token = installToken();
+      if (token) headers['X-Install-Token'] = token;
+      let response;
+      try {
+        response = await fetch('/api/admin/restore-all', {
+          method: 'POST',
+          headers: headers,
+          credentials: 'same-origin',
+          body: form,
+          cache: 'no-store',
+        });
+      } catch (err) {
+        throw new ApiError(
+          'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
+          0,
+          null
+        );
+      }
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('bengkel:unauthorized'));
+      }
+      if (!response.ok) {
+        let detail = null;
+        try {
+          const data = await response.json();
+          detail = data ? data.detail : null;
+        } catch (err) {
+          detail = null;
+        }
+        throw new ApiError(
+          messageFor(response.status, detail),
+          response.status,
+          detail
+        );
+      }
+      return response.json();
+    },
 
     restoreDatabase: async (file) => {
       const form = new FormData();
