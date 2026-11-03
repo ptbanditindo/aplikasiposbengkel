@@ -36,11 +36,26 @@ def _resolve_sqlite_url(url: str) -> str:
     return f"{prefix}{path.as_posix()}"
 
 
+def _normalize_database_url(url: str) -> str:
+    """Pakai psycopg v3 untuk URL Postgres tanpa driver eksplisit."""
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 def build_engine(url: Optional[str] = None) -> Engine:
-    resolved = _resolve_sqlite_url(url or settings.database_url)
+    resolved = _normalize_database_url(
+        _resolve_sqlite_url(url or settings.database_url)
+    )
     kwargs = {"future": True, "pool_pre_ping": True}
     if resolved.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+        if ":memory:" in resolved:
+            from sqlalchemy.pool import StaticPool
+
+            kwargs["poolclass"] = StaticPool
 
     engine = create_engine(resolved, **kwargs)
 

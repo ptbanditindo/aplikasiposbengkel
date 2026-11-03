@@ -82,6 +82,14 @@ class Settings:
     telegram_backup_time: str
     telegram_api_base: str
 
+    relay_host: str
+    relay_port: int
+    relay_database_url: str
+    relay_enroll_token: str
+    relay_require_https: bool
+    relay_max_payload_mb: int
+    relay_rate_limit_per_minute: int
+
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
@@ -140,6 +148,18 @@ def load_settings() -> Settings:
         telegram_api_base=os.getenv(
             "TELEGRAM_API_BASE", "https://api.telegram.org"
         ).strip(),
+        # Relay adalah deployment terpisah (K-24). Aplikasi lokal tetap SQLite.
+        relay_host=os.getenv("RELAY_HOST", "127.0.0.1").strip(),
+        relay_port=_as_int("RELAY_PORT", 8100),
+        relay_database_url=os.getenv(
+            "RELAY_DATABASE_URL", "sqlite:///./data/relay.db"
+        ).strip(),
+        relay_enroll_token=os.getenv("RELAY_ENROLL_TOKEN", "").strip(),
+        relay_require_https=_as_bool("RELAY_REQUIRE_HTTPS", False),
+        relay_max_payload_mb=max(1, _as_int("RELAY_MAX_PAYLOAD_MB", 8)),
+        relay_rate_limit_per_minute=max(
+            1, _as_int("RELAY_RATE_LIMIT_PER_MINUTE", 120)
+        ),
     )
 
 
@@ -198,3 +218,21 @@ def validate_runtime(candidate: Settings | None = None) -> None:
                 "APP_INSTALL_TOKEN masih placeholder 'ganti-dengan-...'. "
                 "Gunakan token acak per instalasi, bukan nilai contoh."
             )
+
+
+def validate_relay_runtime(candidate: Settings | None = None) -> None:
+    """Validasi profil relay tanpa melonggarkan guard aplikasi lokal."""
+    runtime = candidate or settings
+    token = runtime.relay_enroll_token.strip()
+    if not token or token.lower().startswith(PLACEHOLDER_PREFIX):
+        raise RuntimeError(
+            "RELAY_ENROLL_TOKEN kosong atau placeholder. Isi token acak "
+            "untuk pendaftaran perangkat relay."
+        )
+    if runtime.relay_require_https and not runtime.relay_database_url.startswith(
+        ("postgresql", "postgres")
+    ):
+        raise RuntimeError(
+            "Relay produksi wajib memakai PostgreSQL dan HTTPS "
+            "(RELAY_REQUIRE_HTTPS=1, RELAY_DATABASE_URL=postgresql+psycopg://...)."
+        )

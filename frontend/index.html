@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#F1F5F9">
   <script>
     (function () {
@@ -47,6 +48,10 @@
   <link rel="stylesheet" href="/static/css/world.css?v=20261103">
 </head>
 <body class="auth-locked">
+  <div class="offline-banner hidden" id="offlineBanner" role="status">
+    <span id="offlineBannerText">Mode offline.</span>
+    <button type="button" class="btn btn-ghost btn-sm hidden" id="offlineFlushBtn">Kirim sekarang</button>
+  </div>
   <!-- ============================ GERBANG PIN ============================ -->
   <div class="auth-gate hidden" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
     <div class="auth-card">
@@ -102,7 +107,7 @@
           <button type="button" class="auth-switch" id="authEmployeeToggle">Masuk sebagai karyawan</button>
           <form id="authEmployeeForm" class="hidden" autocomplete="off">
             <label class="field">
-              <span>Username</span>
+              <span>Nama pengguna</span>
               <input class="input" type="text" id="authEmployeeUser" autocomplete="username" maxlength="32" required>
             </label>
             <label class="field">
@@ -120,11 +125,11 @@
           </form>
           <form id="authDeviceForm" class="hidden" autocomplete="off">
             <label class="field">
-              <span>ID owner</span>
+              <span>ID pemilik</span>
               <input class="input" type="text" id="authDeviceOwnerId" autocomplete="off" maxlength="16" required>
             </label>
             <label class="field">
-              <span>Username</span>
+              <span>Nama pengguna</span>
               <input class="input" type="text" id="authDeviceUser" autocomplete="username" maxlength="32" required>
             </label>
             <label class="field">
@@ -135,7 +140,7 @@
               <span>Token perangkat</span>
               <input class="input" type="password" id="authDeviceToken" autocomplete="off" placeholder="Dari pemilik; cukup diisi sekali">
             </label>
-            <p class="tiny muted">Perangkat harus didaftarkan pemilik terlebih dahulu. Login pertama memerlukan koneksi ke hub.</p>
+            <p class="tiny muted">Perangkat harus didaftarkan pemilik terlebih dahulu. Login pertama memerlukan koneksi ke server.</p>
             <p class="auth-error hidden" id="authDeviceError" role="alert"></p>
             <button type="submit" class="btn btn-primary auth-submit" id="authDeviceSubmit">Masuk perangkat</button>
             <button type="button" class="auth-switch" id="authDeviceBack">Kembali ke PIN pemilik</button>
@@ -1466,8 +1471,8 @@
       <section class="view hidden" id="view-premium">
         <div class="page-head">
           <div>
-            <h1>Premium dan pemilik</h1>
-            <p class="muted">Lisensi, akun karyawan, perangkat, sinkronisasi terenkripsi, dan arsip semua toko. Metadata disimpan di database utama; data toko tetap di database toko masing-masing.</p>
+            <h1>Premium</h1>
+            <p class="muted">Kelola lisensi, akun karyawan, perangkat, dan cadangan semua toko. Data bengkel tetap tersimpan di perangkat ini.</p>
           </div>
           <div class="page-actions">
             <button type="button" class="btn btn-outline" id="premiumRefreshBtn">Muat ulang</button>
@@ -1478,7 +1483,7 @@
           <div class="card-head">
             <div>
               <h2>Paket gratis</h2>
-              <p class="muted">Akun karyawan, perangkat, sinkronisasi terenkripsi, dan arsip semua toko hanya tersedia di paket premium. Aktifkan lisensi di bawah untuk membuka fitur ini.</p>
+              <p class="muted">Akun karyawan, beberapa perangkat, dan cadangan semua toko tersedia di paket Premium. Aktifkan lisensi di bawah untuk membukanya.</p>
             </div>
             <span class="badge gray">Terkunci</span>
           </div>
@@ -1487,61 +1492,65 @@
         <section class="card" id="premiumLicenseCard">
           <div class="card-head">
             <div>
-              <h2>Lisensi dan ID owner</h2>
-              <p class="muted">Satu paket premium untuk semua fitur. Aktivasi di web hanya untuk pengujian; pembelian resmi memakai Play Billing di APK.</p>
+              <h2>Lisensi dan ID pemilik</h2>
+              <p class="muted">Satu paket Premium membuka semua fitur. Aktivasi di web hanya untuk pengujian; pembelian resmi lewat Google Play di aplikasi HP.</p>
             </div>
             <span class="badge gray" id="premiumPlanBadge">Gratis</span>
           </div>
           <div class="premium-grid" id="premiumLicenseInfo">
             <div class="premium-wide owner-id-card">
-              <span class="tiny muted">ID owner</span>
+              <span class="tiny muted">ID pemilik</span>
               <p class="owner-id-value" id="premiumOwnerId">-</p>
               <div class="owner-id-actions">
                 <button type="button" class="btn btn-outline btn-sm" id="ownerIdCopyBtn">Salin ID</button>
                 <button type="button" class="btn btn-outline btn-sm" id="ownerIdQrBtn">Tampilkan QR</button>
               </div>
               <div class="owner-qr hidden" id="premiumOwnerQr" aria-live="polite"></div>
-              <p class="tiny muted">QR hanya berisi ID owner untuk login perangkat karyawan. Tidak memuat password atau data bengkel.</p>
+              <p class="tiny muted">Tunjukkan QR ini saat karyawan masuk dari perangkat lain. Isinya hanya ID pemilik, tanpa password atau data bengkel.</p>
             </div>
             <div><span class="tiny muted">Status lisensi</span><p class="premium-value" id="premiumLicenseStatus">-</p></div>
             <div><span class="tiny muted">Berlaku sampai</span><p class="premium-value" id="premiumPeriodEnd">-</p></div>
             <div><span class="tiny muted">Sisa hari</span><p class="premium-value" id="premiumDaysLeft">-</p></div>
-            <div><span class="tiny muted">Batas perangkat owner</span><p class="premium-value" id="premiumDeviceLimit">-</p></div>
-            <div><span class="tiny muted">Kunci publik owner</span><p class="premium-value premium-key" id="premiumOwnerKey">-</p></div>
+            <div><span class="tiny muted">Maksimal perangkat pemilik</span><p class="premium-value" id="premiumDeviceLimit">-</p></div>
           </div>
           <p class="auth-error hidden" id="premiumClockWarning" role="alert">Jam perangkat mundur dari verifikasi terakhir. Lisensi tetap aktif sampai batas waktu, tetapi periksa jam perangkat.</p>
 
           <form id="licenseActivateForm" class="form-grid premium-form">
             <label class="field"><span>Masa aktif (hari)</span><input class="input" type="number" id="licenseDays" min="1" max="3660" value="30"></label>
-            <label class="field"><span>Sumber aktivasi</span>
+            <label class="field"><span>Cara aktivasi</span>
               <select class="input" id="licenseProvider">
-                <option value="manual">Manual (uji)</option>
-                <option value="play">Play Billing</option>
+                <option value="manual">Manual (uji coba)</option>
+                <option value="play">Google Play</option>
                 <option value="voucher">Voucher</option>
               </select>
             </label>
-            <label class="field"><span>Batas perangkat owner</span><input class="input" type="number" id="licenseDeviceLimit" min="1" max="10" value="2"></label>
+            <label class="field"><span>Maksimal perangkat pemilik</span><input class="input" type="number" id="licenseDeviceLimit" min="1" max="10" value="2"></label>
             <div class="form-actions premium-form-actions">
               <button type="submit" class="btn btn-primary" id="licenseActivateBtn">Aktifkan premium</button>
               <button type="button" class="btn btn-outline" id="licenseRenewBtn">Perpanjang</button>
-              <button type="button" class="btn btn-outline" id="licenseTokenBtn">Lihat token lisensi</button>
-              <button type="button" class="btn btn-outline" id="licenseSummaryBtn">Ringkasan aplikasi owner</button>
             </div>
           </form>
 
           <details class="premium-details">
-            <summary>Pemulihan dan penghapusan metadata akun</summary>
+            <summary>Bantuan teknis dan pemulihan</summary>
+            <div class="premium-grid">
+              <div class="premium-wide"><span class="tiny muted">Kunci keamanan pemilik</span><p class="premium-value premium-key" id="premiumOwnerKey">-</p></div>
+            </div>
+            <div class="form-actions premium-form-actions">
+              <button type="button" class="btn btn-outline" id="licenseTokenBtn">Kode aktivasi</button>
+              <button type="button" class="btn btn-outline" id="licenseSummaryBtn">Ringkasan untuk aplikasi HP</button>
+            </div>
             <div class="form-grid premium-form">
               <label class="field"><span>Kode pemulihan</span><input class="input" type="password" id="licenseRecoveryCode" autocomplete="off" placeholder="Tempel kode pemulihan"></label>
               <div class="form-actions premium-form-actions">
-                <button type="button" class="btn btn-outline" id="licenseRecoveryBtn">Buka kunci privat owner</button>
+                <button type="button" class="btn btn-outline" id="licenseRecoveryBtn">Pulihkan kunci pemilik</button>
               </div>
             </div>
-            <p class="tiny muted">Penghapusan hanya menghapus metadata premium di database utama. Data bengkel, stok, nota, dan backup tetap utuh.</p>
+            <p class="tiny muted">Penghapusan hanya menghapus data premium di aplikasi ini. Data bengkel, stok, nota, dan cadangan tetap utuh.</p>
             <div class="form-grid premium-form">
-              <label class="field"><span>Ketik ID owner untuk konfirmasi</span><input class="input" type="text" id="licenseDeleteConfirm" autocomplete="off"></label>
+              <label class="field"><span>Ketik ID pemilik untuk konfirmasi</span><input class="input" type="text" id="licenseDeleteConfirm" autocomplete="off"></label>
               <div class="form-actions premium-form-actions">
-                <button type="button" class="btn btn-outline" id="licenseDeleteBtn">Hapus metadata premium</button>
+                <button type="button" class="btn btn-outline" id="licenseDeleteBtn">Hapus data premium</button>
               </div>
             </div>
           </details>
@@ -1553,15 +1562,15 @@
           <div class="card-head">
             <div>
               <h2>Akun karyawan</h2>
-              <p class="muted">Peran dasar ditambah izin tambahan. Tindakan pemilik tetap ditolak di lapisan data.</p>
+              <p class="muted">Tambahkan kasir atau mekanik, lalu pilih toko dan izin yang boleh mereka buka. Pemilik tetap bisa mengubah semuanya.</p>
             </div>
             <button type="button" class="btn btn-primary" id="accountFormToggle">+ Tambah akun</button>
           </div>
           <form id="accountForm" class="form-grid premium-form hidden">
             <input type="hidden" id="accountId">
-            <label class="field"><span>Username</span><input class="input" type="text" id="accountUsername" maxlength="32" autocomplete="off" required></label>
+            <label class="field"><span>Nama pengguna</span><input class="input" type="text" id="accountUsername" maxlength="32" autocomplete="off" required></label>
             <label class="field"><span>Nama tampilan</span><input class="input" type="text" id="accountNama" maxlength="255" autocomplete="off"></label>
-            <label class="field"><span>Peran dasar</span>
+            <label class="field"><span>Peran</span>
               <select class="input" id="accountRole">
                 <option value="KASIR">Kasir</option>
                 <option value="MEKANIK">Mekanik</option>
@@ -1591,14 +1600,14 @@
           </form>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Username</th><th>Nama</th><th>Peran</th><th>Toko</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Nama pengguna</th><th>Nama tampilan</th><th>Peran</th><th>Toko</th><th>Status</th><th></th></tr></thead>
               <tbody id="accountList"></tbody>
             </table>
             <div class="empty-state hidden" id="accountEmpty">Belum ada akun karyawan. Tambahkan akun untuk membuka akses terbatas.</div>
           </div>
           <div class="premium-secret-wrap hidden" id="accountSecretWrap">
             <div class="premium-secret-head">
-              <span class="tiny muted">Teks akun</span>
+              <span class="tiny muted">Keterangan akun</span>
               <button type="button" class="btn btn-outline btn-sm" id="accountSecretCopy" data-secret-copy>Salin semua</button>
             </div>
             <pre class="premium-secret" id="accountSecretOut"></pre>
@@ -1608,11 +1617,11 @@
         <section class="card" id="premiumDevicesCard">
           <div class="card-head">
             <div>
-              <h2>Perangkat dan hub</h2>
-              <p class="muted">Server hanya menyimpan kunci publik dan hash token perangkat. Kunci privat tidak pernah disimpan di server.</p>
+              <h2>Perangkat</h2>
+              <p class="muted">Daftarkan HP kasir atau perangkat lain. Kunci keamanan disimpan di perangkat, bukan di server.</p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-outline" id="webHubBtn">Siapkan web hub</button>
+              <button type="button" class="btn btn-outline" id="webDeviceBtn">Gunakan perangkat ini</button>
               <button type="button" class="btn btn-primary" id="deviceFormToggle">+ Daftarkan perangkat</button>
             </div>
           </div>
@@ -1620,18 +1629,18 @@
             <label class="field"><span>Nama perangkat</span><input class="input" type="text" id="deviceNama" maxlength="255" placeholder="HP kasir" required></label>
             <label class="field"><span>Jenis</span>
               <select class="input" id="deviceKind">
-                <option value="owner">Owner</option>
+                <option value="owner">Pemilik</option>
                 <option value="employee">Karyawan</option>
               </select>
             </label>
             <label class="field"><span>Akun karyawan</span><select class="input" id="deviceAccount"><option value="">Tidak terikat</option></select></label>
-            <label class="field"><span>Buat kunci di server</span>
+            <label class="field"><span>Buatkan kunci otomatis</span>
               <select class="input" id="deviceGenerateKeys">
-                <option value="true">Ya, tampilkan sekali</option>
-                <option value="false">Tidak, kirim kunci publik</option>
+                <option value="true">Ya</option>
+                <option value="false">Tidak</option>
               </select>
             </label>
-            <div class="field premium-wide"><span>Toko yang ditugaskan</span><div class="premium-checks" id="deviceStores"></div></div>
+            <div class="field premium-wide"><span>Toko</span><div class="premium-checks" id="deviceStores"></div></div>
             <div class="form-actions premium-form-actions premium-wide">
               <button type="submit" class="btn btn-primary" id="deviceSave">Daftarkan</button>
               <button type="button" class="btn btn-outline" id="deviceCancel">Batal</button>
@@ -1646,93 +1655,76 @@
           </div>
 
           <div class="premium-subhead">
-            <h3>Hub toko</h3>
-            <p class="tiny muted">Hub wajib daring untuk menulis uang di toko. Perangkat lain hanya dapat mengantrekan perubahan.</p>
+            <h3>Kunci sinkronisasi</h3>
+            <p class="tiny muted">Dipakai saat memulihkan sinkronisasi antarperangkat. Tidak perlu diubah untuk pemakaian sehari-hari.</p>
           </div>
-          <form id="hubForm" class="form-grid premium-form">
-            <label class="field"><span>Toko</span><select class="input" id="hubStore"></select></label>
-            <label class="field"><span>Perangkat hub</span><select class="input" id="hubDeviceId"></select></label>
-            <label class="field"><span>Paksa ganti hub</span>
-              <select class="input" id="hubForce"><option value="false">Tidak</option><option value="true">Ya</option></select>
-            </label>
-            <div class="form-actions premium-form-actions">
-              <button type="submit" class="btn btn-primary" id="hubSetBtn">Simpan hub</button>
-              <button type="button" class="btn btn-outline" id="storeKeyBtn">Buat kunci toko</button>
-              <button type="button" class="btn btn-outline" id="rotateStoreKeyBtn">Ganti kunci toko</button>
+          <div class="form-grid premium-form">
+            <label class="field"><span>Toko</span><select class="input" id="keyStore"></select></label>
+            <div class="form-actions premium-form-actions premium-wide">
+              <button type="button" class="btn btn-outline" id="storeKeyBtn">Buat kunci pengaman</button>
+              <button type="button" class="btn btn-outline" id="rotateStoreKeyBtn">Ganti kunci pengaman</button>
             </div>
-          </form>
+          </div>
           <pre class="premium-secret hidden" id="deviceSecretOut"></pre>
         </section>
 
         <section class="card" id="premiumSyncCard">
           <div class="card-head">
             <div>
-              <h2>Sinkronisasi terenkripsi</h2>
-              <p class="muted">Antrean keluar, konflik, dan snapshot dienkripsi di perangkat. Server hanya melihat ciphertext dan tanda tangan.</p>
+              <h2>Sinkronisasi</h2>
+              <p class="muted">Pantau data yang menunggu dikirim dan data yang bentrok antarperangkat. Semua data terkirim dalam keadaan terenkripsi.</p>
             </div>
             <div class="page-actions">
               <button type="button" class="btn btn-outline" id="syncRefreshBtn">Muat status</button>
-              <button type="button" class="btn btn-outline" id="syncPurgeBtn">Bersihkan kedaluwarsa</button>
+              <button type="button" class="btn btn-outline" id="syncPurgeBtn">Bersihkan data lama</button>
             </div>
           </div>
           <div class="premium-grid" id="syncStatusGrid">
-            <div><span class="tiny muted">Tertunda</span><p class="premium-value" id="syncPending">-</p></div>
-            <div><span class="tiny muted">Konflik</span><p class="premium-value" id="syncConflictCount">-</p></div>
-            <div><span class="tiny muted">Sinkron terakhir</span><p class="premium-value" id="syncLastAt">-</p></div>
-            <div><span class="tiny muted">Status</span><p class="premium-value" id="syncComplete">-</p></div>
+            <div><span class="tiny muted">Menunggu dikirim</span><p class="premium-value" id="syncPending">-</p></div>
+            <div><span class="tiny muted">Bentrok data</span><p class="premium-value" id="syncConflictCount">-</p></div>
+            <div><span class="tiny muted">Terakhir diperbarui</span><p class="premium-value" id="syncLastAt">-</p></div>
+            <div><span class="tiny muted">Keadaan</span><p class="premium-value" id="syncComplete">-</p></div>
           </div>
-          <div class="premium-subhead"><h3>Antrean keluar</h3></div>
+          <div class="premium-subhead"><h3>Menunggu dikirim</h3></div>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Entitas</th><th>Aksi</th><th>Status</th><th>Dibuat</th></tr></thead>
+              <thead><tr><th>Data</th><th>Perubahan</th><th>Keadaan</th><th>Waktu</th></tr></thead>
               <tbody id="syncOutboxList"></tbody>
             </table>
-            <div class="empty-state hidden" id="syncOutboxEmpty">Antrean kosong.</div>
+            <div class="empty-state hidden" id="syncOutboxEmpty">Tidak ada data yang menunggu.</div>
           </div>
-          <div class="premium-subhead"><h3>Konflik</h3></div>
+          <div class="premium-subhead"><h3>Bentrok data</h3></div>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Entitas</th><th>Alasan</th><th>Dibuat</th><th></th></tr></thead>
+              <thead><tr><th>Data</th><th>Penyebab</th><th>Waktu</th><th></th></tr></thead>
               <tbody id="syncConflictList"></tbody>
             </table>
-            <div class="empty-state hidden" id="syncConflictEmpty">Tidak ada konflik terbuka.</div>
+            <div class="empty-state hidden" id="syncConflictEmpty">Tidak ada bentrok data.</div>
           </div>
-          <div class="premium-subhead"><h3>Snapshot terenkripsi</h3></div>
-          <form id="snapshotForm" class="form-grid premium-form">
-            <label class="field"><span>Perangkat</span><select class="input" id="snapshotDevice"></select></label>
-            <label class="field"><span>Kunci toko (base64)</span><input class="input" type="password" id="snapshotStoreKey" autocomplete="off" placeholder="Dibuat lewat tombol Buat kunci toko"></label>
-            <label class="field"><span>Kunci privat perangkat</span><input class="input" type="password" id="snapshotPrivateKey" autocomplete="off" placeholder="Hanya tersedia di sesi ini"></label>
-            <div class="form-actions premium-form-actions">
-              <button type="button" class="btn btn-primary" id="snapshotCreateBtn">Buat snapshot</button>
-              <button type="button" class="btn btn-outline" id="snapshotGetBtn">Ambil snapshot</button>
-              <button type="button" class="btn btn-outline" id="snapshotApplyBtn">Terapkan snapshot</button>
-            </div>
-          </form>
-          <pre class="premium-secret hidden" id="syncSecretOut"></pre>
         </section>
 
         <section class="card" id="premiumArchiveCard">
           <div class="card-head">
             <div>
-              <h2>Arsip semua toko</h2>
-              <p class="muted">Satu ZIP berisi database seluruh toko, manifest, dan checksum. Pemulihan memvalidasi semua berkas sebelum menimpa data.</p>
+              <h2>Cadangan semua toko</h2>
+              <p class="muted">Satu berkas berisi salinan seluruh toko. Sebelum dipulihkan, aplikasi memeriksa berkas agar data lama tidak rusak.</p>
             </div>
-            <button type="button" class="btn btn-primary" id="archiveBackupAllBtn">Buat arsip semua toko</button>
+            <button type="button" class="btn btn-primary" id="archiveBackupAllBtn">Buat cadangan</button>
           </div>
           <div class="table-wrap">
             <table class="table">
-              <thead><tr><th>Berkas</th><th>Ukuran</th><th>Dibuat</th><th></th></tr></thead>
+              <thead><tr><th>Nama berkas</th><th>Ukuran</th><th>Dibuat</th><th></th></tr></thead>
               <tbody id="archiveList"></tbody>
             </table>
-            <div class="empty-state hidden" id="archiveEmpty">Belum ada arsip semua toko.</div>
+            <div class="empty-state hidden" id="archiveEmpty">Belum ada cadangan semua toko.</div>
           </div>
           <div class="form-grid premium-form">
-            <label class="field"><span>Pulihkan arsip ZIP</span><input class="input" type="file" id="archiveRestoreFile" accept=".zip,application/zip"></label>
+            <label class="field"><span>Pilih berkas cadangan (.zip)</span><input class="input" type="file" id="archiveRestoreFile" accept=".zip,application/zip"></label>
             <div class="form-actions premium-form-actions">
-              <button type="button" class="btn btn-outline" id="archiveRestoreBtn">Pulihkan semua toko</button>
+              <button type="button" class="btn btn-outline" id="archiveRestoreBtn">Pulihkan</button>
             </div>
           </div>
-          <p class="tiny muted">Restore arsip menimpa database toko yang ada. Buat backup manual dulu bila ragu.</p>
+          <p class="tiny muted">Memulihkan cadangan akan menimpa data toko yang ada. Buat cadangan terbaru dulu bila ragu.</p>
         </section>
       </section>
 
@@ -3387,6 +3379,7 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <script src="/static/js/native-bridge.js?v=20261103"></script>
+  <script src="/static/js/offline-queue.js?v=20261103"></script>
   <script src="/static/js/api-client.js?v=20261103"></script>
   <script src="/static/js/printer-manager.js?v=20261103"></script>
   <script src="/static/js/bluetooth-native-adapter.js?v=20261103"></script>

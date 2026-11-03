@@ -31,12 +31,13 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 - **Fokus implementasi:** web lebih dulu. APK/Android dan paket platform lain
   belum dikerjakan sampai kode web stabil dan pilot lulus.
 - **Rencana hanya memuat pekerjaan yang belum ada kodenya.** Item yang sudah
-  dibuat dihapus dari dokumen rencana; status dan riwayatnya dicatat di
-  [`STATUS_MULTI_TOKO_PEMANTAPAN.md`](STATUS_MULTI_TOKO_PEMANTAPAN.md).
+  dibuat dipindahkan ke bagian **Status dan riwayat** di
+  [`RENCANA_MULTI_TOKO_PREMIUM.md`](RENCANA_MULTI_TOKO_PREMIUM.md).
 - **Sumber kebenaran produk:** aturan tier, kuota, akun, izin, backup, lisensi,
-  perangkat, relay, kunci, privasi, harga, dan distribusi ditetapkan sebagai
-  `K-01`–`K-22` di `RENCANA_MULTI_TOKO_PREMIUM.md`. Dokumen ini tidak mengulang
-  aturan tersebut; bagian lain hanya merujuk ID-nya.
+  perangkat, relay, kunci, privasi, harga, distribusi, serta model offline-first
+  dan Postgres ditetapkan sebagai `K-01`–`K-24` di
+  `RENCANA_MULTI_TOKO_PREMIUM.md`. Dokumen ini tidak mengulang aturan tersebut;
+  bagian lain hanya merujuk ID-nya.
 - **Teknologi:** Flutter + Dart untuk UI dan logika bisnis.
 - **Database lokal:** SQLite melalui drift/FFI; satu sumber kebenaran lokal di
   semua platform; `database_id` mengikuti K-05.
@@ -46,9 +47,13 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   (K-17). Tidak ada paket layout, server-driven UI, dex/JAR/so, atau self-update.
 - **Paket platform (tahap Flutter):** AAB Android lewat Play (APK sideload
   penuh/split), installer EXE Windows, `.app`/`.dmg` macOS.
-- **Tanpa Python:** backend Python tidak ikut ke paket baru. Aplikasi lama
-  diarsipkan setelah Flutter stabil (K-19); data lamanya tidak wajib
-  dimigrasikan.
+- **Tanpa Python di perangkat:** backend Python tidak ikut ke paket aplikasi.
+  Server relay tetap layanan Python/FastAPI terpisah dengan PostgreSQL (K-24).
+  Aplikasi lama diarsipkan setelah Flutter stabil (K-19); data lamanya tidak
+  wajib dimigrasikan.
+- **Offline-first:** setiap perangkat menyimpan SQLite lokal dan memproses
+  transaksi saat offline; server hanya kotak pos terenkripsi (K-23). Perangkat
+  owner adalah salinan lengkap dan sumber snapshot untuk perangkat baru.
 - **Data awal:** belum ada konsumen. Data dummy/pengembangan boleh dimulai ulang;
   migrasi data lama bukan syarat rilis.
 - **Skema database:** dirancang baru; tidak ada kewajiban kompatibilitas dengan
@@ -63,11 +68,12 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   baru terbuka saat berlangganan. Premium satu tier dengan seluruh fitur
   berbayar; fitur premium boleh dirilis bertahap di balik flag, tetapi tetap
   dijual sebagai satu tier.
-- **Mode karyawan:** mengikuti K-07/K-12. Peran dasar + izin tambahan; hak
-  menulis uang mengikuti flag hub, bukan status owner/karyawan.
+- **Mode karyawan:** mengikuti K-07/K-12. Peran dasar + izin tambahan; nota dan
+  pembayaran boleh dibuat offline di semua perangkat yang ditugaskan, sedangkan
+  void/retur/piutang hanya oleh pengguna dengan akses kasir.
 - **Apple:** target tahap ini macOS. iOS bukan target tahap ini.
-- **Rencana terpisah:** multi-toko, login, header toko, premium, dan backup ada
-  di `RENCANA_MULTI_TOKO_PREMIUM.md`; pengujiannya di `RENCANA_PEMANTAPAN.md`.
+- **Rencana terpisah:** multi-toko, login, header toko, premium, backup,
+  pengujian, dan status ada di `RENCANA_MULTI_TOKO_PREMIUM.md`.
   Web 2.7.0 sudah membuktikan header/registry/ganti toko/gating dan memuat
   prototipe akun/lisensi/perangkat/relay/arsip sebagai acuan migrasi (K-01).
   Sync dan kripto Dart tetap ditulis ulang setelah spesifikasi protokol + test
@@ -80,7 +86,7 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
 - **Satu aplikasi utama** memuat seluruh layar, logika, izin, dan aksi. Tidak ada
   paket layout yang diunduh; pembatasan peran dilakukan di shell dan lapisan
   data (K-07, K-17).
-- **Premium** berjalan penuh di satu perangkat owner (hub) tanpa relay; semua
+- **Premium** berjalan penuh di perangkat owner tanpa relay; semua
   toko dan shift karyawan memakai perangkat itu. Perangkat owner tambahan,
   perangkat karyawan, dan relay adalah bagian premium yang sama (K-12, K-13,
   K-21).
@@ -95,9 +101,10 @@ aplikasi lintas platform yang nyata, bukan WebView wrapper.
   Relay hanya menyimpan amplop terenkripsi sementara (K-13).
 - **Manajemen kunci premium:** kunci owner, kunci data per toko, wrapped key per
   perangkat, re-key saat pencabutan, dan pemulihan kunci owner mengikuti K-22.
-- **Lisensi premium** memakai token bertanda tangan dan hitung mundur offline;
-  kegagalan API tidak mengunci transaksi (K-11). Perangkat owner dan karyawan
-  didaftarkan terpisah (K-12).
+- **Lisensi premium** memakai token bertanda tangan dengan masa tenggang offline
+  tanpa batas selama perangkat terdaftar dan belum dicabut; jam perangkat tidak
+  dipakai untuk mengunci fitur, dan kegagalan API tidak mengunci transaksi
+  (K-11). Perangkat owner dan karyawan didaftarkan terpisah (K-12).
 - **Aplikasi owner** adalah thin client premium tanpa database transaksi; hanya
   cache ringkasan/laporan bertanda tangan (K-02, K-21).
 - **Backup lokal** tetap menjadi cadangan utama; sinkronisasi bukan pengganti
@@ -126,12 +133,12 @@ Target akhir; paket platform belum dikerjakan selama fokus web.
   owner dan tanpa registrasi perangkat (K-07/K-12). Paket aset statis opsional
   tidak boleh mengunci fitur inti atau mewajibkan login online (K-17).
 - Premium boleh berjalan lokal di satu perangkat owner tanpa relay; batas
-  perangkat owner, perangkat karyawan, dan hub mengikuti K-12/K-21.
+  perangkat owner dan perangkat karyawan mengikuti K-12/K-21.
 - Langganan berakhir tidak mengunci kasir atau menghapus data; perilaku fitur
   terkunci mengikuti K-03/K-11.
 - Outbox pending, notifikasi, HLC, dan konflik hanya ada di premium (K-14/K-16).
   TTL antrean relay, snapshot, dan replay outbox mengikuti K-13/K-22.
-- Banyak akun karyawan (mis. 100) di premium mengikuti K-12/K-14; di hub akun
+- Banyak akun karyawan (mis. 100) di premium mengikuti K-12/K-14; akun
   dipakai bergiliran, perangkat karyawan tidak dihitung dalam batas owner.
 - Backup lokal dan restore mengikuti K-10; backup menyertakan outbox pending dan
   tetap berfungsi tanpa akun/internet.
@@ -155,8 +162,8 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
 6. Printer pada Android dan Windows; Mac menyusul di tahap Mac.
 7. Uji parity uang, stok, nomor nota, retur, dan laporan dengan versi Python.
 8. Fitur lanjutan—follow-up, supplier, karyawan, komisi—setelah inti stabil.
-9. **Premium hub:** langganan, satu perangkat owner, multi-toko, karyawan shift
-   di hub, gating fitur, Follow up/WA, dan backup sesuai K-03/K-10/K-11/K-21.
+9. **Premium tahap awal:** langganan, satu perangkat owner, multi-toko, karyawan shift
+   di komputer toko, gating fitur, Follow up/WA, dan backup sesuai K-03/K-10/K-11/K-21.
 10. **Premium sync dan perangkat:** multi-device, perangkat karyawan, relay,
     kunci, dan aplikasi owner; aturan mengikuti K-12–K-16 dan K-21–K-22. Fitur
     ini tetap bagian dari tier premium yang sama, bukan tier kedua. LAN bukan
@@ -185,8 +192,8 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
    backup, WorkManager, AAB lewat Play.
 9. **Windows EXE:** printer, file backup, installer, dan paket aset opsional.
 10. **Mac:** `.app`/`.dmg`, printer, signing, notarization.
-11. **Premium hub:** langganan, satu perangkat owner, multi-toko, karyawan shift
-    di hub, gating, Follow up/WA, dan backup sesuai K-03/K-10/K-11/K-21.
+11. **Premium tahap awal:** langganan, satu perangkat owner, multi-toko, karyawan shift
+    di komputer toko, gating, Follow up/WA, dan backup sesuai K-03/K-10/K-11/K-21.
 12. **Premium sync dan perangkat:** multi-device, perangkat karyawan, relay,
     kunci, dan aplikasi owner sesuai K-12–K-16/K-21–K-22. LAN bukan bagian
     rilis awal.
@@ -227,8 +234,8 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
   terdaftar, token terikat, dan penegakan offline memakai daftar terakhir
   (K-12).
 - Perangkat karyawan tidak dihitung dalam batas owner dapat disalahgunakan;
-  mitigasi: perangkat karyawan tidak bisa menjadi hub, uang hanya ditulis di
-  hub, akun aktif, perangkat terdaftar dan dapat dicabut (K-12).
+  mitigasi: perangkat karyawan mengikuti izin akun, void/retur/piutang hanya oleh
+  akses kasir, akun aktif, perangkat terdaftar dan dapat dicabut (K-12).
 - Halaman harga dapat disalahpahami sebagai multi-device tanpa batas; halaman
   wajib menyebut batas perangkat owner paket dan bahwa perangkat karyawan tidak
   dihitung (K-11, K-21).
@@ -237,7 +244,7 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
   lisensi (K-12). Batas satu pelepasan per 72 jam harus dijelaskan.
 - Kunci owner yang hilang bersama kode pemulihan membuat izin/pencabutan baru
   tidak dapat diterbitkan; peringatan wajib saat pembuatan kode (K-22).
-- Re-key setelah pencabutan bergantung pada hub online; delta sensitif harus
+- Re-key setelah pencabutan bergantung pada perangkat owner online; delta sensitif harus
   ditahan sampai selesai, dan data yang sudah diunduh perangkat dicabut tidak
   dapat dihapus jarak jauh (K-22).
 - Snapshot tanpa replay outbox dapat menghilangkan delta lokal; urutan replay,
@@ -251,8 +258,8 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
 - Delta dari klien yang dimodifikasi dapat dipalsukan jika tidak ditandatangani;
   tanda tangan per perangkat dan verifikasi penerima wajib (K-15).
 - Antrean relay terenkripsi menambah biaya dan memiliki TTL; penerima yang
-  offline sangat lama harus memakai snapshot hub atau backup (K-13).
-- Jika hub hilang, pemulihan hanya lewat backup lokal; cache aplikasi owner
+  offline sangat lama harus memakai snapshot perangkat owner atau backup (K-13).
+- Jika semua perangkat owner hilang, pemulihan hanya lewat backup lokal; cache aplikasi owner
   bukan cadangan (K-02).
 - Hitung mundur lisensi offline bergantung pada jam perangkat; jam mundur tidak
   boleh memperpanjang masa aktif dan harus dikoreksi saat online (K-11).
@@ -281,7 +288,7 @@ per platform; paket aset statis opsional hanya jika pengukuran membuktikan perlu
 - Penyimpanan data bengkel yang dapat dibaca di VPS/cloud; hanya metadata dan
   amplop terenkripsi sementara dengan TTL (K-13).
 - Backup ke Google Drive.
-- LAN/hub lokal; jika dibutuhkan, menjadi keputusan dan pekerjaan terpisah
+- LAN lokal; jika dibutuhkan, menjadi keputusan dan pekerjaan terpisah
   (K-21).
 - Sync, perangkat karyawan, dan aplikasi owner tidak dijual terpisah; semuanya
   bagian tier premium yang sama dan dirilis bertahap di balik flag (K-12, K-21).

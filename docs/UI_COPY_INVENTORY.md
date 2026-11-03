@@ -36,7 +36,7 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - ID owner
 - Token perangkat
 - Dari pemilik; cukup diisi sekali
-- Perangkat harus didaftarkan pemilik terlebih dahulu. Login pertama memerlukan koneksi ke hub.
+- Perangkat harus didaftarkan pemilik terlebih dahulu. Login pertama memerlukan koneksi ke server.
 - Masuk perangkat
 - Lupa PIN? Hubungi teknisi bengkel. Data transaksi tidak ikut terhapus.
 - Error: PIN minimal 4 angka.
@@ -510,9 +510,9 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Belum ada akun karyawan. Tambahkan akun untuk membuka akses terbatas.
 - Teks akun
 - Salin semua
-- Perangkat dan hub
+- Perangkat
 - Server hanya menyimpan kunci publik dan hash token perangkat. Kunci privat tidak pernah disimpan di server.
-- Siapkan web hub
+- Gunakan perangkat ini
 - + Daftarkan perangkat
 - Nama perangkat
 - HP kasir
@@ -534,20 +534,14 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Online
 - Offline
 - Dicabut
-- Hub:
 - Cabut
 - Lepas slot
 - Belum ada perangkat terdaftar.
-- Hub toko
-- Hub wajib daring untuk menulis uang di toko. Perangkat lain hanya dapat mengantrekan perubahan.
+- Kunci sinkronisasi
+- Dipakai saat memulihkan sinkronisasi antarperangkat. Tidak perlu diubah untuk pemakaian sehari-hari.
 - Toko
-- Perangkat hub
-- Paksa ganti hub
-- Tidak
-- Ya
-- Simpan hub
-- Buat kunci toko
-- Ganti kunci toko
+- Buat kunci pengaman
+- Ganti kunci pengaman
 - Sinkronisasi terenkripsi
 - Antrean keluar, konflik, dan snapshot dienkripsi di perangkat. Server hanya melihat ciphertext dan tanda tangan.
 - Muat status
@@ -571,15 +565,6 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Pertahankan lokal
 - Pakai server
 - Tidak ada konflik terbuka.
-- Snapshot terenkripsi
-- Perangkat
-- Kunci toko (base64)
-- Dibuat lewat tombol Buat kunci toko
-- Kunci privat perangkat
-- Hanya tersedia di sesi ini
-- Buat snapshot
-- Ambil snapshot
-- Terapkan snapshot
 - Arsip semua toko
 - Satu ZIP berisi database seluruh toko, manifest, dan checksum. Pemulihan memvalidasi semua berkas sebelum menimpa data.
 - Buat arsip semua toko
@@ -1436,8 +1421,7 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Perangkat terdaftar.success
 - Kunci toko dibuat. Salin sekarang; tidak dapat ditampilkan lagi.success
 - Kunci toko diganti. Salin sekarang; tidak dapat ditampilkan lagi.success
-- Hub toko : aktif/dipaksa/menunggu/belum ada.success
-- Pilih toko dan perangkat owner untuk hub.error
+- Kunci toko diganti. Salin sekarang; tidak dapat ditampilkan lagi.success
 - Premium aktif.success
 - Lisensi diperpanjang.success
 - Masukkan kode pemulihan.error
@@ -1449,11 +1433,6 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Perangkat dicabut.success
 - Slot perangkat dilepas.success
 - Konflik ditandai selesai.success
-- Pilih perangkat hub, isi kunci toko dan kunci privat perangkat.error
-- Snapshot terenkripsi dibuat.success
-- Pilih perangkat.error
-- Pilih perangkat dan isi kunci toko.error
-- Snapshot diterapkan.success
 - Amplop kedaluwarsa dibersihkan: .success
 - Arsip semua toko dibuat: .success
 - Masuk sebagai .success
@@ -1490,10 +1469,8 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - Nonaktifkan akun ?
 - Cabut perangkat ini? Sesi perangkat langsung ditolak.
 - Lepas slot perangkat? Tindakan ini hanya dapat dilakukan sekali per 72 jam.
-- Terapkan snapshot ke toko aktif? Data toko saat ini akan diganti dan antrean lokal diputar ulang.
 - Hapus metadata premium di database utama? Data bengkel dan backup tetap utuh.
 - Prompt: Password baru untuk (kosongkan untuk dibuat otomatis):
-- Prompt: ID snapshot yang diterapkan:
 
 ## Judul/subjudul yang diisi dinamis
 
@@ -1578,7 +1555,6 @@ Dokumen ini mencatat seluruh teks yang tampil di antarmuka: judul halaman, keter
 - `premiumSecretOut`: teks lisensi, token, kunci toko, snapshot, ringkasan owner, atau audit akun
 - `accountSecretOut`: teks akun karyawan siap kirim atau hasil audit/snapshot akun
 - `deviceSecretOut`: token/kunci perangkat atau hasil buat/ganti kunci toko
-- `syncSecretOut`: hasil snapshot, penerapan, atau status sinkronisasi
 - `syncComplete`: LengkapMenunggu
-- `hubStore`/`hubDeviceId`: toko dan perangkat owner aktif
+- `keyStore`: toko untuk kunci pengaman
 - `premiumStoreLabel`: aktif/dipaksa/menunggu/belum ada

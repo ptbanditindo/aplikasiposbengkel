@@ -88,6 +88,24 @@
     try {
       response = await fetch(path, init);
     } catch (err) {
+      if (
+        opts.queue &&
+        init.method !== 'GET' &&
+        typeof window.OfflineQueue !== 'undefined'
+      ) {
+        await window.OfflineQueue.enqueue({
+          method: init.method,
+          url: path,
+          body: opts.body,
+          label: opts.label || path,
+          request_id: (opts.body && opts.body.request_id) || '',
+        });
+        window.OfflineQueue.notify();
+        return {
+          offline_queued: true,
+          request_id: (opts.body && opts.body.request_id) || '',
+        };
+      }
       throw new ApiError(
         'Tidak dapat menghubungi aplikasi. Pastikan aplikasi masih berjalan.',
         0,
@@ -332,9 +350,19 @@
     deleteStock: (id) =>
       request('/api/stock/' + id, { method: 'DELETE' }),
     addStockIn: (id, data) =>
-      request('/api/stock/' + id + '/in', { method: 'POST', body: data }),
+      request('/api/stock/' + id + '/in', {
+        method: 'POST',
+        body: data,
+        queue: true,
+        label: 'Stok masuk',
+      }),
     opnameStock: (data) =>
-      request('/api/stock/opname', { method: 'POST', body: data }),
+      request('/api/stock/opname', {
+        method: 'POST',
+        body: data,
+        queue: true,
+        label: 'Stok opname',
+      }),
 
     jasa: () => request('/api/harga-jasa'),
     createJasa: (data) =>
@@ -347,7 +375,12 @@
     previewTransaction: (data) =>
       request('/api/pos/preview', { method: 'POST', body: data }),
     createTransaction: (data) =>
-      request('/api/pos/transaction', { method: 'POST', body: data }),
+      request('/api/pos/transaction', {
+        method: 'POST',
+        body: data,
+        queue: true,
+        label: 'Nota',
+      }),
     records: (q) => request('/api/service-records?q=' + qs(q || '')),
     receipt: (id) => request('/api/service-records/' + id + '/receipt'),
     claim: (id) =>
@@ -366,6 +399,8 @@
       request('/api/service-records/' + recordId + '/payments', {
         method: 'POST',
         body: data,
+        queue: true,
+        label: 'Pembayaran',
       }),
     receivables: (customerId) =>
       request(
@@ -504,8 +539,8 @@
     devices: () => request('/api/devices'),
     registerDevice: (data) =>
       request('/api/devices', { method: 'POST', body: data }),
-    registerWebHub: () =>
-      request('/api/devices/web-hub', { method: 'POST' }),
+    registerWebDevice: () =>
+      request('/api/devices/web-device', { method: 'POST' }),
     revokeDevice: (id, reason) =>
       request(
         '/api/devices/' + qs(id) + '/revoke?reason=' + qs(reason || ''),
@@ -513,9 +548,6 @@
       ),
     releaseDevice: (id) =>
       request('/api/devices/' + qs(id) + '/release', { method: 'POST' }),
-    getHub: (storeId) =>
-      request('/api/devices/hub?store_id=' + qs(storeId || '')),
-    setHub: (data) => request('/api/devices/hub', { method: 'POST', body: data }),
     registerStoreKeys: (data) =>
       request('/api/devices/keys', { method: 'POST', body: data }),
     rotateStoreKeys: (data) =>
@@ -559,17 +591,6 @@
         method: 'POST',
         body: { resolution: resolution || 'manual' },
       }),
-    createSnapshot: (data) =>
-      request('/api/sync/snapshots', { method: 'POST', body: data }),
-    latestSnapshot: (storeId, deviceId) =>
-      request(
-        '/api/sync/snapshots/' +
-          qs(storeId) +
-          '?device_id=' +
-          qs(deviceId || '')
-      ),
-    applySnapshot: (data) =>
-      request('/api/sync/snapshots/apply', { method: 'POST', body: data }),
     purgeSync: () => request('/api/sync/purge', { method: 'POST' }),
 
     archives: () => request('/api/admin/archives'),

@@ -22,8 +22,10 @@ from api.schemas import (
     VoidRequest,
 )
 from database.session import get_db
+from database import store_registry
 from repositories import service_record_repository as record_repo
 from services import (
+    device_service,
     pos_service,
     pricing_service,
     settings_service,
@@ -45,6 +47,11 @@ def create_transaction(
     db: Session = Depends(get_db),
     operator: Operator = Depends(require_auth),
 ):
+    # Piutang (transaksi kredit) hanya oleh pengguna dengan akses kasir.
+    if (payload.jenis_bayar or "").upper() == "KREDIT":
+        device_service.assert_cashier_money_access(
+            db, operator, store_registry.active_store()["store_id"]
+        )
     result = pos_service.create_transaction(db, payload, operator)
     receipt = ReceiptOut.model_validate(
         build_receipt_payload(

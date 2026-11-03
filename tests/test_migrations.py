@@ -123,6 +123,46 @@ def test_migrasi_menyetel_user_version_dan_data_tetap(tmp_path, monkeypatch):
     assert len(list(backup_dir.glob("sebelum_migrasi_*.db"))) == 1
 
 
+def test_migrasi_040_mengisi_sync_id_tanpa_mengubah_data(tmp_path):
+    from database import migrations
+
+    legacy = build_engine(f"sqlite:///{(tmp_path / 'sync_id.db').as_posix()}")
+    with legacy.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE customers ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "nama VARCHAR(255) NOT NULL, "
+            "nomor_hp VARCHAR(64) NOT NULL)"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO customers (nama, nomor_hp) VALUES ('Lama', '0812')"
+        )
+        conn.exec_driver_sql("PRAGMA user_version = 39")
+
+    migrations.apply_migrations(legacy)
+
+    with legacy.connect() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT nama, sync_id FROM customers"
+        ).first()
+        assert row[0] == "Lama"
+        assert len(row[1]) == 26
+        index = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND name='ux_customers_sync_id'"
+        ).first()
+        assert index is not None
+
+    migrations.apply_migrations(legacy)
+
+    with legacy.connect() as conn:
+        assert (
+            conn.exec_driver_sql("SELECT COUNT(DISTINCT sync_id) FROM customers")
+            .scalar()
+            == 1
+        )
+
+
 def test_migrasi_tidak_dijalankan_dua_kali(tmp_path):
     from database import migrations
 

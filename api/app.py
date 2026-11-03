@@ -332,6 +332,31 @@ def create_app() -> FastAPI:
             return FileResponse(str(icon), media_type="image/svg+xml")
         return JSONResponse(status_code=204, content=None)
 
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    def manifest():
+        path = FRONTEND_DIR / "manifest.webmanifest"
+        if not path.exists():
+            return JSONResponse(status_code=404, content={"detail": "Manifest tidak ada."})
+        return FileResponse(
+            str(path),
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker():
+        path = FRONTEND_DIR / "sw.js"
+        if not path.exists():
+            return JSONResponse(status_code=404, content={"detail": "Service worker tidak ada."})
+        return FileResponse(
+            str(path),
+            media_type="text/javascript",
+            headers={
+                "Cache-Control": "no-cache",
+                "Service-Worker-Allowed": "/",
+            },
+        )
+
     return app
 
 

@@ -134,6 +134,7 @@ class CustomerCreate(CompatBase):
 
 class CustomerOut(ORMModel):
     id: int
+    sync_id: str
     nama: str
     nomor_hp: str
     alamat: Optional[str] = None
@@ -180,6 +181,7 @@ class UnitCreate(CompatBase):
 
 class UnitOut(ORMModel):
     id: int
+    sync_id: str
     customer_id: int
     unit_type: str
     nopol: Optional[str] = None
@@ -533,6 +535,7 @@ class StockItemUpdate(CompatBase):
 
 class StockItemOut(ORMModel):
     id: int
+    sync_id: str
     kode: Optional[str] = None
     barcodes: List[str] = Field(default_factory=list)
     nama: str
@@ -550,6 +553,7 @@ class StockLookupOut(StockItemOut):
 class StockInIn(StrictBase):
     jumlah: int = Field(..., ge=1, le=1000000)
     alasan: Optional[str] = Field(default=None, max_length=255)
+    request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
 
 
 class StockOpnameItemIn(StrictBase):
@@ -560,6 +564,7 @@ class StockOpnameItemIn(StrictBase):
 class StockOpnameIn(StrictBase):
     items: List[StockOpnameItemIn] = Field(default_factory=list)
     alasan: Optional[str] = Field(default=None, max_length=255)
+    request_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
 
 
 class HargaJasaCreate(CompatBase):
@@ -576,6 +581,7 @@ class HargaJasaUpdate(CompatBase):
 
 class HargaJasaOut(ORMModel):
     id: int
+    sync_id: str
     nama: str
     harga_standar: Money
     interval_servis_bulan: int = 0
@@ -1619,18 +1625,19 @@ class DeviceRegisterIn(StrictBase):
     generate_keys: bool = False
 
 
-class HubSetIn(StrictBase):
-    store_id: str = Field(min_length=1, max_length=32)
-    device_id: str = Field(min_length=1, max_length=32)
-    force: bool = False
-    online: bool = True
+class DeviceClaimIn(StrictBase):
+    old_device_id: str = Field(min_length=1, max_length=32)
+    nama: str = Field(default="", max_length=255)
+    public_key: str = Field(default="", max_length=4096)
+    encryption_key: str = Field(default="", max_length=4096)
+    generate_keys: bool = True
 
 
 class StoreKeyRegisterIn(StrictBase):
     store_id: str = Field(min_length=1, max_length=32)
     device_ids: List[str] = Field(default_factory=list)
     store_key: str = Field(default="", max_length=512)
-    hub_device_id: str = Field(default="", max_length=32)
+    primary_device_id: str = Field(default="", max_length=32)
 
 
 class StoreKeyRotateIn(StoreKeyRegisterIn):
@@ -1662,6 +1669,12 @@ class EnvelopeSubmitIn(StrictBase):
 class ApplyEnvelopeIn(StrictBase):
     device_id: str = Field(min_length=1, max_length=32)
     store_key: str = Field(min_length=1, max_length=512)
+
+
+class FeedAckIn(StrictBase):
+    device_id: str = Field(min_length=1, max_length=32)
+    store_id: str = Field(min_length=1, max_length=32)
+    last_seq: int = Field(ge=0)
 
 
 class SnapshotCreateIn(StrictBase):

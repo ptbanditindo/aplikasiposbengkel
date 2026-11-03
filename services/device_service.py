@@ -15,8 +15,6 @@ from database.models import (
     Device,
     DeviceStore,
     EmployeeAccount,
-    HubAudit,
-    StoreHub,
     utcnow,
 )
 from services import license_service, premium_crypto
@@ -98,10 +96,6 @@ def _owner_device_count(db: Session) -> int:
 
 
 def list_devices(db: Session) -> List[Dict[str, Any]]:
-    hubs = {
-        row.store_id: row
-        for row in db.execute(select(StoreHub)).scalars()
-    }
     rows = db.execute(select(Device).order_by(Device.created_at)).scalars()
     result: List[Dict[str, Any]] = []
     for device in rows:
@@ -114,12 +108,6 @@ def list_devices(db: Session) -> List[Dict[str, Any]]:
                 "employee_account_id": device.employee_account_id,
                 "public_key": signing_key(device),
                 "stores": store_ids,
-                "hub_stores": [
-                    store_id
-                    for store_id in store_ids
-                    if hubs.get(store_id) is not None
-                    and hubs[store_id].device_id == device.id
-                ],
                 "created_at": _iso(device.created_at),
                 "last_seen_at": _iso(device.last_seen_at),
                 "revoked_at": _iso(device.revoked_at),
@@ -209,6 +197,36 @@ def register_device(
     }
 
 
+def claim_device(
+    db: Session,
+    *,
+    old_device_id: str,
+    nama: str,
+    public_key: str,
+    encryption_key: str,
+    actor: str,
+) -> Dict[str, Any]:
+    """Instal ulang: slot perangkat lama diambil perangkat baru (K-22)."""
+    old = get_device(db, old_device_id)
+    if old.kind != "owner":
+        raise BusinessValidationError(
+            "Klaim slot hanya untuk perangkat owner; perangkat karyawan "
+            "didaftarkan ulang."
+        )
+    if old.revoked_at is not None:
+        raise ConflictError("Perangkat lama sudah dicabut.")
+    stores = _store_ids(db, old)
+    revoke_device(db, old.id, actor=actor, reason="diganti perangkat baru")
+    return register_device(
+        db,
+        nama=nama or old.nama,
+        kind="owner",
+        public_key=public_key,
+        encryption_key=encryption_key,
+        store_ids=stores,
+    )
+
+
 def revoke_device(
     db: Session, device_id: str, *, actor: str, reason: str = ""
 ) -> Dict[str, Any]:
@@ -216,22 +234,6 @@ def revoke_device(
     if device.revoked_at is None:
         device.revoked_at = _now()
         device.revoked_reason = (reason or "dicabut pemilik")[:255]
-        for hub in db.execute(
-            select(StoreHub).where(StoreHub.device_id == device.id)
-        ).scalars():
-            hub.mode = "pending"
-            hub.previous_device_id = device.id
-            hub.quarantine = True
-            hub.updated_by = actor
-        db.add(
-            HubAudit(
-                store_id="*",
-                from_device_id=device.id,
-                to_device_id="",
-                actor=actor,
-                mode="revoke",
-            )
-        )
         db.commit()
     return next(row for row in list_devices(db) if row["id"] == device.id)
 
@@ -259,100 +261,23 @@ def release_device(
     return result
 
 
-def set_hub(
-    db: Session,
-    *,
-    store_id: str,
-    device_id: str,
-    actor: str,
-    force: bool = False,
-    online: bool = True,
-) -> Dict[str, Any]:
-    if not online:
-        raise BusinessValidationError("Pindah hub hanya boleh saat online.")
-    device = get_device(db, device_id)
-    if device.revoked_at is not None:
-        raise ConflictError("Perangkat sudah dicabut.")
-    if device.kind != "owner":
-        raise BusinessValidationError(
-            "Hanya perangkat owner yang dapat menjadi hub uang."
-        )
-    if store_id not in _store_ids(db, device):
-        raise BusinessValidationError("Perangkat tidak ditugaskan ke toko ini.")
-    current = db.get(StoreHub, store_id)
-    if current is not None and current.device_id != device_id and not force:
-        raise ConflictError(
-            "Toko ini sudah punya hub aktif. Tunggu konfirmasi hub lama atau "
-            "paksa perpindahan dengan autentikasi ulang."
-        )
-    previous = current.device_id if current is not None else ""
-    if current is None:
-        current = StoreHub(
-            store_id=store_id,
-            device_id=device_id,
-            mode="active",
-            updated_by=actor,
-        )
-        db.add(current)
-    else:
-        current.device_id = device_id
-        current.mode = "forced" if force else "active"
-        current.previous_device_id = previous
-        current.quarantine = bool(force and previous and previous != device_id)
-        current.updated_by = actor
-    db.add(
-        HubAudit(
-            store_id=store_id,
-            from_device_id=previous,
-            to_device_id=device_id,
-            actor=actor,
-            mode="forced" if force else "normal",
-        )
-    )
-    db.commit()
-    return {
-        "store_id": store_id,
-        "device_id": device_id,
-        "previous_device_id": previous,
-        "mode": current.mode,
-        "quarantine": current.quarantine,
-    }
-
-
-def hub_for_store(db: Session, store_id: str) -> Optional[StoreHub]:
-    return db.get(StoreHub, store_id)
-
-
-def is_hub(db: Session, store_id: str, device_id: Optional[str]) -> bool:
-    if not device_id:
-        return False
-    hub = hub_for_store(db, store_id)
-    return hub is not None and hub.device_id == device_id and hub.mode != "pending"
-
-
-def assert_money_write(db: Session, operator: Any, store_id: Optional[str] = None) -> None:
-    """Uang hanya ditulis di perangkat hub; sesi web owner tanpa perangkat = hub."""
-    device_id = getattr(operator, "device_id", None)
-    if not device_id:
-        if getattr(operator, "kind", "owner") == "owner":
-            return
+def assert_cashier_money_access(
+    db: Session, operator: Any, store_id: Optional[str] = None
+) -> None:
+    """Void/retur/piutang boleh ditulis siapa pun yang memiliki akses kasir."""
+    if getattr(operator, "kind", "owner") == "owner":
+        return
+    role = getattr(operator, "role", "")
+    if role not in {"KASIR", "KEDUANYA"}:
         raise FeatureLockedError(
-            "Login karyawan dari perangkat memerlukan perangkat hub untuk menulis uang.",
-            code="hub_required",
+            "Peran ini tidak dapat menulis uang.", code="role_money_locked"
         )
     active_store = store_id or store_registry.active_store()["store_id"]
-    if not is_hub(db, active_store, device_id):
+    if active_store not in tuple(getattr(operator, "stores", ())):
         raise FeatureLockedError(
-            "Perangkat ini bukan hub uang toko aktif. Nota, pembayaran, dan retur "
-            "hanya dapat ditulis di hub.",
-            code="not_hub",
+            "Karyawan hanya dapat menulis uang di toko yang ditugaskan.",
+            code="store_not_assigned",
         )
-    if getattr(operator, "kind", "owner") == "employee":
-        role = getattr(operator, "role", "")
-        if role not in {"KASIR", "KEDUANYA"}:
-            raise FeatureLockedError(
-                "Peran ini tidak dapat menulis uang.", code="role_money_locked"
-            )
 
 
 def assert_store_access(db: Session, operator: Any, store_id: str) -> None:
@@ -378,8 +303,8 @@ def device_from_token(db: Session, token: Optional[str]) -> Optional[Device]:
     return device
 
 
-def ensure_web_hub(db: Session, actor: str) -> Dict[str, Any]:
-    """Daftarkan sesi web lokal sebagai perangkat hub utama bila belum ada."""
+def ensure_web_device(db: Session, actor: str) -> Dict[str, Any]:
+    """Daftarkan sesi web lokal sebagai perangkat owner bila belum ada."""
     existing = db.execute(
         select(Device).where(Device.kind == "owner", Device.revoked_at.is_(None))
     ).scalars().first()
@@ -395,7 +320,7 @@ def ensure_web_hub(db: Session, actor: str) -> Dict[str, Any]:
     enc_private, enc_public = premium_crypto.generate_encryption_keypair()
     created = register_device(
         db,
-        nama="Web hub",
+        nama="Perangkat web",
         kind="owner",
         public_key=sign_public,
         encryption_key=enc_public,

@@ -287,14 +287,27 @@ def add_stock(
     jumlah: int,
     alasan: Optional[str] = None,
     oleh: str = "Kasir",
+    request_id: Optional[str] = None,
 ) -> StockItem:
     """Tambah stok masuk dari scanner atau form manual."""
     qty = int(jumlah)
     if qty < 1:
         raise BusinessValidationError("Jumlah stok masuk minimal 1.")
+    begin_immediate(db)
     item = repo.get_stock(db, stock_id)
     if item is None:
         raise NotFoundError("Sparepart tidak ditemukan.")
+    request = clean_text(
+        request_id, max_length=64, allow_newlines=False
+    ) or None
+    if request:
+        existing = db.execute(
+            select(StockMovement.id)
+            .where(StockMovement.request_id == request)
+            .limit(1)
+        ).first()
+        if existing is not None:
+            return item
     item.jumlah = int(item.jumlah or 0) + qty
     db.add(
         StockMovement(
@@ -305,6 +318,7 @@ def add_stock(
             alasan=clean_text(alasan, max_length=255, allow_newlines=False)
             or "Tambah stok",
             oleh=oleh,
+            request_id=request,
         )
     )
     db.commit()
@@ -317,6 +331,7 @@ def opname_stock(
     items: List[dict],
     alasan: Optional[str] = None,
     oleh: str = "Kasir",
+    request_id: Optional[str] = None,
 ) -> List[StockItem]:
     """Sesuaikan stok hasil opname secara atomik.
 
@@ -327,9 +342,23 @@ def opname_stock(
     seen = set()
     reason = clean_text(alasan, max_length=255, allow_newlines=False) or "Stok opname"
     results: List[StockItem] = []
+    request = clean_text(
+        request_id, max_length=64, allow_newlines=False
+    ) or None
 
     with db.begin():
         begin_immediate(db)
+        if request:
+            existing = db.execute(
+                select(StockMovement.id)
+                .where(StockMovement.request_id == request)
+                .limit(1)
+            ).first()
+            if existing is not None:
+                return [
+                    repo.get_stock(db, int(row.get("stock_item_id") or 0))
+                    for row in items
+                ]
         for row in items:
             stock_id = int(row.get("stock_item_id") or 0)
             new_qty = int(row.get("jumlah"))
@@ -356,6 +385,7 @@ def opname_stock(
                         jumlah=new_qty - old_qty,
                         alasan=reason,
                         oleh=oleh,
+                        request_id=request,
                     )
                 )
             db.flush()

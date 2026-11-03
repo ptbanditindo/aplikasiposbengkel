@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from database.models import (
     Customer,
+    DeviceNotaCounter,
     NotaCounter,
     ServicePart,
     ServiceRecord,
@@ -113,6 +114,39 @@ def allocate_numeric_nota(db: Session) -> str:
     counter.terakhir += 1
     db.flush()
     return str(counter.terakhir)
+
+
+def allocate_device_nota(
+    db: Session, *, device_id: str, day: date, prefix: str
+) -> str:
+    """Nomor nota berawalan perangkat, mis. `KSR7X2Q-20261103-0001` (K-12).
+
+    Dipanggil di dalam transaksi tulis sehingga counter tidak balapan.
+    """
+    key_day = f"{day:%Y%m%d}"
+    safe_prefix = "".join(
+        char for char in (prefix or "DEV").upper() if char.isalnum()
+    )[:8] or "DEV"
+    row = db.get(DeviceNotaCounter, (device_id, key_day))
+    if row is None:
+        pattern = f"{safe_prefix}-{key_day}-%"
+        highest = 0
+        for nota in db.scalars(
+            select(ServiceRecord.no_nota).where(
+                ServiceRecord.no_nota.like(pattern)
+            )
+        ).all():
+            suffix = str(nota or "").rsplit("-", 1)[-1]
+            if suffix.isdigit():
+                highest = max(highest, int(suffix))
+        row = DeviceNotaCounter(
+            device_id=device_id, tanggal=key_day, terakhir=highest
+        )
+        db.add(row)
+        db.flush()
+    row.terakhir += 1
+    db.flush()
+    return f"{safe_prefix}-{key_day}-{row.terakhir:04d}"
 
 
 def allocate_nota(db: Session, day: date) -> str:

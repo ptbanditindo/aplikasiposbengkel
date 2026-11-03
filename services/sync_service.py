@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from sqlalchemy import delete, exists, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import session as db_session
@@ -31,9 +33,10 @@ from database.models import (
     RelayEnvelope,
     RelaySnapshot,
     StockItem,
-    StoreHub,
+    StoreFeedCounter,
     StoreKey,
     SyncConflict,
+    SyncCursor,
     SyncPeerState,
     utcnow,
 )
@@ -161,6 +164,28 @@ def build_envelope(
     }
 
 
+def _store_feed_counter(db: Session, store_id: str) -> int:
+    row = db.get(StoreFeedCounter, store_id)
+    return int(row.last_seq or 0) if row is not None else 0
+
+
+def _next_store_seq(db: Session, store_id: str) -> int:
+    """Ambil nomor feed berikutnya dari counter permanen secara atomik."""
+    statement = (
+        sqlite_insert(StoreFeedCounter)
+        .values(store_id=store_id, last_seq=1)
+        .on_conflict_do_update(
+            index_elements=[StoreFeedCounter.store_id],
+            set_={
+                "last_seq": StoreFeedCounter.last_seq + 1,
+                "updated_at": _now(),
+            },
+        )
+        .returning(StoreFeedCounter.last_seq)
+    )
+    return int(db.execute(statement).scalar_one())
+
+
 def submit_envelope(
     db: Session,
     *,
@@ -223,6 +248,7 @@ def submit_envelope(
         sender_device_id=sender_device_id,
         recipient_device_id=recipient_device_id or "",
         seq=int(seq),
+        store_seq=_next_store_seq(db, store_id),
         hlc_wall=int(hlc_wall),
         hlc_counter=int(hlc_counter),
         idempotency_key=idempotency_key or store_registry.new_ulid(),
@@ -232,7 +258,13 @@ def submit_envelope(
         expires_at=_now() + ENVELOPE_TTL,
     )
     db.add(envelope)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError(
+            "Nomor feed toko sedang dipakai; kirim ulang amplop."
+        ) from exc
     return {"envelope": _public_envelope(envelope), "created": True}
 
 
@@ -243,6 +275,7 @@ def _public_envelope(row: RelayEnvelope) -> Dict[str, Any]:
         "sender_device_id": row.sender_device_id,
         "recipient_device_id": row.recipient_device_id,
         "seq": row.seq,
+        "store_seq": row.store_seq,
         "hlc_wall": row.hlc_wall,
         "hlc_counter": row.hlc_counter,
         "idempotency_key": row.idempotency_key,
@@ -289,15 +322,7 @@ def list_envelopes(
     return [_public_envelope(row) for row in db.execute(query).scalars()]
 
 
-def ack_envelope(db: Session, envelope_id: str, device_id: str) -> Dict[str, Any]:
-    envelope = db.get(RelayEnvelope, envelope_id)
-    if envelope is None:
-        raise NotFoundError("Amplop tidak ditemukan.")
-    _device(db, device_id)
-    _assigned(db, device_id, envelope.store_id)
-    if db.get(RelayAck, (envelope_id, device_id)) is None:
-        db.add(RelayAck(envelope_id=envelope_id, device_id=device_id))
-        db.flush()
+def _active_recipients(db: Session, envelope: RelayEnvelope) -> List[str]:
     if envelope.recipient_device_id:
         candidate_ids = [envelope.recipient_device_id]
     else:
@@ -307,28 +332,165 @@ def ack_envelope(db: Session, envelope_id: str, device_id: str) -> Dict[str, Any
                 select(DeviceStore).where(DeviceStore.store_id == envelope.store_id)
             ).scalars()
         ]
-    active_recipients = [
-        row_id
-        for row_id in candidate_ids
-        if row_id != envelope.sender_device_id
-        and (db.get(Device, row_id) is not None)
-        and db.get(Device, row_id).revoked_at is None
-    ]
+    active: List[str] = []
+    for row_id in candidate_ids:
+        if row_id == envelope.sender_device_id:
+            continue
+        device = db.get(Device, row_id)
+        if device is None or device.revoked_at is not None:
+            continue
+        cursor = db.get(SyncCursor, (envelope.store_id, row_id))
+        if cursor is not None and int(cursor.last_seq or 0) >= int(envelope.store_seq):
+            # Kursor sudah melewati posisi ini (feed atau snapshot).
+            continue
+        active.append(row_id)
+    return active
+
+
+def _prune_envelope(db: Session, envelope_id: str) -> int:
+    """Hapus amplop setelah semua penerima aktif mengakui (K-13)."""
+    envelope = db.get(RelayEnvelope, envelope_id)
+    if envelope is None:
+        return 0
     acked = {
         row.device_id
         for row in db.execute(
             select(RelayAck).where(RelayAck.envelope_id == envelope_id)
         ).scalars()
     }
-    if not active_recipients or set(active_recipients).issubset(acked):
-        # Semua penerima aktif sudah mengakui delta; ciphertext tidak perlu
-        # disimpan lagi (K-13). Outbox pengirim tetap dipertahankan.
-        db.execute(delete(RelayAck).where(RelayAck.envelope_id == envelope_id))
-        db.delete(envelope)
+    recipients = _active_recipients(db, envelope)
+    if recipients and not set(recipients).issubset(acked):
+        return 0
+    db.execute(delete(RelayAck).where(RelayAck.envelope_id == envelope_id))
+    db.execute(delete(RelayEnvelope).where(RelayEnvelope.id == envelope_id))
+    return 1
+
+
+def ack_envelope(db: Session, envelope_id: str, device_id: str) -> Dict[str, Any]:
+    _device(db, device_id)
+    envelope = db.get(RelayEnvelope, envelope_id)
+    if envelope is None:
+        # Pengakuan ulang setelah amplop dihapus dianggap idempoten.
         db.commit()
-        return {"envelope_id": envelope_id, "acked": True, "complete": True}
+        return {
+            "envelope_id": envelope_id,
+            "acked": True,
+            "complete": True,
+            "deleted": False,
+        }
+    _assigned(db, device_id, envelope.store_id)
+    if db.get(RelayAck, (envelope_id, device_id)) is None:
+        db.add(RelayAck(envelope_id=envelope_id, device_id=device_id))
+        db.flush()
+    deleted = _prune_envelope(db, envelope_id)
     db.commit()
-    return {"envelope_id": envelope_id, "acked": True, "complete": False}
+    return {
+        "envelope_id": envelope_id,
+        "acked": True,
+        "complete": True,
+        "deleted": bool(deleted),
+    }
+
+
+def feed(
+    db: Session,
+    *,
+    device_id: str,
+    store_id: str,
+    since_seq: int = 0,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    """Perubahan toko setelah kursor, berurutan dan siap diterapkan perangkat."""
+    _require_premium()
+    device = _device(db, device_id)
+    _assigned(db, device.id, store_id)
+    start = max(0, int(since_seq))
+    capped = max(1, min(int(limit), 500))
+    query = (
+        select(RelayEnvelope)
+        .where(
+            RelayEnvelope.store_id == store_id,
+            RelayEnvelope.store_seq > start,
+            RelayEnvelope.sender_device_id != device.id,
+            RelayEnvelope.recipient_device_id.in_(["", device.id]),
+            RelayEnvelope.expires_at >= _now(),
+        )
+        .order_by(RelayEnvelope.store_seq)
+        .limit(capped + 1)
+    )
+    rows = list(db.execute(query).scalars())
+    has_more = len(rows) > capped
+    rows = rows[:capped]
+    counter = _store_feed_counter(db, store_id)
+    cursor_row = db.get(SyncCursor, (store_id, device.id))
+    cursor = int(cursor_row.last_seq or 0) if cursor_row is not None else 0
+    oldest = int(rows[0].store_seq) if rows else 0
+    if counter <= start:
+        snapshot_required = False
+    elif not rows:
+        snapshot_required = True
+    else:
+        snapshot_required = oldest > start + 1
+    return {
+        "store_id": store_id,
+        "device_id": device_id,
+        "cursor": cursor,
+        "since_seq": start,
+        "oldest_seq": oldest,
+        "latest_seq": counter,
+        "next_seq": int(rows[-1].store_seq) if rows else start,
+        "has_more": has_more,
+        "snapshot_required": snapshot_required,
+        "envelopes": [_public_envelope(row) for row in rows],
+    }
+
+
+def advance_cursor(
+    db: Session, *, device_id: str, store_id: str, last_seq: int
+) -> Dict[str, Any]:
+    """Maju-kan kursor perangkat, akui delta yang dilalui, lalu pangkas amplop."""
+    _require_premium()
+    device = _device(db, device_id)
+    _assigned(db, device.id, store_id)
+    target = max(0, int(last_seq))
+    latest_value = _store_feed_counter(db, store_id)
+    if target > latest_value:
+        raise BusinessValidationError(
+            "Kursor melewati perubahan terakhir toko."
+        )
+    row = db.get(SyncCursor, (store_id, device.id))
+    if row is None:
+        row = SyncCursor(store_id=store_id, device_id=device.id, last_seq=0)
+        db.add(row)
+        db.flush()
+    previous = int(row.last_seq or 0)
+    touched = [
+        envelope_id
+        for envelope_id in db.execute(
+            select(RelayEnvelope.id).where(
+                RelayEnvelope.store_id == store_id,
+                RelayEnvelope.store_seq > previous,
+                RelayEnvelope.store_seq <= target,
+                RelayEnvelope.sender_device_id != device.id,
+                RelayEnvelope.recipient_device_id.in_(["", device.id]),
+            )
+        ).scalars()
+    ]
+    for envelope_id in touched:
+        if db.get(RelayAck, (envelope_id, device.id)) is None:
+            db.add(RelayAck(envelope_id=envelope_id, device_id=device.id))
+    db.flush()
+    deleted = sum(_prune_envelope(db, envelope_id) for envelope_id in touched)
+    row.last_seq = max(previous, target)
+    row.updated_at = _now()
+    db.commit()
+    return {
+        "store_id": store_id,
+        "device_id": device.id,
+        "last_seq": row.last_seq,
+        "latest_seq": latest_value,
+        "pruned": deleted,
+    }
 
 
 def purge_expired(db: Session) -> int:
@@ -570,7 +732,7 @@ def register_store_keys(
     store_key: bytes,
     device_ids: Iterable[str],
     owner_private_key: str,
-    hub_device_id: str = "",
+    primary_device_id: str = "",
 ) -> Dict[str, Any]:
     _require_premium()
     created = []
@@ -592,19 +754,16 @@ def register_store_keys(
         row.owner_signature = signature
         db.flush()
         created.append(device.id)
-    hub = hub_device_id or ""
-    if not hub:
-        hub_row = db.get(StoreHub, store_id)
-        hub = hub_row.device_id if hub_row is not None else ""
-    if hub:
-        hub_device = _device(db, hub)
-        encryption = device_service.encryption_key(hub_device)
+    primary = primary_device_id or (created[0] if created else "")
+    if primary:
+        primary_device = _device(db, primary)
+        encryption = device_service.encryption_key(primary_device)
         if encryption:
             wrapped = premium_crypto.wrap_store_key(encryption, store_key)
             signature = premium_crypto.sign(
                 owner_private_key,
                 premium_crypto.canonical_json(
-                    {"store_id": store_id, "device_id": hub, "wrapped_key": wrapped}
+                    {"store_id": store_id, "device_id": primary, "wrapped_key": wrapped}
                 ),
             )
             key_row = db.get(StoreKey, store_id)
@@ -612,10 +771,10 @@ def register_store_keys(
                 key_row = StoreKey(store_id=store_id)
                 db.add(key_row)
             key_row.wrapped_key = wrapped
-            key_row.hub_device_id = hub
+            key_row.primary_device_id = primary
             key_row.owner_signature = signature
     db.commit()
-    return {"store_id": store_id, "devices": created, "hub_device_id": hub}
+    return {"store_id": store_id, "devices": created, "primary_device_id": primary}
 
 
 def store_key_wrap(db: Session, store_id: str, device_id: str) -> Dict[str, Any]:
@@ -687,7 +846,7 @@ def rotate_store_key(
     store_key: bytes,
     device_ids: Iterable[str],
     owner_private_key: str,
-    hub_device_id: str = "",
+    primary_device_id: str = "",
 ) -> Dict[str, Any]:
     """Ganti kunci toko setelah pencabutan perangkat (K-22).
 
@@ -709,13 +868,12 @@ def rotate_store_key(
             "Tidak ada perangkat aktif yang dapat menerima kunci baru."
         )
 
-    hub_row = db.get(StoreHub, store_id)
-    hub = hub_device_id or (hub_row.device_id if hub_row is not None else "")
-    if hub:
-        hub_device = _device(db, hub)
-        _assigned(db, hub_device.id, store_id)
-        if hub_device.id not in targets:
-            targets.append(hub_device.id)
+    primary = primary_device_id or (targets[0] if targets else "")
+    if primary:
+        primary_device = _device(db, primary)
+        _assigned(db, primary_device.id, store_id)
+        if primary_device.id not in targets:
+            targets.append(primary_device.id)
 
     # Bungkus lama milik perangkat yang dicabut/dikeluarkan harus hilang.
     stale = [
@@ -735,7 +893,7 @@ def rotate_store_key(
         store_key=store_key,
         device_ids=targets,
         owner_private_key=owner_private_key,
-        hub_device_id=hub,
+        primary_device_id=primary,
     )
 
     rotated_at = _now()
@@ -758,7 +916,7 @@ def rotate_store_key(
     return {
         "store_id": store_id,
         "devices": targets,
-        "hub_device_id": hub,
+        "primary_device_id": primary,
         "rotated_at": rotated_at,
         "dropped_envelopes": envelopes,
         "dropped_snapshots": snapshots,
@@ -792,15 +950,6 @@ def verify_and_decrypt(
         store_key, envelope.ciphertext, envelope.nonce
     )
     return json.loads(plaintext.decode("utf-8"))
-
-
-def _hub_allows(db: Session, envelope: RelayEnvelope) -> bool:
-    hub = db.get(StoreHub, envelope.store_id)
-    return (
-        hub is not None
-        and hub.device_id == envelope.sender_device_id
-        and hub.mode != "pending"
-    )
 
 
 def _apply_payload(
@@ -898,6 +1047,10 @@ def _verify_employee_permission(
             "Izin karyawan tidak mencukupi untuk delta ini.",
             code="permission_denied",
         )
+    if entity in MONEY_ENTITIES and account.role_base not in {"KASIR", "KEDUANYA"}:
+        raise FeatureLockedError(
+            "Peran ini tidak dapat menulis uang.", code="role_money_locked"
+        )
 
 
 def apply_envelope(
@@ -934,10 +1087,6 @@ def apply_envelope(
     _verify_employee_permission(db, device, envelope, data)
     entity = str(data.get("entity") or "")
     action = str(data.get("action") or "")
-    if entity in MONEY_ENTITIES and not _hub_allows(db, envelope):
-        raise FeatureLockedError(
-            "Delta uang hanya diterima dari hub toko aktif.", code="not_hub"
-        )
     try:
         status = _apply_payload(
             store_db,
@@ -1024,8 +1173,6 @@ LOCAL_ONLY_TABLES = (
     "device_key_wraps",
     "store_keys",
     "permission_snapshots",
-    "hub_audits",
-    "store_hubs",
     "device_stores",
     "devices",
     "login_guards",
@@ -1149,11 +1296,15 @@ def create_snapshot(
     hlc_counter: int = 0,
 ) -> Dict[str, Any]:
     _require_premium()
-    _device(db, device_id)
+    device = _device(db, device_id)
+    if device.kind != "owner":
+        raise FeatureLockedError(
+            "Snapshot hanya dibuat dari perangkat owner.", code="owner_only"
+        )
     _assigned(db, device_id, store_id)
-    hub = db.get(StoreHub, store_id)
-    if hub is None or hub.device_id != device_id or hub.mode == "pending":
-        raise FeatureLockedError("Snapshot hanya dibuat oleh hub toko.", code="not_hub")
+    # Diambil sebelum salinan dibuat: delta yang masuk setelah posisi ini akan
+    # diulang lewat feed dan dideduplikasi oleh sync_id/applied_deltas.
+    snapshot_seq = _store_feed_counter(db, store_id)
     snapshot_file = _snapshot_copy(_store_path(store_id))
     try:
         raw = snapshot_file.read_bytes()
@@ -1168,6 +1319,7 @@ def create_snapshot(
                 "store_id": store_id,
                 "device_id": device_id,
                 "checksum": checksum,
+                "store_seq": int(snapshot_seq),
                 "hlc_wall": int(hlc_wall),
                 "hlc_counter": int(hlc_counter),
             }
@@ -1184,11 +1336,34 @@ def create_snapshot(
         nonce=nonce,
         signature=signature,
         checksum=checksum,
+        store_seq=snapshot_seq,
         expires_at=_now() + ENVELOPE_TTL,
     )
     db.add(row)
     db.commit()
-    return {"id": row.id, "checksum": checksum, "expires_at": row.expires_at}
+    return {
+        "id": row.id,
+        "checksum": checksum,
+        "store_seq": snapshot_seq,
+        "expires_at": row.expires_at,
+    }
+
+
+def _public_snapshot(row: RelaySnapshot) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "store_id": row.store_id,
+        "device_id": row.device_id,
+        "ciphertext": row.ciphertext,
+        "nonce": row.nonce,
+        "signature": row.signature,
+        "checksum": row.checksum,
+        "store_seq": row.store_seq,
+        "hlc_wall": row.hlc_wall,
+        "hlc_counter": row.hlc_counter,
+        "created_at": row.created_at,
+        "expires_at": row.expires_at,
+    }
 
 
 def get_snapshot(db: Session, *, store_id: str, device_id: str) -> Dict[str, Any]:
@@ -1201,18 +1376,41 @@ def get_snapshot(db: Session, *, store_id: str, device_id: str) -> Dict[str, Any
     ).scalars().first()
     if row is None or row.expires_at < _now():
         raise NotFoundError("Snapshot tidak tersedia atau sudah melewati TTL.")
+    return _public_snapshot(row)
+
+
+def bootstrap(db: Session, *, store_id: str, device_id: str) -> Dict[str, Any]:
+    """Data awal perangkat baru: wrapped key, snapshot, dan posisi kursor (K-22)."""
+    _require_premium()
+    _device(db, device_id)
+    _assigned(db, device_id, store_id)
+    wrap = db.get(DeviceKeyWrap, (store_id, device_id))
+    cursor_row = db.get(SyncCursor, (store_id, device_id))
+    cursor = int(cursor_row.last_seq or 0) if cursor_row is not None else 0
+    counter = _store_feed_counter(db, store_id)
+    snapshot = db.execute(
+        select(RelaySnapshot)
+        .where(
+            RelaySnapshot.store_id == store_id,
+            RelaySnapshot.expires_at >= _now(),
+        )
+        .order_by(RelaySnapshot.created_at.desc())
+    ).scalars().first()
+    usable = (
+        snapshot
+        if snapshot is not None and int(snapshot.store_seq or 0) > cursor
+        else None
+    )
     return {
-        "id": row.id,
-        "store_id": row.store_id,
-        "device_id": row.device_id,
-        "ciphertext": row.ciphertext,
-        "nonce": row.nonce,
-        "signature": row.signature,
-        "checksum": row.checksum,
-        "hlc_wall": row.hlc_wall,
-        "hlc_counter": row.hlc_counter,
-        "created_at": row.created_at,
-        "expires_at": row.expires_at,
+        "store_id": store_id,
+        "device_id": device_id,
+        "wrapped_key": wrap.wrapped_key if wrap is not None else "",
+        "owner_signature": wrap.owner_signature if wrap is not None else "",
+        "key_wrap_required": wrap is None,
+        "cursor": cursor,
+        "latest_seq": counter,
+        "snapshot_required": bool(counter > cursor and usable is None),
+        "snapshot": _public_snapshot(usable) if usable is not None else None,
     }
 
 
@@ -1237,6 +1435,7 @@ def apply_snapshot(
             "store_id": snap.store_id,
             "device_id": snap.device_id,
             "checksum": snap.checksum,
+            "store_seq": int(snap.store_seq or 0),
             "hlc_wall": snap.hlc_wall,
             "hlc_counter": snap.hlc_counter,
         }
@@ -1244,7 +1443,20 @@ def apply_snapshot(
     if not premium_crypto.verify(
         device_service.signing_key(sender), canonical, snap.signature
     ):
-        raise BusinessValidationError("Tanda tangan snapshot tidak valid.")
+        # Snapshot lama (sebelum store_seq ikut ditandatangani) tetap dibaca.
+        legacy = premium_crypto.canonical_json(
+            {
+                "store_id": snap.store_id,
+                "device_id": snap.device_id,
+                "checksum": snap.checksum,
+                "hlc_wall": snap.hlc_wall,
+                "hlc_counter": snap.hlc_counter,
+            }
+        )
+        if not premium_crypto.verify(
+            device_service.signing_key(sender), legacy, snap.signature
+        ):
+            raise BusinessValidationError("Tanda tangan snapshot tidak valid.")
     raw = premium_crypto.decrypt_payload(store_key, snap.ciphertext, snap.nonce)
     if premium_crypto.sha256_hex(raw) != snap.checksum:
         raise BusinessValidationError("Checksum snapshot tidak cocok.")
@@ -1289,10 +1501,22 @@ def apply_snapshot(
     finally:
         staged.unlink(missing_ok=True)
 
+    # Kursor perangkat baru mengikuti posisi snapshot; delta sesudahnya menyusul
+    # lewat feed tanpa mengulang data yang sudah ada di snapshot (K-22).
+    cursor = db.get(SyncCursor, (store_id, device_id))
+    if cursor is None:
+        cursor = SyncCursor(store_id=store_id, device_id=device_id, last_seq=0)
+        db.add(cursor)
+    cursor.last_seq = max(int(cursor.last_seq or 0), int(snap.store_seq or 0))
+    cursor.updated_at = _now()
+    db.commit()
+
     return {
         "status": "applied",
         "snapshot_id": snapshot_id,
         "store_id": store_id,
+        "store_seq": cursor.last_seq,
+        "cursor": cursor.last_seq,
         "replayed": replay,
         "device": target_device.id,
     }

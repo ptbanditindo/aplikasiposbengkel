@@ -212,6 +212,74 @@ def read_manifest(archive_path: Path) -> Dict[str, Any]:
     return manifest
 
 
+def _read_local_credentials(primary: Path) -> tuple[dict, dict]:
+    """Kredensial perangkat/akun yang tidak ikut arsip tetapi harus bertahan."""
+    employees: Dict[str, Dict[str, Any]] = {}
+    devices: Dict[str, str] = {}
+    if not primary.exists():
+        return employees, devices
+    connection = sqlite3.connect(str(primary))
+    connection.row_factory = sqlite3.Row
+    try:
+        for row in connection.execute(
+            "SELECT username, password_hash, password_salt, "
+            "password_iterations, pin_hash, pin_salt, pin_iterations, "
+            "must_change_password, failed_attempts, lock_until "
+            "FROM employee_accounts"
+        ):
+            if str(row["password_hash"] or "") or str(row["pin_hash"] or ""):
+                employees[str(row["username"])] = dict(row)
+        for row in connection.execute("SELECT id, token_hash FROM devices"):
+            token = str(row["token_hash"] or "")
+            if token and not token.startswith("redacted:"):
+                devices[str(row["id"])] = token
+    finally:
+        connection.close()
+    return employees, devices
+
+
+def _restore_local_credentials(
+    primary: Path, employees: Dict[str, Dict[str, Any]], devices: Dict[str, str]
+) -> None:
+    """Kembalikan kredensial lokal setelah restore arsip yang diredaksi (K-10)."""
+    if not employees and not devices:
+        return
+    connection = sqlite3.connect(str(primary))
+    try:
+        with connection:
+            for username, row in employees.items():
+                connection.execute(
+                    "UPDATE employee_accounts SET password_hash = ?, "
+                    "password_salt = ?, password_iterations = ?, pin_hash = ?, "
+                    "pin_salt = ?, pin_iterations = ?, must_change_password = ?, "
+                    "failed_attempts = ?, lock_until = ? WHERE username = ?",
+                    (
+                        row.get("password_hash") or "",
+                        row.get("password_salt") or "",
+                        int(row.get("password_iterations") or 0),
+                        row.get("pin_hash") or "",
+                        row.get("pin_salt") or "",
+                        int(row.get("pin_iterations") or 0),
+                        int(row.get("must_change_password") or 0),
+                        int(row.get("failed_attempts") or 0),
+                        row.get("lock_until"),
+                        username,
+                    ),
+                )
+            # Akun baru dari arsip tidak membawa kredensial; paksa reset pemilik.
+            connection.execute(
+                "UPDATE employee_accounts SET must_change_password = 1 "
+                "WHERE password_hash IS NULL OR password_hash = ''"
+            )
+            for device_id, token_hash in devices.items():
+                connection.execute(
+                    "UPDATE devices SET token_hash = ? WHERE id = ?",
+                    (token_hash, device_id),
+                )
+    finally:
+        connection.close()
+
+
 def _target_path(entry: Dict[str, Any]) -> Path:
     if entry.get("primary"):
         return db_session.main_database_path()
@@ -241,30 +309,40 @@ def restore_archive(archive_path: Path) -> Dict[str, Any]:
     safety: Dict[str, Optional[Path]] = {}
     primary_in_archive = False
     try:
-        with zipfile.ZipFile(Path(archive_path)) as archive:
-            for entry in manifest["stores"]:
-                filename = str(entry["filename"])
-                extracted = staging / f"in_{len(targets)}.db"
-                with archive.open(filename) as source, extracted.open("wb") as target:
-                    shutil.copyfileobj(source, target)
-                if _sha256(extracted) != str(entry["sha256"]):
-                    raise BusinessValidationError(
-                        f"Checksum arsip toko {entry['store_id']} tidak cocok."
+        try:
+            with zipfile.ZipFile(Path(archive_path)) as archive:
+                for entry in manifest["stores"]:
+                    filename = str(entry["filename"])
+                    extracted = staging / f"in_{len(targets)}.db"
+                    with archive.open(filename) as source, extracted.open("wb") as target:
+                        shutil.copyfileobj(source, target)
+                    if _sha256(extracted) != str(entry["sha256"]):
+                        raise BusinessValidationError(
+                            f"Checksum arsip toko {entry['store_id']} tidak cocok."
+                        )
+                    backup_service._validate_backup(extracted)
+                    target_path = _target_path(entry)
+                    primary_in_archive = primary_in_archive or bool(entry.get("primary"))
+                    targets.append((extracted, target_path, entry))
+                    safety[str(target_path)] = _safety_copy(
+                        target_path, str(len(targets)), staging
                     )
-                backup_service._validate_backup(extracted)
-                target_path = _target_path(entry)
-                primary_in_archive = primary_in_archive or bool(entry.get("primary"))
-                targets.append((extracted, target_path, entry))
-                safety[str(target_path)] = _safety_copy(
-                    target_path, str(len(targets)), staging
-                )
+        except (zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
+            raise BusinessValidationError(
+                "Arsip rusak atau tidak lengkap."
+            ) from exc
 
         preserved: Dict[str, str] = {}
+        preserved_employees: Dict[str, Dict[str, Any]] = {}
+        preserved_devices: Dict[str, str] = {}
         if primary_in_archive:
             primary = db_session.main_database_path()
             if primary.exists():
                 preserved = backup_service._read_settings(
                     primary, PRESERVED_SETTING_KEYS
+                )
+                preserved_employees, preserved_devices = (
+                    _read_local_credentials(primary)
                 )
 
         db_session.dispose_store_engines()
@@ -303,6 +381,11 @@ def restore_archive(archive_path: Path) -> Dict[str, Any]:
             backup_service._write_settings(
                 db_session.main_database_path(), preserved
             )
+        _restore_local_credentials(
+            db_session.main_database_path(),
+            preserved_employees,
+            preserved_devices,
+        )
     except Exception:
         db_session.dispose_store_engines()
         db_session.engine.dispose()

@@ -25,10 +25,10 @@ build/
 *.db
 *.sqlite
 *.sqlite3
-/data/*.db
-/data/printer_config.json
+/data/
 /backups/*.db
 /backups/*.zip
+/backups_dummy_*/
 
 # Logs
 logs/

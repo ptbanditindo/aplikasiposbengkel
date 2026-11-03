@@ -17,7 +17,32 @@ Migration = Tuple[int, Callable[[object], None]]
 
 LABEL_INDEX_NAME = "ix_vehicle_or_units_label_radiator"
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 46
+
+SYNC_ID_TABLES = (
+    "customers",
+    "suppliers",
+    "supplier_items",
+    "supplier_followups",
+    "vehicle_or_units",
+    "stock_items",
+    "stock_barcodes",
+    "harga_jasa",
+    "employees",
+    "employee_debts",
+    "salary_payments",
+    "service_records",
+    "pengerjaan_nota",
+    "pengerjaan_nota_events",
+    "wa_message_logs",
+    "followup_items",
+    "followup_events",
+    "service_jobs",
+    "service_parts",
+    "service_returns",
+    "service_return_items",
+    "stock_movements",
+)
 
 
 def get_user_version(conn) -> int:
@@ -1219,6 +1244,152 @@ def _migrate_039_unit_part_and_barcodes(cursor) -> None:
     )
 
 
+def _migrate_040_sync_ids(cursor) -> None:
+    """Tambahkan ID publik ULID agar baris dapat dirujuk antar perangkat."""
+    from database import store_registry
+
+    tables = _tables(cursor)
+    for table in SYNC_ID_TABLES:
+        if table not in tables:
+            continue
+        if "sync_id" not in _columns(cursor, table):
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN sync_id VARCHAR(26)")
+        cursor.execute(
+            f"SELECT id FROM {table} WHERE sync_id IS NULL OR sync_id = ''"
+        )
+        for (row_id,) in cursor.fetchall():
+            cursor.execute(
+                f"UPDATE {table} SET sync_id = ? WHERE id = ?",
+                (store_registry.new_ulid(), row_id),
+            )
+        index_name = f"ux_{table}_sync_id"
+        if not _index_is_unique(cursor, table, index_name):
+            cursor.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                f"ON {table}(sync_id)"
+            )
+
+
+def _migrate_041_sync_feed(cursor) -> None:
+    """Beri nomor urut feed per toko dan simpan kursor baca per perangkat."""
+    tables = _tables(cursor)
+    if "relay_envelopes" in tables:
+        if "store_seq" not in _columns(cursor, "relay_envelopes"):
+            cursor.execute(
+                "ALTER TABLE relay_envelopes ADD COLUMN store_seq "
+                "INTEGER NOT NULL DEFAULT 0"
+            )
+        cursor.execute("SELECT DISTINCT store_id FROM relay_envelopes")
+        for (store_id,) in cursor.fetchall():
+            cursor.execute(
+                "SELECT id FROM relay_envelopes "
+                "WHERE store_id = ? AND store_seq = 0 "
+                "ORDER BY created_at, id",
+                (store_id,),
+            )
+            pending_ids = [row[0] for row in cursor.fetchall()]
+            cursor.execute(
+                "SELECT COALESCE(MAX(store_seq), 0) FROM relay_envelopes "
+                "WHERE store_id = ?",
+                (store_id,),
+            )
+            next_seq = int(cursor.fetchone()[0]) + 1
+            for envelope_id in pending_ids:
+                cursor.execute(
+                    "UPDATE relay_envelopes SET store_seq = ? WHERE id = ?",
+                    (next_seq, envelope_id),
+                )
+                next_seq += 1
+        if not _index_is_unique(cursor, "relay_envelopes", "ux_relay_store_seq"):
+            cursor.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_relay_store_seq "
+                "ON relay_envelopes(store_id, store_seq)"
+            )
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS sync_cursors ("
+        "store_id VARCHAR(32) NOT NULL, "
+        "device_id VARCHAR(32) NOT NULL, "
+        "last_seq INTEGER NOT NULL DEFAULT 0, "
+        "updated_at DATETIME NOT NULL, "
+        "PRIMARY KEY (store_id, device_id))"
+    )
+
+
+def _migrate_042_store_feed_counters(cursor) -> None:
+    """Simpan nomor feed permanen agar tidak kembali ke 1 setelah ack."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS store_feed_counters ("
+        "store_id VARCHAR(32) NOT NULL PRIMARY KEY, "
+        "last_seq INTEGER NOT NULL DEFAULT 0, "
+        "updated_at DATETIME NOT NULL)"
+    )
+    if "relay_envelopes" not in _tables(cursor):
+        return
+    cursor.execute(
+        "SELECT store_id, COALESCE(MAX(store_seq), 0) "
+        "FROM relay_envelopes GROUP BY store_id"
+    )
+    for store_id, last_seq in cursor.fetchall():
+        cursor.execute(
+            "INSERT INTO store_feed_counters (store_id, last_seq, updated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(store_id) DO UPDATE SET "
+            "last_seq = CASE WHEN excluded.last_seq > last_seq "
+            "THEN excluded.last_seq ELSE last_seq END",
+            (store_id, int(last_seq or 0)),
+        )
+
+
+def _migrate_043_snapshot_store_seq(cursor) -> None:
+    """Snapshot membawa posisi feed agar kursor perangkat baru tepat."""
+    if "relay_snapshots" not in _tables(cursor):
+        return
+    if "store_seq" not in _columns(cursor, "relay_snapshots"):
+        cursor.execute(
+            "ALTER TABLE relay_snapshots ADD COLUMN store_seq "
+            "INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _migrate_044_device_nota_counters(cursor) -> None:
+    """Counter nota per perangkat; nomor berawalan perangkat (K-12)."""
+    cursor.execute(
+        "CREATE TABLE IF NOT EXISTS device_nota_counters ("
+        "device_id VARCHAR(32) NOT NULL, "
+        "tanggal VARCHAR(8) NOT NULL, "
+        "terakhir INTEGER NOT NULL DEFAULT 0, "
+        "PRIMARY KEY (device_id, tanggal))"
+    )
+
+
+def _migrate_045_stock_movement_request(cursor) -> None:
+    """Penanda idempotensi stok masuk/opname yang dikirim ulang offline."""
+    if "stock_movements" not in _tables(cursor):
+        return
+    if "request_id" not in _columns(cursor, "stock_movements"):
+        cursor.execute(
+            "ALTER TABLE stock_movements ADD COLUMN request_id VARCHAR(64)"
+        )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS ix_stock_movements_request "
+        "ON stock_movements(request_id)"
+    )
+
+
+def _migrate_046_remove_hub(cursor) -> None:
+    """Hapus konsep hub; kunci toko memakai perangkat utama biasa."""
+    tables = _tables(cursor)
+    cursor.execute("DROP TABLE IF EXISTS hub_audits")
+    cursor.execute("DROP TABLE IF EXISTS store_hubs")
+    if "store_keys" in tables:
+        columns = _columns(cursor, "store_keys")
+        if "hub_device_id" in columns and "primary_device_id" not in columns:
+            cursor.execute(
+                "ALTER TABLE store_keys RENAME COLUMN hub_device_id "
+                "TO primary_device_id"
+            )
+
+
 MIGRATIONS: List[Migration] = [
     (1, _migrate_001_harga_modal),
     (2, _migrate_002_nota_counters),
@@ -1259,6 +1430,13 @@ MIGRATIONS: List[Migration] = [
     (37, _migrate_037_part_exchange),
     (38, _migrate_038_supplier_followups),
     (39, _migrate_039_unit_part_and_barcodes),
+    (40, _migrate_040_sync_ids),
+    (41, _migrate_041_sync_feed),
+    (42, _migrate_042_store_feed_counters),
+    (43, _migrate_043_snapshot_store_seq),
+    (44, _migrate_044_device_nota_counters),
+    (45, _migrate_045_stock_movement_request),
+    (46, _migrate_046_remove_hub),
 ]
 
 

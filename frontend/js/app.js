@@ -260,7 +260,6 @@
     entitlement: { plan: 'free', premium: false },
     operator: null,
     premiumMeta: null,
-    premiumKeys: { deviceId: '', sign: '', encrypt: '', storeKey: '' },
     permissionCatalog: null,
     premiumAccounts: [],
     premiumDevices: [],
@@ -1154,6 +1153,12 @@
     state.stores = config.stores || [];
     state.storeActive = config.store_aktif || '';
     state.followupQuota = config.kuota_followup || null;
+    const employeeMode = Boolean(
+      state.operator && state.operator.kind === 'employee'
+    );
+    $$('.role-hidden-owner').forEach((element) =>
+      element.classList.toggle('hidden', employeeMode)
+    );
 
     syncFeatureToggles();
     document.title = config.bengkel.nama + ' - Kasir Bengkel';
@@ -3439,6 +3444,17 @@
         }
       }
 
+      if (result && result.offline_queued) {
+        toast(
+          'Transaksi disimpan di perangkat dan akan dikirim saat online.',
+          'warning',
+          9000
+        );
+        resetPosState();
+        refreshOfflineIndicator();
+        return;
+      }
+
       toast('Nota ' + result.record.no_nota + ' berhasil disimpan.', 'success', 5000);
       (result.warnings || []).forEach((warning) =>
         toast(warning, 'warning', 8000)
@@ -5251,9 +5267,10 @@
         !state.config ||
         !state.config.ops ||
         state.config.ops.karyawan_aktif !== false;
+      const payrollAllowed = employeeAktif && isOwnerOperator();
       const results = await Promise.all([
         API.daily(todayISO()),
-        employeeAktif ? API.payrollSummary(todayISO()) : Promise.resolve(null),
+        payrollAllowed ? API.payrollSummary(todayISO()) : Promise.resolve(null),
         API.soldParts(todayISO(), todayISO()),
       ]);
       const daily = results[0];
@@ -6295,6 +6312,15 @@
         catatan: noteEl && noteEl.value.trim() ? noteEl.value.trim() : null,
         request_id: paymentRequestId(),
       });
+      if (result && result.offline_queued) {
+        toast(
+          'Pembayaran disimpan di perangkat dan akan dikirim saat online.',
+          'warning',
+          8000
+        );
+        refreshOfflineIndicator();
+        return;
+      }
       if (result.status_bayar === 'LUNAS') {
         toast('Nota ' + record.no_nota + ' lunas.', 'success');
       } else if (kredit) {
@@ -9317,13 +9343,20 @@
     const button = $('#stockInForm button[type="submit"]');
     setBusy(button, true, 'Menyimpan...');
     try {
-      await API.addStockIn(item.id, {
+      const result = await API.addStockIn(item.id, {
         jumlah: jumlah,
         alasan: $('#stockInAlasan').value.trim() || null,
+        request_id: paymentRequestId(),
       });
       closeModal('#stockInModal');
-      toast('Stok ' + item.nama + ' bertambah ' + jumlah + '.', 'success');
+      toast(
+        result && result.offline_queued
+          ? 'Stok masuk disimpan di perangkat dan akan dikirim saat online.'
+          : 'Stok ' + item.nama + ' bertambah ' + jumlah + '.',
+        result && result.offline_queued ? 'warning' : 'success'
+      );
       await loadStock();
+      refreshOfflineIndicator();
     } catch (err) {
       toast(err.message, 'error', 6000);
     } finally {
@@ -9486,13 +9519,20 @@
     const button = $('#stockOpnameForm button[type="submit"]');
     setBusy(button, true, 'Menyimpan...');
     try {
-      await API.opnameStock({
+      const result = await API.opnameStock({
         items: items,
         alasan: $('#stockOpnameAlasan').value.trim() || null,
+        request_id: paymentRequestId(),
       });
       closeModal('#stockOpnameModal');
-      toast('Stok opname tersimpan.', 'success');
+      toast(
+        result && result.offline_queued
+          ? 'Stok opname disimpan di perangkat dan akan dikirim saat online.'
+          : 'Stok opname tersimpan.',
+        result && result.offline_queued ? 'warning' : 'success'
+      );
       await loadStock();
+      refreshOfflineIndicator();
     } catch (err) {
       toast(err.message, 'error', 6000);
     } finally {
@@ -9890,6 +9930,90 @@
     return labels[value] || value || '-';
   }
 
+  function premiumDeviceKindLabel(kind) {
+    const labels = { owner: 'Pemilik', employee: 'Karyawan' };
+    return labels[kind] || kind || '-';
+  }
+
+  function premiumEntityLabel(entity) {
+    const labels = {
+      stock: 'Stok',
+      payment: 'Pembayaran',
+      nota: 'Nota',
+      retur: 'Retur',
+      void: 'Pembatalan',
+      piutang: 'Piutang',
+    };
+    return labels[entity] || entity || '-';
+  }
+
+  function premiumSyncActionLabel(action) {
+    const labels = {
+      delta: 'Ubah jumlah',
+      opname: 'Hitung ulang',
+      create: 'Tambah',
+      update: 'Ubah',
+      delete: 'Hapus',
+    };
+    return labels[action] || action || '-';
+  }
+
+  function premiumSyncStatusLabel(status) {
+    const labels = {
+      pending: 'Menunggu',
+      sent: 'Dikirim',
+      acked: 'Terkirim',
+      applied: 'Diterima',
+      conflict: 'Bentrok',
+      duplicate: 'Sudah ada',
+    };
+    return labels[status] || status || '-';
+  }
+
+  function accountAuditText(rows) {
+    if (!rows || !rows.length) {
+      return 'Belum ada riwayat perubahan untuk akun ini.';
+    }
+    const notes = {
+      'buat akun': 'Akun dibuat',
+      'ubah akun/izin': 'Data atau izin diubah',
+      'reset password': 'Password direset',
+      'reset PIN': 'PIN dihapus',
+    };
+    return rows
+      .map(function (row) {
+        const actor = row.actor_id === 'owner' ? 'Pemilik' : row.actor_id || '-';
+        return (
+          fmtDateTime(row.created_at) +
+          ' · ' +
+          (notes[row.note] || row.note || 'Perubahan akun') +
+          ' · oleh ' +
+          actor
+        );
+      })
+      .join('\n');
+  }
+
+  function accountSnapshotText(data) {
+    const payload = (data && data.payload) || {};
+    const catalog =
+      (state.permissionCatalog && state.permissionCatalog.permissions) || {};
+    const permissions =
+      (payload.permissions || [])
+        .map((key) => catalog[key] || key)
+        .join(', ') || 'Tidak ada izin tambahan';
+    const stores =
+      (payload.stores || []).map(premiumStoreName).join(', ') || '-';
+    return [
+      'Izin tersimpan untuk ' + (payload.username || '-'),
+      'Peran: ' + accountRoleLabel(payload.role),
+      'Toko: ' + stores,
+      'Izin: ' + permissions,
+      'Versi: ' + (payload.permission_version || (data && data.version) || '-'),
+      'Diperbarui: ' + (payload.updated_at ? fmtDateTime(payload.updated_at) : '-'),
+    ].join('\n');
+  }
+
   function premiumStoreName(storeId) {
     const store = (state.stores || []).find(
       (row) => row.store_id === storeId
@@ -9935,7 +10059,7 @@
           '</option>'
       )
       .join('');
-    const storeSelect = $('#hubStore');
+    const storeSelect = $('#keyStore');
     if (storeSelect) storeSelect.innerHTML = storeOptions;
     const accountSelect = $('#deviceAccount');
     if (accountSelect) {
@@ -9954,25 +10078,6 @@
           )
           .join('');
     }
-    const ownerDevices = (state.premiumDevices || []).filter(
-      (device) => !device.revoked_at
-    );
-    const deviceOptions = ownerDevices
-      .map(
-        (device) =>
-          '<option value="' +
-          esc(device.id) +
-          '">' +
-          esc(device.nama) +
-          ' (' +
-          esc(device.kind) +
-          ')</option>'
-      )
-      .join('');
-    ['hubDeviceId', 'snapshotDevice'].forEach((id) => {
-      const select = $('#' + id);
-      if (select) select.innerHTML = deviceOptions;
-    });
     fillPremiumStoreChecks('accountStores', []);
     fillPremiumStoreChecks('deviceStores', []);
   }
@@ -10074,16 +10179,16 @@
           '">Ubah</button>' +
           '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="reset-password" data-id="' +
           account.id +
-          '">Password</button>' +
+          '">Password baru</button>' +
           '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="reset-pin" data-id="' +
           account.id +
           '">Reset PIN</button>' +
           '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="account-audit" data-id="' +
           account.id +
-          '">Audit</button>' +
+          '">Riwayat</button>' +
           '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="account-snapshot" data-id="' +
           account.id +
-          '">Snapshot</button>' +
+          '">Lihat izin</button>' +
           (account.aktif
             ? '<button type="button" class="btn btn-ghost btn-sm text-danger" data-premium-action="deactivate-account" data-id="' +
               account.id +
@@ -10184,8 +10289,8 @@
       .join(', ') || '-';
     return [
       'PusatkuPOS — akun karyawan',
-      'ID owner: ' + (meta.owner_id || '-'),
-      'Username: ' + account.username,
+      'ID pemilik: ' + (meta.owner_id || '-'),
+      'Nama pengguna: ' + account.username,
       'Password: ' + (password || '-'),
       'Peran: ' + accountRoleLabel(account.role || account.role_base),
       'Toko: ' + stores,
@@ -10262,12 +10367,7 @@
           esc(device.id) +
           '</div></td>' +
           '<td>' +
-          esc(device.kind) +
-          (device.hub_stores && device.hub_stores.length
-            ? '<div class="tiny muted">Hub: ' +
-              esc(device.hub_stores.map(premiumStoreName).join(', ')) +
-              '</div>'
-            : '') +
+          esc(premiumDeviceKindLabel(device.kind)) +
           '</td>' +
           '<td class="tiny">' +
           esc((device.stores || []).map(premiumStoreName).join(', ') || '-') +
@@ -10283,7 +10383,7 @@
               '">Cabut</button>' +
               '<button type="button" class="btn btn-ghost btn-sm" data-premium-action="release-device" data-id="' +
               esc(device.id) +
-              '">Lepas slot</button>') +
+              '">Kosongkan slot</button>') +
           '</td>' +
           '</tr>'
         );
@@ -10324,11 +10424,6 @@
           '\nKunci enkripsi (sekali): ' +
           result.private_keys.encrypt;
       }
-      if (result.private_keys) {
-        state.premiumKeys.deviceId = device.id;
-        state.premiumKeys.sign = result.private_keys.sign;
-        state.premiumKeys.encrypt = result.private_keys.encrypt;
-      }
       showPremiumSecret('deviceSecretOut', text + '\n\n' + (result.private_keys_note || ''));
       toast('Perangkat ' + device.nama + ' terdaftar.', 'success');
       $('#deviceForm').classList.add('hidden');
@@ -10341,28 +10436,27 @@
     }
   }
 
-  async function prepareWebHub() {
+  async function prepareWebDevice() {
     if (state.premiumBusy) return;
     state.premiumBusy = true;
-    const button = $('#webHubBtn');
+    const button = $('#webDeviceBtn');
     setBusy(button, true, 'Menyiapkan...');
     try {
-      const result = await API.registerWebHub();
+      const result = await API.registerWebDevice();
       const device = result.device || result;
-      let text = 'Web hub: ' + device.nama + '\nID: ' + device.id;
-      if (result.token) text += '\nToken (sekali): ' + result.token;
+      let text = 'Perangkat ini: ' + device.nama + '\nID: ' + device.id;
+      if (result.token) {
+        text += '\nToken perangkat (hanya sekali): ' + result.token;
+      }
       if (result.private_keys) {
         text +=
           '\nKunci tanda tangan (sekali): ' +
           result.private_keys.sign +
           '\nKunci enkripsi (sekali): ' +
           result.private_keys.encrypt;
-        state.premiumKeys.deviceId = device.id;
-        state.premiumKeys.sign = result.private_keys.sign;
-        state.premiumKeys.encrypt = result.private_keys.encrypt;
       } else {
         text +=
-          '\nPerangkat owner sudah ada. Kunci privat lama tidak dapat ditampilkan lagi.';
+          '\nPerangkat pemilik sudah ada. Kunci lama tidak dapat ditampilkan lagi.';
       }
       showPremiumSecret('deviceSecretOut', text);
       await loadPremiumPage();
@@ -10374,16 +10468,22 @@
     }
   }
 
+  function keyTargets(storeId) {
+    const active = (state.premiumDevices || []).filter(
+      (device) =>
+        !device.revoked_at && (device.stores || []).includes(storeId)
+    );
+    const owner = active.find((device) => device.kind === 'owner');
+    return {
+      deviceIds: active.map((device) => device.id),
+      primary: owner ? owner.id : '',
+    };
+  }
+
   async function createStoreKey() {
     if (state.premiumBusy) return;
-    const storeId = $('#hubStore').value;
-    const hubDeviceId = $('#hubDeviceId').value;
-    const deviceIds = (state.premiumDevices || [])
-      .filter(
-        (device) =>
-          !device.revoked_at && (device.stores || []).includes(storeId)
-      )
-      .map((device) => device.id);
+    const storeId = $('#keyStore').value;
+    const targets = keyTargets(storeId);
     if (!storeId) return;
     state.premiumBusy = true;
     const button = $('#storeKeyBtn');
@@ -10391,26 +10491,18 @@
     try {
       const result = await API.registerStoreKeys({
         store_id: storeId,
-        device_ids: deviceIds,
-        hub_device_id: hubDeviceId,
+        device_ids: targets.deviceIds,
+        primary_device_id: targets.primary,
       });
       let text =
-        'Kunci toko ' +
+        'Kunci pengaman toko ' +
         premiumStoreName(storeId) +
         ' (hanya ditampilkan sekali):\n' +
         (result.store_key || '(sudah ada)') +
-        '\n\nPerangkat terbungkus: ' +
+        '\n\nPerangkat yang memakai kunci: ' +
         ((result.devices || result.created || []).join(', ') || '-');
-      if (result.store_key) state.premiumKeys.storeKey = result.store_key;
-      if (hubDeviceId) state.premiumKeys.deviceId = hubDeviceId;
       showPremiumSecret('deviceSecretOut', text);
-      const keyInput = $('#snapshotStoreKey');
-      if (keyInput && result.store_key) keyInput.value = result.store_key;
-      const privateInput = $('#snapshotPrivateKey');
-      if (privateInput && state.premiumKeys.sign) {
-        privateInput.value = state.premiumKeys.sign;
-      }
-      toast('Kunci toko dibuat. Salin sekarang; tidak dapat ditampilkan lagi.', 'success', 8000);
+      toast('Kunci pengaman dibuat. Salin sekarang; tidak dapat ditampilkan lagi.', 'success', 8000);
     } catch (err) {
       toast(err.message, 'error', 7000);
     } finally {
@@ -10421,50 +10513,41 @@
 
   async function rotateStoreKey() {
     if (state.premiumBusy) return;
-    const storeId = $('#hubStore').value;
-    const hubDeviceId = $('#hubDeviceId').value;
+    const storeId = $('#keyStore').value;
     if (!storeId) return;
     if (
       !window.confirm(
-        'Ganti kunci toko ' +
+        'Ganti kunci pengaman toko ' +
           premiumStoreName(storeId) +
-          '? Amplop dan snapshot lama dihapus; outbox dikirim ulang. Lakukan setelah perangkat dicabut.'
+          '? Data dan cadangan lama dibuang, lalu data tertunda dikirim ulang. Lakukan setelah perangkat dicabut.'
       )
     ) {
       return;
     }
-    const deviceIds = (state.premiumDevices || [])
-      .filter(
-        (device) =>
-          !device.revoked_at && (device.stores || []).includes(storeId)
-      )
-      .map((device) => device.id);
+    const targets = keyTargets(storeId);
     state.premiumBusy = true;
     const button = $('#rotateStoreKeyBtn');
     setBusy(button, true, 'Mengganti...');
     try {
       const result = await API.rotateStoreKeys({
         store_id: storeId,
-        device_ids: deviceIds,
-        hub_device_id: hubDeviceId,
+        device_ids: targets.deviceIds,
+        primary_device_id: targets.primary,
       });
       let text =
-        'Kunci baru toko ' +
+        'Kunci pengaman baru toko ' +
         premiumStoreName(storeId) +
         ' (hanya ditampilkan sekali):\n' +
         (result.store_key || '(tidak dibuat)') +
-        '\n\nPerangkat dibungkus ulang: ' +
+        '\n\nPerangkat memakai kunci baru: ' +
         ((result.devices || []).join(', ') || '-') +
-        '\nAmplop dihapus: ' +
+        '\nData lama dibuang: ' +
         (result.dropped_envelopes || 0) +
-        '\nSnapshot dihapus: ' +
+        '\nCadangan lama dibuang: ' +
         (result.dropped_snapshots || 0) +
-        '\nOutbox dikirim ulang: ' +
+        '\nData tertunda dikirim ulang: ' +
         (result.requeued_outbox || 0);
-      if (result.store_key) state.premiumKeys.storeKey = result.store_key;
       showPremiumSecret('deviceSecretOut', text);
-      const keyInput = $('#snapshotStoreKey');
-      if (keyInput && result.store_key) keyInput.value = result.store_key;
       toast('Kunci toko diganti. Salin sekarang; tidak dapat ditampilkan lagi.', 'success', 8000);
       await loadPremiumPage();
     } catch (err) {
@@ -10473,46 +10556,6 @@
       state.premiumBusy = false;
       setBusy(button, false);
     }
-  }
-
-  async function saveHub(event) {
-    event.preventDefault();
-    if (state.premiumBusy) return;
-    const storeId = $('#hubStore').value;
-    const deviceId = $('#hubDeviceId').value;
-    if (!storeId || !deviceId) {
-      toast('Pilih toko dan perangkat owner untuk hub.', 'error');
-      return;
-    }
-    state.premiumBusy = true;
-    const button = $('#hubSetBtn');
-    setBusy(button, true, 'Menyimpan...');
-    try {
-      const result = await API.setHub({
-        store_id: storeId,
-        device_id: deviceId,
-        force: $('#hubForce').value === 'true',
-        online: true,
-      });
-      toast(
-        'Hub toko ' +
-          premiumStoreName(storeId) +
-          ': ' +
-          premiumStoreLabel(result.mode),
-        'success'
-      );
-      await loadPremiumPage();
-    } catch (err) {
-      toast(err.message, 'error', 7000);
-    } finally {
-      state.premiumBusy = false;
-      setBusy(button, false);
-    }
-  }
-
-  function premiumStoreLabel(mode) {
-    const labels = { active: 'aktif', forced: 'dipaksa', pending: 'menunggu', none: 'belum ada' };
-    return labels[mode] || mode || '-';
   }
 
   function renderPremiumSync() {
@@ -10525,7 +10568,9 @@
     if (last) last.textContent = status.last_sync_at ? fmtDateTime(status.last_sync_at) : '-';
     const complete = $('#syncComplete');
     if (complete) {
-      complete.textContent = status.complete ? 'Lengkap' : 'Menunggu';
+      complete.textContent = status.complete
+        ? 'Semua terkirim'
+        : 'Ada yang menunggu';
     }
     const outboxBody = $('#syncOutboxList');
     if (outboxBody) {
@@ -10534,14 +10579,11 @@
         .map(
           (item) =>
             '<tr><td>' +
-            esc(item.entity) +
-            (item.entity_id
-              ? '<div class="tiny muted">' + esc(item.entity_id) + '</div>'
-              : '') +
+            esc(premiumEntityLabel(item.entity)) +
             '</td><td>' +
-            esc(item.action) +
+            esc(premiumSyncActionLabel(item.action)) +
             '</td><td>' +
-            esc(item.status) +
+            esc(premiumSyncStatusLabel(item.status)) +
             '</td><td class="tiny">' +
             esc(fmtDateTime(item.created_at)) +
             '</td></tr>'
@@ -10561,7 +10603,7 @@
         .map(
           (item) =>
             '<tr><td>' +
-            esc(item.entity) +
+            esc(premiumEntityLabel(item.entity)) +
             '</td><td>' +
             esc(item.reason) +
             '</td><td class="tiny">' +
@@ -10586,8 +10628,7 @@
     }
   }
 
-  async function loadPremiumSync(deviceId) {
-    const selected = deviceId || ($('#snapshotDevice') || {}).value || '';
+  async function loadPremiumSync() {
     if (!isPremium()) {
       state.premiumSync = null;
       state.premiumOutbox = [];
@@ -10597,8 +10638,8 @@
     }
     try {
       const results = await Promise.all([
-        API.syncStatus(selected),
-        API.syncOutbox(selected),
+        API.syncStatus(),
+        API.syncOutbox(),
         API.syncConflicts(),
       ]);
       state.premiumSync = results[0];
@@ -10700,7 +10741,7 @@
       let text =
         'Lisensi: ' +
         premiumStatusLabel(result.status) +
-        '\nID owner: ' +
+        '\nID pemilik: ' +
         (result.owner_id || '-') +
         '\nBerlaku sampai: ' +
         fmtDateTime(result.period_end) +
@@ -10710,9 +10751,9 @@
         text +=
           '\n\nKode pemulihan (hanya sekali): ' +
           result.recovery_code +
-          '\nSimpan di tempat aman. Tanpa kode ini kunci privat owner tidak dapat dipulihkan.';
+          '\nSimpan di tempat aman. Tanpa kode ini kunci pemilik tidak dapat dipulihkan.';
       }
-      if (result.token) text += '\n\nToken lisensi: ' + result.token;
+      if (result.token) text += '\n\nKode aktivasi: ' + result.token;
       showPremiumSecret('premiumSecretOut', text);
       toast('Premium aktif.', 'success');
       await refreshConfigSilently();
@@ -10790,7 +10831,7 @@
       const result = await API.recoverOwnerKey(code);
       showPremiumSecret(
         'premiumSecretOut',
-        'Kunci privat owner (jangan bagikan):\n' + result.private_key
+        'Kunci pemilik (jangan dibagikan):\n' + result.private_key
       );
     } catch (err) {
       toast(err.message, 'error', 7000);
@@ -10801,23 +10842,23 @@
     const confirmValue = $('#licenseDeleteConfirm').value.trim();
     const ownerId = (state.premiumMeta && state.premiumMeta.owner_id) || '';
     if (!confirmValue) {
-      toast('Ketik ID owner untuk konfirmasi.', 'error');
+      toast('Ketik ID pemilik untuk konfirmasi.', 'error');
       return;
     }
     if (
       !window.confirm(
-        'Hapus metadata premium di database utama? Data bengkel dan backup tetap utuh.'
+        'Hapus data premium di aplikasi ini? Data bengkel dan cadangan tetap utuh.'
       )
     ) {
       return;
     }
     try {
-      const result = await API.deleteOwner(confirmValue);
+      await API.deleteOwner(confirmValue);
       showPremiumSecret(
         'premiumSecretOut',
-        'Metadata premium dihapus.\n' + JSON.stringify(result, null, 2)
+        'Data premium dihapus. Data bengkel dan cadangan tidak berubah.'
       );
-      toast('Metadata premium dihapus. Data toko tidak disentuh.', 'success');
+      toast('Data premium dihapus. Data toko tetap utuh.', 'success');
       await refreshConfigSilently();
       await loadPremiumPage();
     } catch (err) {
@@ -10868,7 +10909,8 @@
     }
     if (action === 'account-audit' && account) {
       try {
-        showPremiumSecret('accountSecretOut', await API.accountAudit(account.id));
+        const rows = await API.accountAudit(account.id);
+        showPremiumSecret('accountSecretOut', accountAuditText(rows));
       } catch (err) {
         toast(err.message, 'error', 6000);
       }
@@ -10876,7 +10918,8 @@
     }
     if (action === 'account-snapshot' && account) {
       try {
-        showPremiumSecret('accountSecretOut', await API.accountSnapshot(account.id));
+        const data = await API.accountSnapshot(account.id);
+        showPremiumSecret('accountSecretOut', accountSnapshotText(data));
       } catch (err) {
         toast(err.message, 'error', 6000);
       }
@@ -10909,14 +10952,14 @@
     if (action === 'release-device') {
       if (
         !window.confirm(
-          'Lepas slot perangkat? Tindakan ini hanya dapat dilakukan sekali per 72 jam.'
+          'Kosongkan slot perangkat ini? Hanya bisa dilakukan sekali per 72 jam.'
         )
       ) {
         return;
       }
       try {
         await API.releaseDevice(id);
-        toast('Slot perangkat dilepas.', 'success');
+        toast('Slot perangkat dikosongkan.', 'success');
         await loadPremiumPage();
       } catch (err) {
         toast(err.message, 'error', 7000);
@@ -10926,7 +10969,7 @@
     if (action === 'resolve-conflict') {
       try {
         await API.resolveSyncConflict(id, dataset.resolution || 'manual');
-        toast('Konflik ditandai selesai.', 'success');
+        toast('Bentrok data ditandai selesai.', 'success');
         await loadPremiumSync();
       } catch (err) {
         toast(err.message, 'error', 7000);
@@ -10942,119 +10985,10 @@
     }
   }
 
-  async function createEncryptedSnapshot() {
-    if (state.premiumBusy) return;
-    const deviceId = $('#snapshotDevice').value;
-    const storeKey = $('#snapshotStoreKey').value.trim();
-    const privateKey = $('#snapshotPrivateKey').value.trim();
-    if (!deviceId || !storeKey || !privateKey) {
-      toast(
-        'Pilih perangkat hub, isi kunci toko dan kunci privat perangkat.',
-        'error',
-        7000
-      );
-      return;
-    }
-    const storeId =
-      (state.stores.find((store) => store.aktif) || {}).store_id ||
-      (state.stores[0] || {}).store_id ||
-      '';
-    state.premiumBusy = true;
-    const button = $('#snapshotCreateBtn');
-    setBusy(button, true, 'Membuat...');
-    try {
-      const result = await API.createSnapshot({
-        store_id: storeId,
-        device_id: deviceId,
-        store_key: storeKey,
-        device_private_key: privateKey,
-        hlc_wall: Date.now(),
-        hlc_counter: 0,
-      });
-      state.premiumSnapshotId = result.id;
-      showPremiumSecret(
-        'syncSecretOut',
-        'Snapshot dibuat.\nID: ' +
-          result.id +
-          '\nChecksum: ' +
-          result.checksum +
-          '\nKedaluwarsa: ' +
-          fmtDateTime(result.expires_at)
-      );
-      toast('Snapshot terenkripsi dibuat.', 'success');
-      await loadPremiumSync(deviceId);
-    } catch (err) {
-      toast(err.message, 'error', 7000);
-    } finally {
-      state.premiumBusy = false;
-      setBusy(button, false);
-    }
-  }
-
-  async function getEncryptedSnapshot() {
-    const deviceId = $('#snapshotDevice').value;
-    if (!deviceId) {
-      toast('Pilih perangkat.', 'error');
-      return;
-    }
-    const storeId =
-      (state.stores.find((store) => store.aktif) || {}).store_id ||
-      (state.stores[0] || {}).store_id ||
-      '';
-    try {
-      const result = await API.latestSnapshot(storeId, deviceId);
-      state.premiumSnapshotId = result.id;
-      showPremiumSecret('syncSecretOut', result);
-    } catch (err) {
-      toast(err.message, 'error', 7000);
-    }
-  }
-
-  async function applyEncryptedSnapshot() {
-    if (state.premiumBusy) return;
-    const deviceId = $('#snapshotDevice').value;
-    const storeKey = $('#snapshotStoreKey').value.trim();
-    const snapshotId = window.prompt(
-      'ID snapshot yang diterapkan:',
-      state.premiumSnapshotId || ''
-    );
-    if (!snapshotId) return;
-    if (!deviceId || !storeKey) {
-      toast('Pilih perangkat dan isi kunci toko.', 'error');
-      return;
-    }
-    if (
-      !window.confirm(
-        'Terapkan snapshot ke toko aktif? Data toko saat ini akan diganti dan antrean lokal diputar ulang.'
-      )
-    ) {
-      return;
-    }
-    state.premiumBusy = true;
-    const button = $('#snapshotApplyBtn');
-    setBusy(button, true, 'Menerapkan...');
-    try {
-      const result = await API.applySnapshot({
-        device_id: deviceId,
-        snapshot_id: snapshotId,
-        store_key: storeKey,
-      });
-      showPremiumSecret('syncSecretOut', result);
-      toast('Snapshot diterapkan.', 'success');
-      await startApp();
-      await loadPremiumPage();
-    } catch (err) {
-      toast(err.message, 'error', 8000);
-    } finally {
-      state.premiumBusy = false;
-      setBusy(button, false);
-    }
-  }
-
   async function purgeSync() {
     try {
       const result = await API.purgeSync();
-      toast('Amplop kedaluwarsa dibersihkan: ' + (result.deleted || 0) + '.', 'success');
+      toast('Data lama dibersihkan: ' + (result.deleted || 0) + '.', 'success');
       await loadPremiumSync();
     } catch (err) {
       toast(err.message, 'error', 7000);
@@ -11065,10 +10999,10 @@
     if (state.premiumBusy) return;
     state.premiumBusy = true;
     const button = $('#archiveBackupAllBtn');
-    setBusy(button, true, 'Membuat arsip...');
+    setBusy(button, true, 'Membuat cadangan...');
     try {
       const result = await API.backupAll();
-      toast('Arsip semua toko dibuat: ' + result.filename, 'success', 8000);
+      toast('Cadangan semua toko dibuat: ' + result.filename, 'success', 8000);
       state.premiumArchives = (await API.archives()) || [];
       renderPremiumArchives();
     } catch (err) {
@@ -11083,14 +11017,14 @@
     const input = $('#archiveRestoreFile');
     const file = input && input.files && input.files[0];
     if (!file) {
-      toast('Pilih berkas ZIP arsip semua toko.', 'error');
+      toast('Pilih berkas cadangan (.zip) terlebih dahulu.', 'error');
       return;
     }
     if (
       !window.confirm(
         'Pulihkan semua toko dari ' +
           file.name +
-          '? Database toko yang ada akan ditimpa.'
+          '? Data toko yang ada akan ditimpa.'
       )
     ) {
       return;
@@ -11102,8 +11036,14 @@
     try {
       const result = await API.restoreAll(file);
       input.value = '';
-      showPremiumSecret('deviceSecretOut', result);
-      toast('Arsip semua toko dipulihkan.', 'success', 8000);
+      const names = (result.stores || [])
+        .map((row) => row.nama || premiumStoreName(row.store_id))
+        .join(', ');
+      showPremiumSecret(
+        'deviceSecretOut',
+        'Cadangan dipulihkan untuk toko: ' + (names || '-')
+      );
+      toast('Cadangan semua toko dipulihkan.', 'success', 8000);
       await startApp();
       await loadPremiumPage();
     } catch (err) {
@@ -11145,7 +11085,7 @@
       ownerCopy.addEventListener('click', () =>
         copyText(
           (state.premiumMeta && state.premiumMeta.owner_id) || '',
-          'ID owner disalin.'
+          'ID pemilik disalin.'
         )
       );
     }
@@ -11178,7 +11118,7 @@
       accountCopy.addEventListener('click', () => {
         const targetId = accountCopy.dataset.copyTarget || 'accountSecretOut';
         const source = $('#' + targetId);
-        copyText(source ? source.textContent : '', 'Teks akun disalin.');
+        copyText(source ? source.textContent : '', 'Keterangan akun disalin.');
       });
     }
 
@@ -11196,32 +11136,17 @@
         $('#deviceForm').classList.add('hidden')
       );
     }
-    const webHub = $('#webHubBtn');
-    if (webHub) webHub.addEventListener('click', prepareWebHub);
+    const webDevice = $('#webDeviceBtn');
+    if (webDevice) webDevice.addEventListener('click', prepareWebDevice);
     const storeKey = $('#storeKeyBtn');
     if (storeKey) storeKey.addEventListener('click', createStoreKey);
     const rotateKey = $('#rotateStoreKeyBtn');
     if (rotateKey) rotateKey.addEventListener('click', rotateStoreKey);
-    const hubForm = $('#hubForm');
-    if (hubForm) hubForm.addEventListener('submit', saveHub);
 
     const syncRefresh = $('#syncRefreshBtn');
     if (syncRefresh) syncRefresh.addEventListener('click', () => loadPremiumSync());
     const purge = $('#syncPurgeBtn');
     if (purge) purge.addEventListener('click', purgeSync);
-    const snapshotCreate = $('#snapshotCreateBtn');
-    if (snapshotCreate) snapshotCreate.addEventListener('click', createEncryptedSnapshot);
-    const snapshotGet = $('#snapshotGetBtn');
-    if (snapshotGet) snapshotGet.addEventListener('click', getEncryptedSnapshot);
-    const snapshotApply = $('#snapshotApplyBtn');
-    if (snapshotApply) snapshotApply.addEventListener('click', applyEncryptedSnapshot);
-    const snapshotDevice = $('#snapshotDevice');
-    if (snapshotDevice) {
-      snapshotDevice.addEventListener('change', () =>
-        loadPremiumSync(snapshotDevice.value)
-      );
-    }
-
     const backupAll = $('#archiveBackupAllBtn');
     if (backupAll) backupAll.addEventListener('click', backupAllStores);
     const restoreAll = $('#archiveRestoreBtn');
@@ -11232,9 +11157,65 @@
   const authState = {
     mode: 'session-pin',
     started: false,
+    offline: false,
   };
 
   let lastUnauthorizedAt = 0;
+
+  const OFFLINE_SESSION_KEY = 'bengkel.offlineSession';
+  const OFFLINE_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function saveOfflineSession(operator, config) {
+    if (!operator) return;
+    try {
+      window.localStorage.setItem(
+        OFFLINE_SESSION_KEY,
+        JSON.stringify({
+          operator: {
+            id: operator.id,
+            kind: operator.kind,
+            role: operator.role,
+            label: operator.label,
+            permissions: operator.permissions || [],
+            stores: operator.stores || [],
+            device_id: operator.device_id || null,
+            must_change_password: Boolean(operator.must_change_password),
+          },
+          config: config || null,
+          saved_at: Date.now(),
+        })
+      );
+    } catch (err) {
+      /* penyimpanan penuh atau diblokir */
+    }
+  }
+
+  function readOfflineSession() {
+    try {
+      const raw = window.localStorage.getItem(OFFLINE_SESSION_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || !data.operator || !data.saved_at) return null;
+      if (Date.now() - Number(data.saved_at) > OFFLINE_SESSION_TTL_MS) {
+        window.localStorage.removeItem(OFFLINE_SESSION_KEY);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearOfflineSession() {
+    try {
+      window.localStorage.removeItem(OFFLINE_SESSION_KEY);
+    } catch (err) {
+      /* abaikan */
+    }
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'clear-api-cache' });
+    }
+  }
 
   function normalizePin(value) {
     return String(value == null ? '' : value).replace(/[^\d]/g, '').slice(0, 12);
@@ -11278,6 +11259,8 @@
     if (now - lastUnauthorizedAt < 1500) return;
     lastUnauthorizedAt = now;
     authState.started = false;
+    authState.offline = false;
+    clearOfflineSession();
     showAuthGate(
       'login',
       storedDeviceToken()
@@ -11291,6 +11274,12 @@
     try {
       status = await API.authStatus();
     } catch (err) {
+      if (err.status === 0 && readOfflineSession()) {
+        // Perangkat terakhir login; izin terakhir dipakai sampai server kembali.
+        authState.offline = true;
+        hideAuthGate();
+        return true;
+      }
       const message =
         err.status === 503
           ? 'Aplikasi belum siap. Tutup lalu buka lagi.'
@@ -11306,10 +11295,12 @@
       return true;
     }
     if (status.authenticated) {
+      authState.offline = false;
       hideAuthGate();
       return true;
     }
 
+    clearOfflineSession();
     const lockMessage =
       Number(status.locked_seconds) > 0
         ? 'Terlalu banyak percobaan. Tunggu ' + status.locked_seconds + ' detik.'
@@ -11438,7 +11429,7 @@
     const token = tokenInput.value.trim() || storedDeviceToken();
     const button = $('#authDeviceSubmit');
     if (!ownerId || !username || !password) {
-      setAuthError($('#authDeviceError'), 'Isi ID owner, username, dan password.');
+      setAuthError($('#authDeviceError'), 'Isi ID pemilik, nama pengguna, dan password.');
       return;
     }
     if (!token) {
@@ -11554,6 +11545,7 @@
       /* sesi tetap dianggap berakhir di perangkat ini */
     }
     clearDeviceToken();
+    clearOfflineSession();
     window.location.reload();
   }
 
@@ -15188,20 +15180,46 @@
   /* --------------------------------- Init --------------------------------- */
   async function startApp() {
     hideAuthGate();
+    let config;
+    let usedCachedConfig = false;
+    const cachedSession = readOfflineSession();
+    try {
+      config = await API.getConfig();
+    } catch (err) {
+      if (err.status === 0 && cachedSession && cachedSession.config) {
+        config = cachedSession.config;
+        usedCachedConfig = true;
+        authState.offline = true;
+      } else {
+        if (err.status !== 401) {
+          toast('Aplikasi gagal memuat data awal. Tutup lalu buka lagi.', 'error', 8000);
+        }
+        return;
+      }
+    }
+    state.config = config;
+    applyConfig();
+    saveOfflineSession(state.operator, config);
+    if (!usedCachedConfig) authState.offline = false;
+    const isEmployee = Boolean(
+      state.operator && state.operator.kind === 'employee'
+    );
+    const permissions = operatorPermissions();
     try {
       const results = await Promise.all([
-        API.getConfig(),
-        API.stock(),
-        API.jasa(),
-        API.employees(false),
-        API.suppliers(''),
+        API.stock().catch(() => []),
+        API.jasa().catch(() => []),
+        isEmployee
+          ? Promise.resolve([])
+          : API.employees(false).catch(() => []),
+        !isEmployee || permissions.has('baca_supplier')
+          ? API.suppliers('').catch(() => [])
+          : Promise.resolve([]),
       ]);
-      state.config = results[0];
-      state.stock = results[1];
-      state.jasa = results[2];
-      state.employees = results[3] || [];
-      state.suppliers = results[4] || [];
-      applyConfig();
+      state.stock = results[0] || [];
+      state.jasa = results[1] || [];
+      state.employees = results[2] || [];
+      state.suppliers = results[3] || [];
       populatePickers();
       populateEmployeeOptions();
       renderStock();
@@ -15220,6 +15238,40 @@
     await loadDashboard();
   }
 
+  async function refreshOfflineIndicator() {
+    const banner = $('#offlineBanner');
+    if (!banner) return;
+    const online = navigator.onLine !== false && !authState.offline;
+    let pending = 0;
+    try {
+      pending = window.OfflineQueue ? await window.OfflineQueue.count() : 0;
+    } catch (err) {
+      pending = 0;
+    }
+    if (online && pending === 0) {
+      banner.classList.add('hidden');
+      return;
+    }
+    banner.classList.remove('hidden');
+    const text = $('#offlineBannerText');
+    if (text) {
+      if (!online) {
+        text.textContent =
+          'Mode offline. Menampilkan data terakhir; perubahan dikirim saat online.';
+      } else {
+        text.textContent = pending + ' perubahan menunggu dikirim.';
+      }
+    }
+    const flush = $('#offlineFlushBtn');
+    if (flush) flush.classList.toggle('hidden', !online || pending === 0);
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (!/^https?:$/.test(window.location.protocol)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
   async function init() {
     initTheme();
     initFontSizes();
@@ -15231,10 +15283,33 @@
     initPrinter();
     initPinSecurityCard();
     window.addEventListener('bengkel:unauthorized', handleUnauthorized);
+    window.addEventListener('online', refreshOfflineIndicator);
+    window.addEventListener('offline', refreshOfflineIndicator);
+    window.addEventListener('bengkel:offline-queue', refreshOfflineIndicator);
+    const flushButton = $('#offlineFlushBtn');
+    if (flushButton) {
+      flushButton.addEventListener('click', async () => {
+        if (!window.OfflineQueue) return;
+        setBusy(flushButton, true, 'Mengirim...');
+        try {
+          const result = await window.OfflineQueue.flush();
+          toast(
+            'Terkirim: ' + result.sent + ', gagal: ' + result.failed + '.',
+            result.failed ? 'warning' : 'success',
+            7000
+          );
+        } finally {
+          setBusy(flushButton, false);
+          refreshOfflineIndicator();
+        }
+      });
+    }
+    registerServiceWorker();
 
     const ready = await ensureAuthenticated();
     if (!ready) return;
     await startApp();
+    refreshOfflineIndicator();
   }
 
   document.addEventListener('DOMContentLoaded', init);

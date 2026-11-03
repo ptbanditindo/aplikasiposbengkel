@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+import re
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, update
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database.models import (
+    Device,
     Employee,
     HargaJasa,
     PengerjaanNota,
@@ -68,6 +70,25 @@ def _record_gross_profit(record: ServiceRecord) -> Decimal:
 def _existing_result(record: ServiceRecord) -> TransactionResult:
     return TransactionResult(
         record=record, warnings=[], laba_kotor=_record_gross_profit(record)
+    )
+
+
+def _device_nota_prefix(device: Optional[Device]) -> str:
+    raw = re.sub(r"[^A-Z0-9]", "", (device.nama if device else "").upper())
+    return (raw[:3] or "DEV")
+
+
+def _allocate_nota(db: Session, operator: Optional[Operator]) -> str:
+    """Nomor berawalan perangkat bila sesi terikat perangkat (K-12)."""
+    device_id = getattr(operator, "device_id", None) if operator else None
+    if not device_id:
+        return record_repo.allocate_numeric_nota(db)
+    device = db.get(Device, device_id)
+    prefix = _device_nota_prefix(device)
+    # Empat karakter ID perangkat menjaga nomor tetap unik walau namanya sama.
+    prefix += re.sub(r"[^A-Z0-9]", "", device_id.upper())[-4:]
+    return record_repo.allocate_device_nota(
+        db, device_id=device_id, day=datetime.now().date(), prefix=prefix
     )
 
 
@@ -376,7 +397,7 @@ def _create_transaction_locked(
         record = ServiceRecord(
             unit_id=unit.id,
             cashier_employee_id=cashier.id if cashier is not None else None,
-            no_nota=record_repo.allocate_numeric_nota(db),
+            no_nota=_allocate_nota(db, operator),
             request_id=request_id,
             waktu_service=now,
             keluhan_awal=keluhan,

@@ -268,7 +268,9 @@ def _public(account: EmployeeAccount) -> Dict[str, Any]:
         "aktif": bool(account.aktif),
         "must_change_password": bool(account.must_change_password),
         "pin_configured": bool(account.pin_hash),
-        "last_login_at": account.last_login_at,
+        "last_login_at": (
+            account.last_login_at.isoformat() if account.last_login_at else None
+        ),
         "permission_version": account.permission_version,
     }
 
@@ -309,10 +311,10 @@ def create_account(
     clean_username = (username or "").strip().lower()
     if not USERNAME_PATTERN.match(clean_username):
         raise BusinessValidationError(
-            "Username 3-32 karakter, huruf kecil/angka/titik/strip, tanpa spasi."
+            "Nama pengguna 3-32 karakter, huruf kecil/angka/titik/strip, tanpa spasi."
         )
     if find_by_username(db, clean_username) is not None:
-        raise ConflictError("Username sudah dipakai di owner ini.")
+        raise ConflictError("Nama pengguna sudah dipakai.")
     role_value = (role or "").strip().upper()
     if role_value not in ROLES:
         raise BusinessValidationError("Peran dasar harus KASIR, MEKANIK, atau KEDUANYA.")

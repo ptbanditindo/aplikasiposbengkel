@@ -1,0 +1,19 @@
+{
+  "name": "PusatkuPOS Bengkel Radiator",
+  "short_name": "PusatkuPOS",
+  "description": "Kasir, servis, stok, dan laporan bengkel radiator.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F1F5F9",
+  "theme_color": "#F1F5F9",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

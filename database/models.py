@@ -21,7 +21,7 @@ from sqlalchemy import (
     event,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from database.base import Base
 
@@ -30,7 +30,27 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-class Customer(Base):
+def _new_sync_id() -> str:
+    from database import store_registry
+
+    return store_registry.new_ulid()
+
+
+class SyncMixin:
+    """Identitas publik stabil agar baris dapat dibuat dan dirujuk offline."""
+
+    @declared_attr
+    def sync_id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(26),
+            nullable=False,
+            default=_new_sync_id,
+            unique=True,
+            index=True,
+        )
+
+
+class Customer(SyncMixin, Base):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -54,7 +74,7 @@ class Customer(Base):
     )
 
 
-class Supplier(Base):
+class Supplier(SyncMixin, Base):
     """Supplier/reseller barang sparepart."""
 
     __tablename__ = "suppliers"
@@ -75,7 +95,7 @@ class Supplier(Base):
     )
 
 
-class SupplierItem(Base):
+class SupplierItem(SyncMixin, Base):
     """Barang stok yang disuplai oleh seorang supplier."""
 
     __tablename__ = "supplier_items"
@@ -100,7 +120,7 @@ class SupplierItem(Base):
     stock_item: Mapped["StockItem"] = relationship()
 
 
-class SupplierFollowup(Base):
+class SupplierFollowup(SyncMixin, Base):
     """Status follow up reseller per pasangan supplier + barang stok."""
 
     __tablename__ = "supplier_followups"
@@ -127,7 +147,7 @@ class SupplierFollowup(Base):
     )
 
 
-class VehicleOrUnit(Base):
+class VehicleOrUnit(SyncMixin, Base):
     __tablename__ = "vehicle_or_units"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -165,7 +185,7 @@ class VehicleOrUnit(Base):
     service_records: Mapped[List["ServiceRecord"]] = relationship(back_populates="unit")
 
 
-class StockItem(Base):
+class StockItem(SyncMixin, Base):
     __tablename__ = "stock_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -200,7 +220,7 @@ class StockItem(Base):
         return [row.barcode for row in self.barcode_rows]
 
 
-class StockBarcode(Base):
+class StockBarcode(SyncMixin, Base):
     """Alias barcode/QR untuk satu barang stok.
 
     Satu nilai barcode hanya boleh menunjuk satu barang. `stock_items.kode`
@@ -221,7 +241,7 @@ class StockBarcode(Base):
     stock_item: Mapped["StockItem"] = relationship(back_populates="barcode_rows")
 
 
-class HargaJasa(Base):
+class HargaJasa(SyncMixin, Base):
     __tablename__ = "harga_jasa"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -248,7 +268,17 @@ class NotaCounter(Base):
     terakhir: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-class Employee(Base):
+class DeviceNotaCounter(Base):
+    """Counter nota harian per perangkat agar nomor tidak bentrok (K-12)."""
+
+    __tablename__ = "device_nota_counters"
+
+    device_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tanggal: Mapped[str] = mapped_column(String(8), primary_key=True)
+    terakhir: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Employee(SyncMixin, Base):
     """Karyawan operasional: mekanik, kasir, atau keduanya."""
 
     __tablename__ = "employees"
@@ -303,7 +333,7 @@ class Employee(Base):
     )
 
 
-class EmployeeDebt(Base):
+class EmployeeDebt(SyncMixin, Base):
     """Hutang/uang muka karyawan yang dipotong dari gaji atau komisi."""
 
     __tablename__ = "employee_debts"
@@ -324,7 +354,7 @@ class EmployeeDebt(Base):
     employee: Mapped[Optional["Employee"]] = relationship()
 
 
-class SalaryPayment(Base):
+class SalaryPayment(SyncMixin, Base):
     """Pembayaran gaji aktual per karyawan dan periode.
 
     Nama karyawan disimpan sebagai snapshot agar riwayat tetap terbaca
@@ -363,7 +393,7 @@ class SalaryPayment(Base):
     employee: Mapped[Optional["Employee"]] = relationship()
 
 
-class ServiceRecord(Base):
+class ServiceRecord(SyncMixin, Base):
     __tablename__ = "service_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -595,7 +625,7 @@ class ServicePayment(Base):
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="payments")
 
 
-class PengerjaanNota(Base):
+class PengerjaanNota(SyncMixin, Base):
     """Penanda unit masih di bengkel untuk follow-up kendaraan selesai.
 
     Satu baris per nota. Dibuat saat kasir menyalakan opsi "Unit ditinggal"
@@ -651,7 +681,7 @@ class PengerjaanNota(Base):
     )
 
 
-class PengerjaanNotaEvent(Base):
+class PengerjaanNotaEvent(SyncMixin, Base):
     """Riwayat perubahan status pengerjaan unit."""
 
     __tablename__ = "pengerjaan_nota_events"
@@ -673,7 +703,7 @@ class PengerjaanNotaEvent(Base):
     pengerjaan: Mapped["PengerjaanNota"] = relationship(back_populates="events")
 
 
-class WhatsAppLog(Base):
+class WhatsAppLog(SyncMixin, Base):
     """Catatan upaya membuka WhatsApp (append-only, Tahap 12).
 
     Aplikasi tidak mengirim pesan sendiri; baris ini mencatat apakah jendela
@@ -714,7 +744,7 @@ class WhatsAppLog(Base):
     supplier: Mapped[Optional["Supplier"]] = relationship()
 
 
-class FollowupItem(Base):
+class FollowupItem(SyncMixin, Base):
     """Pengingat follow-up aktif per pelanggan dan jenis (Tahap 13)."""
 
     __tablename__ = "followup_items"
@@ -778,7 +808,7 @@ class FollowupItem(Base):
     )
 
 
-class FollowupEvent(Base):
+class FollowupEvent(SyncMixin, Base):
     """Riwayat perpindahan status follow-up (append-only)."""
 
     __tablename__ = "followup_events"
@@ -800,7 +830,7 @@ class FollowupEvent(Base):
     item: Mapped["FollowupItem"] = relationship(back_populates="events")
 
 
-class ServiceJob(Base):
+class ServiceJob(SyncMixin, Base):
     __tablename__ = "service_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -823,7 +853,7 @@ class ServiceJob(Base):
     service_record: Mapped["ServiceRecord"] = relationship(back_populates="jobs")
 
 
-class ServicePart(Base):
+class ServicePart(SyncMixin, Base):
     __tablename__ = "service_parts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -857,7 +887,7 @@ class ServicePart(Base):
     stock_item: Mapped[Optional["StockItem"]] = relationship()
 
 
-class ServiceReturn(Base):
+class ServiceReturn(SyncMixin, Base):
     """Satu peristiwa retur untuk sebuah nota (sebagian atau seluruh item)."""
 
     __tablename__ = "service_returns"
@@ -893,7 +923,7 @@ class ServiceReturn(Base):
     )
 
 
-class ServiceReturnItem(Base):
+class ServiceReturnItem(SyncMixin, Base):
     """Rincian item yang diretur: jasa atau sparepart (snapshot nilai deal)."""
 
     __tablename__ = "service_return_items"
@@ -922,7 +952,7 @@ class ServiceReturnItem(Base):
     service_return: Mapped["ServiceReturn"] = relationship(back_populates="items")
 
 
-class StockMovement(Base):
+class StockMovement(SyncMixin, Base):
     """Ledger pergerakan stok; jumlah positif = stok bertambah."""
 
     __tablename__ = "stock_movements"
@@ -941,6 +971,9 @@ class StockMovement(Base):
     )
     service_return_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("service_returns.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    request_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
@@ -1146,36 +1179,6 @@ class DeviceStore(Base):
     assigned_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 
-class StoreHub(Base):
-    """Tepat satu hub uang per toko (K-12)."""
-
-    __tablename__ = "store_hubs"
-
-    store_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    device_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
-    previous_device_id: Mapped[str] = mapped_column(String(32), nullable=False, default="")
-    quarantine: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    updated_by: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, onupdate=utcnow, nullable=False
-    )
-
-
-class HubAudit(Base):
-    """Audit perpindahan flag hub."""
-
-    __tablename__ = "hub_audits"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    store_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    from_device_id: Mapped[str] = mapped_column(String(32), nullable=False, default="")
-    to_device_id: Mapped[str] = mapped_column(String(32), nullable=False, default="")
-    actor: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    mode: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-
-
 class PermissionSnapshot(Base):
     """Salinan izin bertanda tangan owner untuk perangkat (K-07, K-15)."""
 
@@ -1196,13 +1199,15 @@ class PermissionSnapshot(Base):
 
 
 class StoreKey(Base):
-    """Kunci toko yang dibungkus untuk hub; server tidak menyimpan kunci polos."""
+    """Kunci toko yang dibungkus untuk perangkat; server tidak menyimpan kunci polos."""
 
     __tablename__ = "store_keys"
 
     store_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     wrapped_key: Mapped[str] = mapped_column(Text, nullable=False)
-    hub_device_id: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    primary_device_id: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=""
+    )
     owner_signature: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     rotated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -1221,6 +1226,18 @@ class DeviceKeyWrap(Base):
     rotated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class StoreFeedCounter(Base):
+    """Nomor feed permanen per toko; tidak ikut terhapus saat amplop di-ack."""
+
+    __tablename__ = "store_feed_counters"
+
+    store_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    last_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class RelayEnvelope(Base):
     """Amplop delta terenkripsi end-to-end; server tidak dapat membacanya."""
 
@@ -1234,6 +1251,9 @@ class RelayEnvelope(Base):
         String(32), nullable=False, default="", index=True
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    store_seq: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, index=True
+    )
     hlc_wall: Mapped[int] = mapped_column(Integer, nullable=False)
     hlc_counter: Mapped[int] = mapped_column(Integer, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(
@@ -1248,6 +1268,7 @@ class RelayEnvelope(Base):
 
     __table_args__ = (
         Index("ux_relay_device_seq", "sender_device_id", "seq", unique=True),
+        Index("ux_relay_store_seq", "store_id", "store_seq", unique=True),
     )
 
 
@@ -1278,6 +1299,7 @@ class RelaySnapshot(Base):
     nonce: Mapped[str] = mapped_column(String(64), nullable=False)
     signature: Mapped[str] = mapped_column(Text, nullable=False)
     checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -1336,6 +1358,19 @@ class SyncPeerState(Base):
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class SyncCursor(Base):
+    """Posisi baca feed per perangkat per toko."""
+
+    __tablename__ = "sync_cursors"
+
+    store_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    last_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class AppliedDelta(Base):
     """Penanda delta yang sudah diterapkan agar replay tidak menggandakan."""
 
@@ -1354,5 +1389,3 @@ def _reject_immutable_change(_mapper, _connection, target):  # pragma: no cover 
 
 event.listen(PermissionAudit, "before_update", _reject_immutable_change)
 event.listen(PermissionAudit, "before_delete", _reject_immutable_change)
-event.listen(HubAudit, "before_update", _reject_immutable_change)
-event.listen(HubAudit, "before_delete", _reject_immutable_change)

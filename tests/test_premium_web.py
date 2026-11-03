@@ -118,7 +118,7 @@ def _store_key(client, device_id):
         json={
             "store_id": PRIMARY,
             "device_ids": [device_id],
-            "hub_device_id": device_id,
+            "primary_device_id": device_id,
         },
     )
     assert response.status_code == 200, response.text
@@ -252,6 +252,36 @@ def test_akun_karyawan_peran_izin_audit_dan_snapshot(client, db_session):
     _login_owner(client)
 
 
+def test_reset_password_dan_pin_setelah_karyawan_login(client):
+    _activate(client)
+    account = _create_account(client)["akun"]
+    _logout(client)
+    assert _employee_login(client).status_code == 200
+    _logout(client)
+    _login_owner(client)
+
+    reset = client.post(
+        f"/api/accounts/{account['id']}/password-reset",
+        json={"password": "passwordBaru9"},
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["password"] == "passwordBaru9"
+    assert reset.json()["akun"]["last_login_at"]
+
+    pin_reset = client.post(f"/api/accounts/{account['id']}/pin-reset")
+    assert pin_reset.status_code == 200, pin_reset.text
+    assert pin_reset.json()["pin_configured"] is False
+
+    audit = client.get(f"/api/accounts/{account['id']}/audit")
+    assert audit.status_code == 200, audit.text
+    assert any(row["note"] == "reset PIN" for row in audit.json())
+
+    _logout(client)
+    relogin = _employee_login(client, password="passwordBaru9")
+    assert relogin.status_code == 200, relogin.text
+    assert relogin.json()["pin_set"] is True
+
+
 def test_filter_toko_karyawan_dan_akses_pemilik(client):
     _activate(client)
     branch = client.post(
@@ -292,7 +322,7 @@ def test_filter_toko_karyawan_dan_akses_pemilik(client):
     assert sync_status.status_code == 200, sync_status.text
 
 
-def test_batas_perangkat_pencabutan_pelepasan_dan_hub(client, db_session):
+def test_batas_perangkat_pencabutan_dan_pelepasan(client, db_session):
     _activate(client, device_limit=1)
     first = _register_device(client, "HP Owner")
     assert first["token"]
@@ -321,27 +351,15 @@ def test_batas_perangkat_pencabutan_pelepasan_dan_hub(client, db_session):
     assert again.status_code == 403
     assert again.json()["code"] == "release_window"
 
-    hub = _register_device(client, "Web Hub")
-    hub_id = hub["device"]["id"]
-    set_hub = client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": hub_id},
-    )
-    assert set_hub.status_code == 200, set_hub.text
-    assert set_hub.json()["mode"] == "active"
 
-    current = client.get(f"/api/devices/hub?store_id={PRIMARY}").json()
-    assert current["device_id"] == hub_id
-
-
-def test_login_perangkat_karyawan_dan_hub_uang(client, create_customer, create_unit):
+def test_login_perangkat_karyawan_dan_hak_void(client, create_customer, create_unit):
     _activate(client)
     owner_id = _owner_id(client)
     account = _create_account(client, role="KASIR")["akun"]
     device = _register_device(
         client, "HP Kasir", kind="employee", account_id=account["id"]
     )
-    customer = create_customer(nama="Pelanggan Hub")
+    customer = create_customer(nama="Pelanggan Kasir")
     unit = create_unit(customer["id"])
 
     _logout(client)
@@ -368,6 +386,7 @@ def test_login_perangkat_karyawan_dan_hub_uang(client, create_customer, create_u
     client.cookies.clear()
     login = _employee_login(client)
     assert login.status_code == 200, login.text
+    assert login.json()["device_id"] is None
     client.post(
         "/api/auth/employee/change-password",
         json={
@@ -376,7 +395,8 @@ def test_login_perangkat_karyawan_dan_hub_uang(client, create_customer, create_u
         },
     )
 
-    blocked = client.post(
+    # K-12 revisi: akses kasir boleh membuat nota dan void tanpa hub.
+    created = client.post(
         "/api/pos/transaction",
         json={
             "unit_id": unit["id"],
@@ -387,31 +407,24 @@ def test_login_perangkat_karyawan_dan_hub_uang(client, create_customer, create_u
             "parts": [],
         },
     )
-    assert blocked.status_code == 403
-    assert blocked.json()["code"] == "hub_required"
-
-    _logout(client)
-    _login_owner(client)
-    hub = _register_device(client, "Web Hub")
-    hub_id = hub["device"]["id"]
-    assert (
-        client.post(
-            "/api/devices/hub",
-            json={"store_id": PRIMARY, "device_id": hub_id},
-        ).status_code
-        == 200
+    assert created.status_code == 201, created.text
+    created_id = created.json()["record"]["id"]
+    voided = client.post(
+        f"/api/service-records/{created_id}/void",
+        json={"alasan": "Void oleh kasir"},
     )
+    assert voided.status_code == 200, voided.text
 
+    # Jalur token perangkat juga memiliki akses kasir yang sama.
     _logout(client)
-    login = _employee_login(client, password="passwordBaru9")
-    assert login.status_code == 200, login.text
-    assert login.json()["device_id"] == hub_id
-
+    client.cookies.clear()
+    headers = {"X-Device-Token": device["token"]}
     allowed = client.post(
         "/api/pos/transaction",
+        headers=headers,
         json={
             "unit_id": unit["id"],
-            "keluhan_awal": "Tes",
+            "keluhan_awal": "Tes perangkat",
             "metode_bayar": "CASH",
             "bayar": "50000",
             "jobs": [{"deskripsi": "Jasa", "jumlah": 1, "harga": "50000"}],
@@ -419,26 +432,28 @@ def test_login_perangkat_karyawan_dan_hub_uang(client, create_customer, create_u
         },
     )
     assert allowed.status_code == 201, allowed.text
-    _logout(client)
+    allowed_id = allowed.json()["record"]["id"]
+    voided_device = client.post(
+        f"/api/service-records/{allowed_id}/void",
+        headers=headers,
+        json={"alasan": "Void dari perangkat kasir"},
+    )
+    assert voided_device.status_code == 200, voided_device.text
     _login_owner(client)
 
 
 def test_kunci_toko_dibungkus_dan_bisa_dibuka(client):
     _activate(client)
-    hub = _register_device(client, "Web Hub")
+    hub = _register_device(client, "Web Device")
     hub_id = hub["device"]["id"]
     encrypt_private = hub["private_keys"]["encrypt"]
-    client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": hub_id},
-    )
 
     response = client.post(
         "/api/devices/keys",
         json={
             "store_id": PRIMARY,
             "device_ids": [hub_id],
-            "hub_device_id": hub_id,
+            "primary_device_id": hub_id,
         },
     )
     assert response.status_code == 200, response.text
@@ -455,15 +470,11 @@ def test_kunci_toko_dibungkus_dan_bisa_dibuka(client):
 
 def test_amplop_e2e_tidak_menyimpan_plaintext_dan_idempoten(client, db_session):
     _activate(client)
-    sender = _register_device(client, "Hub A")
+    sender = _register_device(client, "Device A")
     recipient = _register_device(client, "B")
     sender_id = sender["device"]["id"]
     recipient_id = recipient["device"]["id"]
     store_key = _store_key(client, sender_id)
-    client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": sender_id},
-    )
 
     stock = client.get("/api/stock").json()[0]
     item = client.post(
@@ -551,13 +562,9 @@ def test_amplop_e2e_tidak_menyimpan_plaintext_dan_idempoten(client, db_session):
 
 def test_konflik_opname_dan_resolusi(client, db_session):
     _activate(client)
-    hub = _register_device(client, "Hub")
+    hub = _register_device(client, "Device")
     hub_id = hub["device"]["id"]
     store_key = _store_key(client, hub_id)
-    client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": hub_id},
-    )
     stock = client.get("/api/stock").json()[0]
     queued = client.post(
         "/api/sync/outbox",
@@ -625,13 +632,9 @@ def test_konflik_opname_dan_resolusi(client, db_session):
 
 def test_snapshot_terenkripsi_memulihkan_data_dan_memutar_outbox(client, db_session):
     _activate(client)
-    hub = _register_device(client, "Hub Snapshot")
+    hub = _register_device(client, "Device Snapshot")
     hub_id = hub["device"]["id"]
     store_key = _store_key(client, hub_id)
-    client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": hub_id},
-    )
     stock = client.get("/api/stock").json()[0]
     original = stock["jumlah"]
 
@@ -689,13 +692,9 @@ def test_snapshot_terenkripsi_memulihkan_data_dan_memutar_outbox(client, db_sess
 
 def test_ttl_amplop_dibersihkan(client, db_session):
     _activate(client)
-    hub = _register_device(client, "Hub TTL")
+    hub = _register_device(client, "Device TTL")
     hub_id = hub["device"]["id"]
     store_key = _store_key(client, hub_id)
-    client.post(
-        "/api/devices/hub",
-        json={"store_id": PRIMARY, "device_id": hub_id},
-    )
     stock = client.get("/api/stock").json()[0]
     queued = client.post(
         "/api/sync/outbox",
@@ -868,3 +867,141 @@ def test_hapus_metadata_owner_tidak_menyentuh_data_bengkel(client, create_custom
 
     renewed = _activate(client)
     assert renewed["owner_id"] != activated["owner_id"]
+
+
+def test_feed_toko_berurutan_dan_kursor(client, db_session):
+    _activate(client)
+    sender = _register_device(client, "Device A")
+    recipient = _register_device(client, "B")
+    sender_id = sender["device"]["id"]
+    recipient_id = recipient["device"]["id"]
+    store_key = _store_key(client, sender_id)
+    stock = client.get("/api/stock").json()[0]
+
+    def submit(qty, idempotency_key):
+        queued = client.post(
+            "/api/sync/outbox",
+            json={
+                "device_id": sender_id,
+                "entity": "stock",
+                "action": "delta",
+                "entity_id": str(stock["id"]),
+                "payload": {"stock_item_id": stock["id"], "qty": qty},
+                "idempotency_key": idempotency_key,
+            },
+        ).json()
+        envelope = _envelope_payload(
+            store_key,
+            {
+                "device_id": sender_id,
+                "seq": queued["seq"],
+                "hlc_wall": queued["hlc_wall"],
+                "hlc_counter": queued["hlc_counter"],
+                "idempotency_key": queued["idempotency_key"],
+            },
+            {
+                "entity": "stock",
+                "action": "delta",
+                "entity_id": str(stock["id"]),
+                "payload": {"stock_item_id": stock["id"], "qty": qty},
+            },
+            sender["private_keys"]["sign"],
+        )
+        response = client.post(
+            "/api/sync/envelopes",
+            json={**envelope, "sender_device_id": sender_id},
+        )
+        assert response.status_code == 201, response.text
+        return response.json()["envelope"]
+
+    first = submit(1, "feed-delta-1")
+    assert first["store_seq"] == 1
+
+    feed = client.get(
+        f"/api/sync/feed?device_id={recipient_id}&store_id={PRIMARY}&since_seq=0"
+    )
+    assert feed.status_code == 200, feed.text
+    body = feed.json()
+    assert [row["store_seq"] for row in body["envelopes"]] == [1]
+    assert body["next_seq"] == 1
+
+    ack = client.post(
+        "/api/sync/feed/ack",
+        json={"device_id": recipient_id, "store_id": PRIMARY, "last_seq": 1},
+    )
+    assert ack.status_code == 200, ack.text
+    assert ack.json()["last_seq"] == 1
+
+    empty = client.get(
+        f"/api/sync/feed?device_id={recipient_id}&store_id={PRIMARY}&since_seq=1"
+    ).json()
+    assert empty["envelopes"] == []
+
+    second = submit(1, "feed-delta-2")
+    assert second["store_seq"] == 2
+    again = client.get(
+        f"/api/sync/feed?device_id={recipient_id}&store_id={PRIMARY}&since_seq=1"
+    ).json()
+    assert [row["store_seq"] for row in again["envelopes"]] == [2]
+
+    bad = client.post(
+        "/api/sync/feed/ack",
+        json={"device_id": recipient_id, "store_id": PRIMARY, "last_seq": 99},
+    )
+    assert bad.status_code == 400
+
+
+def test_karyawan_non_kasir_tidak_bisa_void(client, create_customer, create_unit):
+    _activate(client)
+    owner_id = _owner_id(client)
+    account = _create_account(
+        client, username="mekanik1", role="MEKANIK"
+    )["akun"]
+    device = _register_device(
+        client, "HP Mekanik", kind="employee", account_id=account["id"]
+    )
+    customer = create_customer(nama="Pelanggan Mekanik")
+    unit = create_unit(customer["id"])
+    created = client.post(
+        "/api/pos/transaction",
+        json={
+            "unit_id": unit["id"],
+            "keluhan_awal": "Tes peran",
+            "metode_bayar": "CASH",
+            "bayar": "50000",
+            "jobs": [{"deskripsi": "Jasa", "jumlah": 1, "harga": "50000"}],
+            "parts": [],
+        },
+    )
+    assert created.status_code == 201, created.text
+    record_id = created.json()["record"]["id"]
+
+    _logout(client)
+    client.cookies.clear()
+    login = client.post(
+        "/api/auth/device/login",
+        headers={"X-Device-Token": device["token"]},
+        json={
+            "owner_id": owner_id,
+            "username": "mekanik1",
+            "password": EMPLOYEE_PASSWORD,
+        },
+    )
+    assert login.status_code == 200, login.text
+    changed = client.post(
+        "/api/auth/employee/change-password",
+        headers={"X-Device-Token": device["token"]},
+        json={
+            "old_password": EMPLOYEE_PASSWORD,
+            "new_password": "passwordBaru9",
+        },
+    )
+    assert changed.status_code == 200, changed.text
+    denied = client.post(
+        f"/api/service-records/{record_id}/void",
+        headers={"X-Device-Token": device["token"]},
+        json={"alasan": "Void oleh mekanik"},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "role_money_locked"
+    _login_owner(client)

@@ -27,13 +27,10 @@ OWNER_ONLY_PREFIXES = (
     "/api/owner-app",
 )
 
-MONEY_WRITE_PATHS = (
-    ("POST", "/api/pos/transaction"),
-    ("POST", "/api/service-records/"),
-    ("PUT", "/api/service-records/"),
-)
-
-MONEY_WRITE_SUFFIXES = ("/payments", "/void", "/returns", "/exchange")
+MONEY_WRITE_PATHS = ()
+# K-12 revisi: tidak ada hub. Void/retur/tukar/piutang boleh ditulis siapa pun
+# yang memiliki akses kasir pada toko yang ditugaskan.
+MONEY_WRITE_SUFFIXES = ("/void", "/returns", "/exchange", "/jatuh-tempo")
 
 EXEMPT_ACTIVE_STORE = (
     "/api/auth",
@@ -154,7 +151,9 @@ def assert_allowed(
         )
 
     if _is_money_write(method, normalized):
-        device_service.assert_money_write(db, operator, active_store_id)
+        device_service.assert_cashier_money_access(
+            db, operator, active_store_id
+        )
 
     if not any(_matches(normalized, prefix) for prefix in EXEMPT_ACTIVE_STORE):
         store_id = active_store_id or store_registry.active_store()["store_id"]

@@ -89,6 +89,7 @@ def customer_overview(
         result.append(
             CustomerOverviewOut(
                 id=customer.id,
+                sync_id=customer.sync_id,
                 nama=customer.nama,
                 nomor_hp=customer.nomor_hp,
                 alamat=customer.alamat,

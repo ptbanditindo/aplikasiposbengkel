@@ -16,5 +16,8 @@ openpyxl==3.1.5
 cryptography==50.0.2
 bcrypt==5.0.0
 
+# Relay server (K-24): PostgreSQL untuk metadata dan amplop terenkripsi.
+psycopg[binary]==3.3.7
+
 # Testing
 pytest==9.2.0

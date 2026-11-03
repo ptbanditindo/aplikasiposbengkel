@@ -21,8 +21,7 @@ from api.schemas import (
     PinRequest,
 )
 from config import settings
-from database import store_registry
-from database.models import EmployeeAccount, StoreHub
+from database.models import EmployeeAccount
 from database.session import get_primary_db
 from services import (
     account_service,
@@ -179,22 +178,19 @@ def employee_login(
     response: Response,
     db: Session = Depends(get_primary_db),
 ):
-    """Login karyawan di komputer hub: username + password + PIN."""
+    """Login karyawan di komputer toko: username + password + PIN."""
     _require_session_mode()
     _require_premium()
     account, pin_set = account_service.authenticate_hub(
         db, payload.username, payload.password, payload.pin
     )
-    active_store = store_registry.active_store()["store_id"]
-    hub = db.get(StoreHub, active_store)
-    device_id = hub.device_id if hub is not None else None
-    operator = auth_service.employee_operator(account, device_id)
+    operator = auth_service.employee_operator(account, None)
     _attach_session(response, db, operator)
     return {
         "status": "ok",
         "pin_set": pin_set,
         "must_change_password": operator.must_change_password,
-        "device_id": device_id,
+        "device_id": None,
     }
 
 

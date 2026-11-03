@@ -25,9 +25,10 @@ from api.schemas import (
     AccountUpdateIn,
     ApplyEnvelopeIn,
     ConflictResolveIn,
+    DeviceClaimIn,
     DeviceRegisterIn,
     EnvelopeSubmitIn,
-    HubSetIn,
+    FeedAckIn,
     LicenseActivateIn,
     LicenseRenewIn,
     OutboxEnqueueIn,
@@ -414,13 +415,42 @@ def register_device(
     return result
 
 
-@router.post("/devices/web-hub")
-def register_web_hub(
+@router.post("/devices/claim", status_code=201)
+def claim_device(
+    payload: DeviceClaimIn,
+    db: Session = Depends(get_primary_db),
+    operator: Operator = Depends(require_owner),
+):
+    """Instal ulang: perangkat baru mengambil slot perangkat lama (K-22)."""
+    _premium()
+    public_key = payload.public_key.strip()
+    encryption_key = payload.encryption_key.strip()
+    private_keys = None
+    if payload.generate_keys or not public_key or not encryption_key:
+        sign_private, sign_public = premium_crypto.generate_signing_keypair()
+        enc_private, enc_public = premium_crypto.generate_encryption_keypair()
+        public_key = sign_public
+        encryption_key = enc_public
+        private_keys = {"sign": sign_private, "encrypt": enc_private}
+    result = device_service.claim_device(
+        db,
+        old_device_id=payload.old_device_id,
+        nama=payload.nama,
+        public_key=public_key,
+        encryption_key=encryption_key,
+        actor=operator.id,
+    )
+    result["private_keys"] = private_keys
+    return result
+
+
+@router.post("/devices/web-device")
+def register_web_device(
     db: Session = Depends(get_primary_db),
     operator: Operator = Depends(require_owner),
 ):
     _premium()
-    return device_service.ensure_web_hub(db, operator.id)
+    return device_service.ensure_web_device(db, operator.id)
 
 
 @router.post("/devices/{device_id}/revoke")
@@ -446,40 +476,6 @@ def release_device(
     return device_service.release_device(db, device_id, actor=operator.id)
 
 
-@router.get("/devices/hub")
-def get_hub(
-    store_id: str = Query(default="", max_length=32),
-    db: Session = Depends(get_primary_db),
-    _operator: Operator = Depends(require_owner),
-):
-    target = store_id or _active_store()
-    row = device_service.hub_for_store(db, target)
-    return {
-        "store_id": target,
-        "device_id": row.device_id if row else "",
-        "mode": row.mode if row else "none",
-        "quarantine": bool(row.quarantine) if row else False,
-        "previous_device_id": row.previous_device_id if row else "",
-    }
-
-
-@router.post("/devices/hub")
-def set_hub(
-    payload: HubSetIn,
-    db: Session = Depends(get_primary_db),
-    operator: Operator = Depends(require_owner),
-):
-    _premium()
-    return device_service.set_hub(
-        db,
-        store_id=payload.store_id,
-        device_id=payload.device_id,
-        actor=operator.id,
-        force=payload.force,
-        online=payload.online,
-    )
-
-
 @router.post("/devices/keys")
 def register_store_keys(
     payload: StoreKeyRegisterIn,
@@ -499,7 +495,7 @@ def register_store_keys(
         store_key=key,
         device_ids=payload.device_ids,
         owner_private_key=license_service.owner_private_key(db),
-        hub_device_id=payload.hub_device_id,
+        primary_device_id=payload.primary_device_id,
     )
     result["store_key"] = generated
     return result
@@ -524,7 +520,7 @@ def rotate_store_key(
         store_key=key,
         device_ids=payload.device_ids,
         owner_private_key=license_service.owner_private_key(db),
-        hub_device_id=payload.hub_device_id,
+        primary_device_id=payload.primary_device_id,
     )
     result["store_key"] = generated
     return result
@@ -610,6 +606,57 @@ def submit_envelope(
         ciphertext=payload.ciphertext,
         nonce=payload.nonce,
         signature=payload.signature,
+    )
+
+
+@router.get("/sync/feed")
+def sync_feed(
+    device_id: str = Query(..., max_length=32),
+    store_id: str = Query(..., max_length=32),
+    since_seq: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_primary_db),
+    _operator: Operator = Depends(require_auth),
+):
+    _premium()
+    return sync_service.feed(
+        db,
+        device_id=device_id,
+        store_id=store_id,
+        since_seq=since_seq,
+        limit=limit,
+    )
+
+
+@router.get("/sync/bootstrap")
+def sync_bootstrap(
+    store_id: str = Query(..., max_length=32),
+    device_id: str = Query(..., max_length=32),
+    db: Session = Depends(get_primary_db),
+    operator: Operator = Depends(require_auth),
+):
+    """Data awal perangkat baru: wrapped key, snapshot, dan kursor (K-22)."""
+    _premium()
+    if operator.kind != "owner" and operator.device_id != device_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Perangkat hanya dapat meminta bootstrap untuk dirinya.",
+        )
+    return sync_service.bootstrap(db, store_id=store_id, device_id=device_id)
+
+
+@router.post("/sync/feed/ack")
+def sync_feed_ack(
+    payload: FeedAckIn,
+    db: Session = Depends(get_primary_db),
+    _operator: Operator = Depends(require_auth),
+):
+    _premium()
+    return sync_service.advance_cursor(
+        db,
+        device_id=payload.device_id,
+        store_id=payload.store_id,
+        last_seq=payload.last_seq,
     )
 
 

@@ -89,7 +89,11 @@ def add_stock(
     db: Session = Depends(get_db),
 ):
     item = stock_service.add_stock(
-        db, stock_id, payload.jumlah, alasan=payload.alasan
+        db,
+        stock_id,
+        payload.jumlah,
+        alasan=payload.alasan,
+        request_id=payload.request_id,
     )
     return StockItemOut.model_validate(item)
 
@@ -100,7 +104,9 @@ def opname_stock(payload: StockOpnameIn, db: Session = Depends(get_db)):
         {"stock_item_id": row.stock_item_id, "jumlah": row.jumlah}
         for row in payload.items
     ]
-    results = stock_service.opname_stock(db, items, alasan=payload.alasan)
+    results = stock_service.opname_stock(
+        db, items, alasan=payload.alasan, request_id=payload.request_id
+    )
     return [StockItemOut.model_validate(item) for item in results]
 
 
