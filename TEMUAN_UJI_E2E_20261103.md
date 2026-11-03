@@ -296,6 +296,20 @@ kosong dan relay kosong dalam satu rangkaian:
 - **Pytest:** suite penuh **403 passed**; tes peran non-kasir terpisah lulus.
 - Bukti E2E: `data/dummy_e2e/final_no_hub.log`.
 
+## Fase 2 Flutter (kode inti)
+
+- Flutter 3.47.9 stable dipasang di `C:\Users\Administrator\flutter`; proyek
+  `pusatkupos/` dibuat untuk Android, web, dan Windows.
+- Kode inti dibangun: SQLite lokal, PIN pemilik, pelanggan/unit, stok +
+  stok masuk, tarif jasa, kasir, nomor nota, void, riwayat, laporan, pengaturan,
+  dan backup ZIP.
+- **Bukti:** `flutter analyze` bersih (2 info), `flutter test` **2 lulus**
+  (parser Rupiah + transaksi, laporan, void), `flutter build web --release`
+  berhasil, smoke Chrome berhasil setup PIN, membuka dashboard, dan menambah
+  sparepart tanpa error konsol.
+- **Belum diuji:** transaksi kasir end-to-end lewat UI Flutter, restore backup
+  di perangkat, build Android/Windows, ukuran aplikasi, dan Fase 3–7.
+
 ## Yang belum dilakukan
 
 ### Produk dan rilis
@@ -311,9 +325,11 @@ kosong dan relay kosong dalam satu rangkaian:
   putus-putus, dan penyimpanan hampir penuh.
 
 ### Flutter, Android, dan distribusi
-- Port Dart/Flutter Fase 2–7; web saat ini adalah prototipe acuan.
+- Port Dart/Flutter **Fase 3–7**; Fase 2 kode inti sudah dibangun di
+  `pusatkupos/` dan baru diuji lewat web build + smoke. Uji kasir end-to-end di
+  Flutter belum.
 - Build APK/AAB Android, Play Billing, secure storage, notifikasi sistem, dan
-  kunci perangkat sungguhan.
+  kunci perangkat sungguhan; Android SDK/Visual Studio belum terpasang.
 - Relay lintas perangkat nyata (bukan dua proses di laptop yang sama).
 - Paket Windows/macOS, penandatanganan, dan pengukuran ukuran aplikasi.
 - Dokumen spesifikasi protokol + test vector sebelum implementasi sync Dart.

@@ -12,9 +12,9 @@ kanal uji web; setelah perilakunya teruji, fitur dibawa ke PusatkuPOS Flutter.
 
 - **Keputusan produk:** `K-01`–`K-24`. Aturan baru offline-first, relay
   sementara, Postgres, dan kebijakan tulis uang ada di K-12, K-13, K-23, K-24.
-- **Fokus kode saat ini:** web relay offline-first. Kode W2–W7, E2E 81/81, dan
-  suite pytest 403 lulus. Berikutnya uji beban perangkat nyata, reverse proxy
-  produksi, lalu pilot. Port Dart/APK belum dikerjakan.
+- **Fokus kode saat ini:** web relay offline-first sudah selesai. Fase 2 Flutter
+  (kode inti) juga sudah dibangun di `pusatkupos/`; berikutnya Fase 3–7,
+  pengukuran ukuran, Android SDK/Windows toolchain, dan pilot.
 - **Skenario uji:** bagian **Skenario uji**.
 - **Status dan riwayat:** bagian **Status dan riwayat**.
 - **Uji otomatis terakhir:** rangkaian E2E nyata **81/81 lulus** pada database
@@ -1098,6 +1098,39 @@ sudah ada dan mengalami perubahan. Belum ada commit pada saat peta ini dibuat.
 | `start_postgres_relay.cmd` | Menjalankan PostgreSQL relay lokal port 5433 | **Baru** |
 | `start_relay_server.cmd` | Menjalankan relay port 8120 dengan `.env` | **Baru** |
 
+### Flutter Fase 2 (kode inti)
+
+| Berkas | Isi | Status |
+| --- | --- | --- |
+| `pusatkupos/pubspec.yaml` | Proyek Flutter, SQLite/FFI/web, path, intl, crypto, archive, file picker | **Baru** |
+| `pusatkupos/lib/main.dart` | Inisialisasi database, locale `id_ID`, aplikasi | **Baru** |
+| `pusatkupos/lib/app.dart` | MaterialApp, tema terang/gelap | **Baru** |
+| `pusatkupos/lib/core/money.dart` | Uang berbasis sen, format Rupiah, parser input | **Baru** |
+| `pusatkupos/lib/core/ids.dart` | ULID untuk `sync_id` | **Baru** |
+| `pusatkupos/lib/core/dates.dart` | Format tanggal Indonesia dan rentang laporan | **Baru** |
+| `pusatkupos/lib/data/models.dart` | Model pelanggan, unit, stok, jasa, nota, laporan | **Baru** |
+| `pusatkupos/lib/data/app_database.dart` | Skema SQLite, CRUD, nomor nota, transaksi atomik, void, laporan | **Baru** |
+| `pusatkupos/lib/data/pin_service.dart` | PIN pemilik (salt + SHA-256) | **Baru** |
+| `pusatkupos/lib/data/backup_service.dart` | Backup ZIP + manifest/checksum, restore tervalidasi | **Baru** |
+| `pusatkupos/lib/data/backup_platform_io.dart` / `_stub.dart` | Baca/tulis database per platform | **Baru** |
+| `pusatkupos/lib/state/app_state.dart` | Identitas toko, tema, revisi data | **Baru** |
+| `pusatkupos/lib/ui/theme.dart` | Tema Material 3 | **Baru** |
+| `pusatkupos/lib/ui/pin_gate.dart` | Setup/login PIN | **Baru** |
+| `pusatkupos/lib/ui/home_shell.dart` | NavigationRail/drawer/NavigationBar | **Baru** |
+| `pusatkupos/lib/ui/widgets.dart` | Kartu, statistik, empty state, dialog | **Baru** |
+| `pusatkupos/lib/ui/screens/dashboard_screen.dart` | Ringkasan harian, aksi cepat, nota terbaru | **Baru** |
+| `pusatkupos/lib/ui/screens/pos_screen.dart` | Kasir: pelanggan/unit, jasa, part, pembayaran, nota | **Baru** |
+| `pusatkupos/lib/ui/screens/history_screen.dart` | Riwayat, detail, void | **Baru** |
+| `pusatkupos/lib/ui/screens/customers_screen.dart` | Pelanggan dan unit | **Baru** |
+| `pusatkupos/lib/ui/screens/stock_screen.dart` | Stok, tambah/ubah, stok masuk | **Baru** |
+| `pusatkupos/lib/ui/screens/jasa_screen.dart` | Tarif jasa | **Baru** |
+| `pusatkupos/lib/ui/screens/reports_screen.dart` | Laporan periode dan rincian | **Baru** |
+| `pusatkupos/lib/ui/screens/settings_screen.dart` | Identitas, tema, PIN, backup/restore | **Baru** |
+| `pusatkupos/web/sqlite3.wasm` / `sqflite_sw.js` | Aset SQLite untuk pratinjau web | **Baru** |
+| `pusatkupos/test/widget_test.dart` | Uji parser Rupiah | **Baru** |
+| `pusatkupos/test/database_test.dart` | Uji transaksi, idempotensi, laporan, void + stok | **Baru** |
+| `pusatkupos/android`, `web`, `windows` | Scaffold platform; APK/Windows belum dibangun | **Baru** |
+
 ### Tes dan tool
 
 | Berkas | Isi | Status |
@@ -1203,6 +1236,23 @@ lengkap belum dijalankan; bukti sementara ada di bagian **Riwayat pengerjaan**.
 | W5 | PWA/cache baca, outbox lokal browser, nomor nota berawalan perangkat | Sangat sulit | **Selesai (kode web)** |
 | W6 | Tulis offline nota/pembayaran/stok; void/retur/piutang oleh akses kasir; konflik | Sangat sulit | **Selesai (kode web)** |
 | W7 | Pengerasan relay (HTTPS, rate limit, audit), uji 6 perangkat, pilot | Sangat sulit | **Kode selesai**; simulasi 6 perangkat lulus; pilot belum |
+
+### Fase 2 Flutter — urutan kode (dikerjakan)
+
+Fase 2 adalah port inti ke Flutter + SQLite lokal. Pengujian dijalankan setelah
+kode selesai; pilot tetap gerbang sebelum rilis.
+
+1. **Scaffold** proyek `pusatkupos/` (Flutter stable), tema, routing, dan
+   `pubspec.yaml` (SQLite, path, intl, file picker/zip).
+2. **Skema SQLite lokal** setara web: pelanggan, unit, stok, barcode, jasa,
+   nota, part/job, pembayaran, retur/void, karyawan, counter nota, pengaturan.
+3. **Lapisan domain**: uang berbasis desimal, nomor nota, transaksi atomik,
+   stok masuk/keluar/opname, laporan harian/periode.
+4. **Gerbang PIN** dan sesi lokal perangkat; belum akun/premium/relay.
+5. **Layar inti**: Ringkasan, Kasir, Riwayat, Pelanggan, Stok, Jasa, Laporan,
+   Pengaturan.
+6. **Backup/restore lokal** database SQLite + manifest checksum.
+7. **Ukur ukuran aplikasi** dan catat hasil; APK/rilis belum.
 
 ### Fase Flutter (setelah pilot web)
 
@@ -1449,7 +1499,7 @@ skenario uji ada di bagian **Skenario uji**.
 | W5–W6 offline writes | **Selesai (kode web)** | PWA, IndexedDB, nomor nota perangkat, akses kasir |
 | W7 pengerasan relay | **Kode selesai** | Simulasi 6 perangkat lulus; pilot belum |
 | Pilot 1–3 bengkel | **Belum mulai** | Menunggu uji UI web manual |
-| Port Flutter PusatkuPOS | **Belum mulai** | Terblokir pilot |
+| Port Flutter PusatkuPOS | **Fase 2 kode inti dibangun** | UI/DB/PIN/backup; Fase 3–7 belum; Android SDK belum ada |
 | APK/Android | **Ditunda** | Jangan dibuat sampai kode web stabil dan pilot lulus |
 | Pemantapan web | **Sebagian** | E2E 81/81 dan pytest 403 + 1 tes peran lulus; pilot belum |
 | Pemantapan premium/Dart | **Belum dijalankan di Dart** | Web sudah lulus otomatis; port Dart belum |
@@ -1475,9 +1525,9 @@ skenario uji ada di bagian **Skenario uji**.
   PWA + antrean IndexedDB, nomor nota per perangkat, kebijakan uang kasir, dan
   pengerasan relay. Migrasi dummy 41→45 lulus; simulasi relay 6 perangkat
   lulus dengan 0 amplop tersisa. Suite pytest belum dijalankan ulang.
-- **Yang belum:** uji beban perangkat nyata, reverse proxy produksi dengan
-  sertifikat publik, dokumentasi test vector protokol, port Dart, dan pilot
-  1–3 bengkel.
+- **Yang belum:** Fase 3–7 Flutter (akun/lisensi, sync, perangkat, aplikasi
+  owner), pengukuran ukuran aplikasi, Android SDK/Visual Studio, APK/Windows
+  build, reverse proxy produksi, dokumentasi test vector, dan pilot.
 - **Uji E2E nyata 2026-11-03:** **81/81 lulus** dari instalasi kosong, termasuk
   gratis, premium, karyawan, backup/restore semua toko, relay nyata di proses
   terpisah, dan antrean offline PWA. Temuan B-01 sampai B-08 dicatat di
@@ -1563,7 +1613,7 @@ flowchart TD
 | W7 | Pengerasan + uji 6 perangkat + pilot | Belum | Hasil pilot dicatat |
 | 1 | Web: header, registry, ganti toko, gating, kuota | Dibangun, pemantapan formal lulus | Pemantapan + pilot |
 | G | Pilot 1–3 bengkel nyata | Belum mulai | Kriteria pilot |
-| 2 | Port Flutter inti + ukur ukuran | Belum mulai | Build Flutter inti |
+| 2 | Port Flutter inti + ukur ukuran | **Kode inti dibangun**; ukuran belum | Web build + smoke |
 | 3 | Akun owner/karyawan, lisensi, perangkat | Web dibangun; Dart belum | Uji Dart |
 | 4 | Backup + rilis premium tahap awal | Web dibangun; Dart belum | Rilis + QA |
 | 5 | Spesifikasi protokol + test vector | Kode protokol web ada; dokumen belum | Test vector disetujui |
@@ -1765,6 +1815,21 @@ flowchart TD
 - **Tes:** `tests/test_premium_web.py` diperbarui agar kasir dapat void lewat
   sesi server dan token perangkat; E2E 81/81 lulus; suite pytest penuh
   403 lulus ditambah tes peran non-kasir yang lulus terpisah.
+
+#### 2026-11-03 — Fase 2 Flutter kode inti dibangun
+
+- **Toolchain:** Flutter 3.47.9 stable dipasang di `C:\Users\Administrator\flutter`.
+  Android SDK dan Visual Studio belum ada; APK/Windows belum dibangun.
+- **Proyek:** `pusatkupos/` (Android, web, Windows) dengan SQLite
+  `sqflite`/FFI/web, PIN pemilik, navigasi responsif, dan backup ZIP.
+- **Fitur inti:** pelanggan/unit, stok + stok masuk, tarif jasa, kasir dengan
+  jasa/part/pembayaran, nomor nota, void, riwayat, laporan, pengaturan.
+- **Bukti:** `flutter analyze` bersih (2 info), `flutter test` **2 lulus**
+  (parser Rupiah + transaksi/laporan/void), `flutter build web --release`
+  berhasil, smoke Chrome: setup PIN, dashboard, dan tambah stok berhasil tanpa
+  error konsol.
+- **Belum:** Fase 3–7 Flutter, pengukuran ukuran, Android SDK/Windows
+  toolchain, APK, dan uji lapangan.
 
 ### Temuan terbuka
 
